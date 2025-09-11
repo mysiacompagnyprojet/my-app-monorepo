@@ -4,12 +4,23 @@
 // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
 // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
+// backend/prisma/schema.prisma
+// Prisma schema : configuration + modèles
+
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
+  output   = "../src/generated/prisma" // garde cette option
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// Définition du modèle User (table dans Postgres)
+model User {
+  id        Int      @id @default(autoincrement()) // clé primaire auto-incrémentée
+  email     String   @unique                      // email unique
+  password  String                               // mot de passe (hashé en vrai)
+  createdAt DateTime @default(now())             // date de création auto
 }

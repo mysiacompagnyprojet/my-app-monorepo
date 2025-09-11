@@ -6,8 +6,10 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "build": "echo \"(JS) rien à builder\"",
-    "db:migrate": "echo \"Configure l’outil de migration (Prisma/Knex) puis remplace-moi\""
+    "build": "prisma generate",
+    "db:migrate": "prisma migrate deploy",
+    "db:studio": "prisma studio",
+    "db:validate": "prisma validate"
   },
   "devDependencies": {
     "prisma": "^6.16.0"
