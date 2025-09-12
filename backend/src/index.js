@@ -30,6 +30,25 @@ app.get("/health", (_req, res) => res.json({ ok: true }));
 // app.get("/api/...", handler)
 
 const PORT = process.env.PORT || 4000;
-app.listen(PORT, () => {
-  console.log(`API up on http://localhost:${PORT}`);
+
+const server = app.listen(PORT, "0.0.0.0", () => {
+  const addr = server.address();
+  console.log(
+    `API up on http://localhost:${PORT}  | bound to address:`,
+    addr
+  );
 });
+
+// ➜ Ajout de logs pour voir si une erreur fait arrêter le serveur
+server.on("error", (err) => {
+  console.error("SERVER ERROR:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("UNCAUGHT EXCEPTION:", err);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("UNHANDLED REJECTION:", reason);
+});
+
