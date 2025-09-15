@@ -19,7 +19,9 @@ export default function HealthCheckPage() {
       setLoading(false);
       return;
     }
-
+    <p style={{ color: '#666' }}>
+  Token présent (localStorage) : {typeof window !== 'undefined' && localStorage.getItem('token') ? 'oui' : 'non'}
+</p>
     fetch(`${api}/health`, { method: 'GET' })
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as
