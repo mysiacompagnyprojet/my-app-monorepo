@@ -9,8 +9,13 @@ export default function HealthCheck() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE}/health`);
       const json = await res.json();
       setResult(JSON.stringify(json));
-    } catch (err: any) {
-      setResult("Erreur: " + err.message);
+    } catch (err: unknown) {
+      // on vérifie que c'est bien une Error
+      if (err instanceof Error) {
+        setResult("Erreur: " + err.message);
+      } else {
+        setResult("Erreur inconnue");
+      }
     }
   };
 
