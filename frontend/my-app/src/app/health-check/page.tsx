@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from 'react';
 
-type HealthResponse = { ok: boolean } | { error: string };
+type HealthOk = { ok: boolean };
+type HealthErr = { error: string };
+type HealthResponse = HealthOk | HealthErr;
 
 export default function HealthCheckPage() {
   const [data, setData] = useState<HealthResponse | null>(null);
@@ -10,6 +12,7 @@ export default function HealthCheckPage() {
 
   useEffect(() => {
     const api = process.env.NEXT_PUBLIC_API_URL;
+
     // Sécurise si la variable est absente
     if (!api) {
       setData({ error: 'NEXT_PUBLIC_API_URL manquante côté frontend' });
@@ -19,14 +22,28 @@ export default function HealthCheckPage() {
 
     fetch(`${api}/health`, { method: 'GET' })
       .then(async (res) => {
-        const json = await res.json().catch(() => null);
+        const json = (await res.json().catch(() => null)) as
+          | { ok?: boolean; error?: string }
+          | null;
+
         if (!res.ok) {
-          throw new Error(json?.error || `HTTP ${res.status}`);
+          throw new Error(json?.error ?? `HTTP ${res.status}`);
         }
-        setData(json || { error: 'Réponse vide' });
+
+        if (json && typeof json.ok === 'boolean') {
+          setData({ ok: json.ok });
+        } else {
+          setData({ error: 'Réponse vide' });
+        }
       })
-      .catch((err: any) => {
-        setData({ error: String(err?.message || err) });
+      .catch((err: unknown) => {
+        const message =
+          err instanceof Error
+            ? err.message
+            : typeof err === 'string'
+            ? err
+            : JSON.stringify(err);
+        setData({ error: message });
       })
       .finally(() => setLoading(false));
   }, []);
