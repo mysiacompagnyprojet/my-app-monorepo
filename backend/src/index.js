@@ -8,7 +8,7 @@ const app = express();
 // ⬇️ Mets ici les origines AUTORISÉES (à adapter)
 const allowedOrigins = [
   "http://localhost:3000",               // ton frontend local
-  "https://ton-frontend.vercel.app"      // ton domaine Vercel (remplace-le)
+  "https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app"      // ton domaine Vercel (remplace-le) 
 ];
 
 // Middleware CORS strict
