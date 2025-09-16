@@ -4,54 +4,38 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
-const authRouter = require('./routes/auth');  // ← chemin relatif
+const authRouter = require("./routes/auth");
 
-// … après app.use(express.json());
-app.use('/auth', authRouter);
-// ⬇️ Mets ici les origines AUTORISÉES (à adapter)
+// ⬇️ 1) CORS d'abord
 const allowedOrigins = [
-  "http://localhost:3000",               // ton frontend local
-  "https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app"      // ton domaine Vercel (remplace-le) 
+  "http://localhost:3000",
+  "https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app",
 ];
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
+    credentials: true,
+  })
+);
 
-// Middleware CORS strict
-app.use(cors({
-  origin: (origin, cb) => {
-    // origin = undefined pour curl/Postman → on autorise
-    if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-    return cb(new Error("Not allowed by CORS"));
-  },
-  credentials: true
-}));
-
+// ⬇️ 2) Parser JSON avant les routes
 app.use(express.json());
+
+// ⬇️ 3) Monter les routes APRÈS express.json()
+app.use("/auth", authRouter);
 
 // Healthcheck
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// TODO: tes autres routes ici
-// app.get("/api/...", handler)
-
 const PORT = process.env.PORT || 4000;
-
 const server = app.listen(PORT, "0.0.0.0", () => {
   const addr = server.address();
-  console.log(
-    `API up on http://localhost:${PORT}  | bound to address:`,
-    addr
-  );
+  console.log(`API up on http://localhost:${PORT}  | bound to address:`, addr);
 });
 
-// ➜ Ajout de logs pour voir si une erreur fait arrêter le serveur
-server.on("error", (err) => {
-  console.error("SERVER ERROR:", err);
-});
-
-process.on("uncaughtException", (err) => {
-  console.error("UNCAUGHT EXCEPTION:", err);
-});
-
-process.on("unhandledRejection", (reason) => {
-  console.error("UNHANDLED REJECTION:", reason);
-});
-
+server.on("error", (err) => console.error("SERVER ERROR:", err));
+process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
+process.on("unhandledRejection", (reason) => console.error("UNHANDLED REJECTION:", reason));
