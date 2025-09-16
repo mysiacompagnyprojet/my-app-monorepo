@@ -4,7 +4,10 @@ const express = require("express");
 const cors = require("cors");
 
 const app = express();
+const authRouter = require('./routes/auth');  // ← chemin relatif
 
+// … après app.use(express.json());
+app.use('/auth', authRouter);
 // ⬇️ Mets ici les origines AUTORISÉES (à adapter)
 const allowedOrigins = [
   "http://localhost:3000",               // ton frontend local
