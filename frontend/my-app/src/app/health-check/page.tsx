@@ -62,6 +62,9 @@ export default function HealthCheckPage() {
       {!loading && (
         <>
           <h2>Résultat</h2>
+          <p style={{ color: '#666' }}>
+            Token présent (localStorage) : {typeof window !== 'undefined' && localStorage.getItem('token') ? 'oui' : 'non'}
+          </p>
           <pre
             style={{
               background: '#f5f5f5',

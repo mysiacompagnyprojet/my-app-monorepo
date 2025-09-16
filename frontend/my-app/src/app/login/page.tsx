@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { API_URL } from '@/lib/api';
+import { API_URL } from '@/lib/api';           // ← on garde ton alias existant
 import { useRouter } from 'next/navigation';
 
 type LoginSuccess = { token: string };
@@ -51,12 +51,15 @@ export default function LoginPage() {
         throw new Error(message);
       }
 
+      // Stockage du JWT (démo). En prod: préférer un cookie httpOnly coté API.
       localStorage.setItem('token', json.token);
+
+      // Redirige vers une page de test (health-check) après connexion
       router.push('/health-check');
     } catch (err: unknown) {
-      const msg =
-        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erreur inconnue';
-      setError(msg);
+      setError(
+        err instanceof Error ? err.message : typeof err === 'string' ? err : 'Erreur inconnue'
+      );
     } finally {
       setBusy(false);
     }
@@ -99,3 +102,4 @@ export default function LoginPage() {
     </main>
   );
 }
+
