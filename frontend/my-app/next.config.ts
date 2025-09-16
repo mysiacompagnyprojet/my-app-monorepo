@@ -1,7 +1,10 @@
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  /* config options here */
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  // ← clé supportée par Next 15+
+  turbopack: {
+    root: __dirname, // force la racine à 'frontend/my-app'
+  },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
+
