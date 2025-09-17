@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { API_URL } from '@/lib/api';           // ← on garde ton alias existant
+import { API_URL } from '../../lib/api';           // ← on garde ton alias existant
 import { useRouter } from 'next/navigation';
 
 type LoginSuccess = { token: string };
