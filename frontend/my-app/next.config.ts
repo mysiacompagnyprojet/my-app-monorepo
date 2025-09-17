@@ -1,10 +1,11 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  // ← clé supportée par Next 15+
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  // Force la racine du projet Next sur ce dossier (frontend/my-app)
   turbopack: {
-    root: __dirname, // force la racine à 'frontend/my-app'
+    root: __dirname,
   },
 };
 
-module.exports = nextConfig;
+export default nextConfig;
 
