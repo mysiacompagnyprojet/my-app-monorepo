@@ -1,27 +1,75 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-// backend/prisma/schema.prisma
-// Prisma schema : configuration + modèles
+// backend - prisma - schema.prisma
 
 generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma" // garde cette option
+provider = "prisma-client-js"
+output = "../src/generated/prisma" // <-- conservé de "fait"
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+provider = "postgresql"
+url = env("DATABASE_URL")
+directUrl = env("DIRECT_URL") // <-- conservé de "fait"
 }
 
-// Définition du modèle User (table dans Postgres)
+// Statut d'abonnement plus sûr qu'un simple String
+enum SubscriptionStatus {
+trialing
+active
+past_due
+canceled
+}
+
 model User {
-  id        Int      @id @default(autoincrement()) // clé primaire auto-incrémentée
-  email     String   @unique                      // email unique
-  password  String                               // mot de passe (hashé en vrai)
-  createdAt DateTime @default(now())             // date de création auto
+id String @id @default(uuid()) // <-- UUID (String)
+email String @unique
+password String // hashé côté backend
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+// Stripe
+stripeCustomerId String?
+subscriptionStatus SubscriptionStatus?
+subscriptionEndsAt DateTime?
+
+// Relations
+Recipes Recipe[]
+ImportLimit ImportLimit?
+}
+
+model Recipe {
+id String @id @default(uuid())
+userId String
+user User @relation(fields: [userId], references: [id])
+title String
+servings Int
+steps Json // tableau d’étapes
+imageUrl String?
+notes String?
+createdAt DateTime @default(now())
+updatedAt DateTime @updatedAt
+
+ingredients RecipeIngredient[]
+}
+
+model RecipeIngredient {
+id String @id @default(uuid())
+recipeId String
+recipe Recipe @relation(fields: [recipeId], references: [id])
+name String // libellé original
+quantity Float
+unit String // g, kg, ml, l, pièce…
+airtableId String? // id dans Airtable si mappé
+unitPriceBuy Float? // prix d’achat / unité (Airtable)
+costRecipe Float? // prix de revient (calculé)
+}
+
+model ImportLimit {
+id String @id @default(uuid())
+userId String @unique
+user User @relation(fields: [userId], references: [id]) // relation explicite
+// Limites gratuites
+breakfasts Int @default(0)
+lunches Int @default(0)
+snacks Int @default(0)
+dinners Int @default(0)
+periodStart DateTime @default(now())
 }
