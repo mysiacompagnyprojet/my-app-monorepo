@@ -1,75 +1,75 @@
 // backend - prisma - schema.prisma
 
 generator client {
-provider = "prisma-client-js"
-output = "../src/generated/prisma" // <-- conservé de "fait"
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma" // <-- conservé de "fait"
 }
 
 datasource db {
-provider = "postgresql"
-url = env("DATABASE_URL")
-directUrl = env("DIRECT_URL") // <-- conservé de "fait"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL") // <-- conservé de "fait"
 }
 
 // Statut d'abonnement plus sûr qu'un simple String
 enum SubscriptionStatus {
-trialing
-active
-past_due
-canceled
+  trialing
+  active
+  past_due
+  canceled
 }
 
 model User {
-id String @id @default(uuid()) // <-- UUID (String)
-email String @unique
-password String // hashé côté backend
-createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
-// Stripe
-stripeCustomerId String?
-subscriptionStatus SubscriptionStatus?
-subscriptionEndsAt DateTime?
+  id                 String              @id @default(uuid()) // <-- UUID (String)
+  email              String              @unique
+  password           String // hashé côté backend
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  // Stripe
+  stripeCustomerId   String?
+  subscriptionStatus SubscriptionStatus?
+  subscriptionEndsAt DateTime?
 
-// Relations
-Recipes Recipe[]
-ImportLimit ImportLimit?
+  // Relations
+  Recipes     Recipe[]
+  ImportLimit ImportLimit?
 }
 
 model Recipe {
-id String @id @default(uuid())
-userId String
-user User @relation(fields: [userId], references: [id])
-title String
-servings Int
-steps Json // tableau d’étapes
-imageUrl String?
-notes String?
-createdAt DateTime @default(now())
-updatedAt DateTime @updatedAt
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  title     String
+  servings  Int
+  steps     Json // tableau d’étapes
+  imageUrl  String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-ingredients RecipeIngredient[]
+  ingredients RecipeIngredient[]
 }
 
 model RecipeIngredient {
-id String @id @default(uuid())
-recipeId String
-recipe Recipe @relation(fields: [recipeId], references: [id])
-name String // libellé original
-quantity Float
-unit String // g, kg, ml, l, pièce…
-airtableId String? // id dans Airtable si mappé
-unitPriceBuy Float? // prix d’achat / unité (Airtable)
-costRecipe Float? // prix de revient (calculé)
+  id           String  @id @default(uuid())
+  recipeId     String
+  recipe       Recipe  @relation(fields: [recipeId], references: [id])
+  name         String // libellé original
+  quantity     Float
+  unit         String // g, kg, ml, l, pièce…
+  airtableId   String? // id dans Airtable si mappé
+  unitPriceBuy Float? // prix d’achat / unité (Airtable)
+  costRecipe   Float? // prix de revient (calculé)
 }
 
 model ImportLimit {
-id String @id @default(uuid())
-userId String @unique
-user User @relation(fields: [userId], references: [id]) // relation explicite
-// Limites gratuites
-breakfasts Int @default(0)
-lunches Int @default(0)
-snacks Int @default(0)
-dinners Int @default(0)
-periodStart DateTime @default(now())
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id]) // relation explicite
+  // Limites gratuites
+  breakfasts  Int      @default(0)
+  lunches     Int      @default(0)
+  snacks      Int      @default(0)
+  dinners     Int      @default(0)
+  periodStart DateTime @default(now())
 }
