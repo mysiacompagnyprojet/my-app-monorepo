@@ -29,6 +29,9 @@ app.use("/auth", authRouter);
 
 // Healthcheck
 app.get("/health", (_req, res) => res.json({ ok: true }));
+app.get ('/', (_req, res) => {
+  res.json({name: 'my-app API', status: 'ok', docs: '/health'})
+});
 
 const PORT = process.env.PORT || 4000;
 const server = app.listen(PORT, "0.0.0.0", () => {
