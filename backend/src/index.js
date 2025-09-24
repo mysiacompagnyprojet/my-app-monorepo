@@ -8,7 +8,7 @@ const authRouter = require("./routes/auth");
 
 // ⬇️ 1) CORS d'abord
 const allowedOrigins = [
-  "http://localhost:3000",
+  'http://localhost:3000',
   "https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app",
 ];
 app.use(

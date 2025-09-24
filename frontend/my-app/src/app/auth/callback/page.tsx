@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { createClient } from '@supabase/supabase-js';
 import { useRouter } from 'next/navigation';
+import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(
 process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,50 +16,69 @@ const [msg, setMsg] = useState('Connexion en cours...');
 useEffect(() => {
 (async () => {
 try {
-// 1) Récupérer la session
-const { data: { session }, error } = await supabase.auth.getSession();
-if (error || !session) throw new Error('Session introuvable.');
+const url = new URL(window.location.href);
+
+// Lire erreurs / code en query ou dans le hash
+const queryErr = url.searchParams.get('error');
+const queryDesc = url.searchParams.get('error_description') ?? '';
+const queryCode = url.searchParams.get('code');
+
+const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+const hashErr = hash.get('error');
+const hashDesc = hash.get('error_description') ?? '';
+const hashCode = hash.get('code');
+
+const err = queryErr || hashErr;
+const desc = queryDesc || hashDesc;
+if (err) throw new Error(`${err}${desc ? `: ${desc}` : ''}`);
+
+// ⬇️ Échanger le code (ta version attend un STRING)
+const code = queryCode || hashCode;
+if (typeof code === 'string' && code.length > 0) {
+const { error: exchError } = await supabase.auth.exchangeCodeForSession(code);
+if (exchError) throw exchError;
+}
+
+// Lire la session
+const { data: { session }, error: sessErr } = await supabase.auth.getSession();
+if (sessErr || !session) throw new Error('Session introuvable.');
 
 const accessToken = session.access_token;
-const user = session.user;
-if (!user?.id || !user?.email) throw new Error('Utilisateur invalide.');
+const user = session.user!;
+if (!user.id || !user.email) throw new Error('Utilisateur invalide.');
 
-// 2) Appeler ton backend /auth/sync
-// Attendu côté backend: vérif du token, upsert du User, retour JSON {userId, subscriptionStatus}
+// Sync backend
 const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/auth/sync`, {
 method: 'POST',
-headers: {
-'Content-Type': 'application/json',
-'Authorization': `Bearer ${accessToken}`, // très important
-},
-body: JSON.stringify({ userId: user.id, email: user.email })
+headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${accessToken}` },
+body: JSON.stringify({ email: user.email }),
 });
 
 if (!res.ok) {
-const t = await res.text();
-throw new Error(`Sync échouée: ${res.status} ${t}`);
+const t = await res.text().catch(() => '');
+throw new Error(`Sync échouée (${res.status}) ${t}`);
 }
 
 const payload = await res.json() as { userId: string; subscriptionStatus?: string };
 const status = payload.subscriptionStatus ?? 'trialing';
 
-// 3) Stocker en cookies (lisibles par le middleware)
-// expires=7j ; path=/ pour tout le site
+// Cookies pour le middleware
 document.cookie = `user_id=${encodeURIComponent(user.id)}; path=/; max-age=${60*60*24*7}`;
 document.cookie = `subscription_status=${encodeURIComponent(status)}; path=/; max-age=${60*60*24*7}`;
 
 setMsg('Connexion réussie, redirection...');
-// 4) Rediriger
-router.replace('/dashboard'); // adapte vers ta page d’accueil connectée
+router.replace('/dashboard');
 } catch (e: any) {
 console.error(e);
-setMsg(`Erreur: ${e.message ?? e}`);
+setMsg(`Erreur: ${e?.message ?? e}`);
 }
 })();
 }, [router]);
 
-return <main style={{maxWidth:420, margin:'48px auto', padding:16}}>
+return (
+<main style={{ maxWidth: 420, margin: '48px auto', padding: 16 }}>
 <h1>{msg}</h1>
-<p>Tu peux fermer cet onglet si rien ne se passe.</p>
-</main>;
+<p>Besoin ? Retourne à <a href="/login">/login</a> et redemande un lien.</p>
+</main>
+);
 }
