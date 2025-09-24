@@ -1,75 +1,67 @@
-// backend - prisma - schema.prisma
-
 generator client {
   provider = "prisma-client-js"
-  output   = "../src/generated/prisma" // <-- conservé de "fait"
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider  = "postgresql"
   url       = env("DIRECT_URL")
-  directUrl = env("DATABASE_URL") // <-- conservé de "fait"
-}
-
-// Statut d'abonnement plus sûr qu'un simple String
-enum SubscriptionStatus {
-  trialing
-  active
-  past_due
-  canceled
+  directUrl = env("DATABASE_URL")
 }
 
 model User {
-  id                 String              @id @default(uuid()) // <-- UUID (String)
+  id                 String              @id @default(uuid())
   email              String              @unique
-  password           String // hashé côté backend
+  password           String
   createdAt          DateTime            @default(now())
-  updatedAt          DateTime            @updatedAt
-  // Stripe
   stripeCustomerId   String?
-  subscriptionStatus SubscriptionStatus?
   subscriptionEndsAt DateTime?
-
-  // Relations
-  Recipes     Recipe[]
-  ImportLimit ImportLimit?
+  subscriptionStatus SubscriptionStatus?
+  updatedAt          DateTime            @updatedAt
+  ImportLimit        ImportLimit?
+  Recipes            Recipe[]
 }
 
 model Recipe {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  title     String
-  servings  Int
-  steps     Json // tableau d’étapes
-  imageUrl  String?
-  notes     String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
+  id          String             @id @default(uuid())
+  userId      String
+  title       String
+  servings    Int
+  steps       Json
+  imageUrl    String?
+  notes       String?
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  user        User               @relation(fields: [userId], references: [id])
   ingredients RecipeIngredient[]
 }
 
 model RecipeIngredient {
   id           String  @id @default(uuid())
   recipeId     String
-  recipe       Recipe  @relation(fields: [recipeId], references: [id])
-  name         String // libellé original
+  name         String
   quantity     Float
-  unit         String // g, kg, ml, l, pièce…
-  airtableId   String? // id dans Airtable si mappé
-  unitPriceBuy Float? // prix d’achat / unité (Airtable)
-  costRecipe   Float? // prix de revient (calculé)
+  unit         String
+  airtableId   String?
+  unitPriceBuy Float?
+  costRecipe   Float?
+  recipe       Recipe  @relation(fields: [recipeId], references: [id])
 }
 
 model ImportLimit {
   id          String   @id @default(uuid())
   userId      String   @unique
-  user        User     @relation(fields: [userId], references: [id]) // relation explicite
-  // Limites gratuites
   breakfasts  Int      @default(0)
   lunches     Int      @default(0)
   snacks      Int      @default(0)
   dinners     Int      @default(0)
   periodStart DateTime @default(now())
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+enum SubscriptionStatus {
+  trialing
+  active
+  past_due
+  canceled
 }
