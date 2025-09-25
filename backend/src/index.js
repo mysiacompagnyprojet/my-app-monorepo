@@ -6,37 +6,41 @@ const cors = require("cors");
 const app = express();
 const authRouter = require("./routes/auth");
 
-// ⬇️ 1) CORS d'abord
+// 1) CORS
 const allowedOrigins = [
-  'http://localhost:3000',
-  "https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app",
+'http://localhost:3000',
+'http://127.0.0.1:3000',
+'https://my-app-monorepo-r72yir9t7-mysias-projects-f0dde108.vercel.app', // ton Vercel
 ];
+
 app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error("Not allowed by CORS"));
-    },
-    credentials: true,
-  })
+cors({
+origin: (origin, cb) => {
+if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+return cb(new Error("Not allowed by CORS"));
+},
+credentials: true,
+})
 );
 
-// ⬇️ 2) Parser JSON avant les routes
+// 2) JSON
 app.use(express.json());
 
-// ⬇️ 3) Monter les routes APRÈS express.json()
+// 3) Routes
 app.use("/auth", authRouter);
 
-// Healthcheck
 app.get("/health", (_req, res) => res.json({ ok: true }));
-app.get ('/', (_req, res) => {
-  res.json({name: 'my-app API', status: 'ok', docs: '/health'})
+app.get("/", (_req, res) => {
+res.json({ name: "my-app API", status: "ok", docs: "/health" });
 });
 
+// 4) Listen (HOST pilotable)
 const PORT = process.env.PORT || 4000;
-const server = app.listen(PORT, "0.0.0.0", () => {
-  const addr = server.address();
-  console.log(`API up on http://localhost:${PORT}  | bound to address:`, addr);
+const HOST = process.env.HOST || "0.0.0.0"; // en local tu peux mettre HOST=127.0.0.1 dans .env
+
+const server = app.listen(PORT, HOST, () => {
+const addr = server.address();
+console.log(`API up on http://${HOST}:${PORT} | bound to address:`, addr);
 });
 
 server.on("error", (err) => console.error("SERVER ERROR:", err));
