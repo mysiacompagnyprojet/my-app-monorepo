@@ -1,4 +1,7 @@
+"use client";
 import Image from "next/image";
+import { useState } from "react";
+const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
 
 export default function Home() {
   return (
@@ -51,6 +54,11 @@ export default function Home() {
           </a>
         </div>
       </main>
+      <div className="flex flex-col gap-3 items-center border rounded p-4 w-full sm:w-auto">
+        <p className="text-sm text-gray-500">API: {API}</p>
+
+        <TestSyncButton />
+      </div>
       <footer className="row-start-3 flex gap-[24px] flex-wrap items-center justify-center">
         <a
           className="flex items-center gap-2 hover:underline hover:underline-offset-4"
@@ -98,6 +106,44 @@ export default function Home() {
           Go to nextjs.org →
         </a>
       </footer>
+    </div>
+  );
+}
+function TestSyncButton() {
+  const [loading, setLoading] = useState(false);
+  const [out, setOut] = useState<any>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  async function send() {
+    setLoading(true);
+    setErr(null);
+    setOut(null);
+    try {
+      const res = await fetch(`${API}/auth/sync`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ping: true}),
+      });
+      const data = await res.json().catch(() => ({}));
+      setOut({ status: res.status, ok: res.ok, data});
+    } catch (e: any) {
+      setErr(e?.message || String(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+  return (
+    <div className="w-full">
+      <button
+        onClick={send}
+        disabled={loading}
+        className="rounded border px-4 py-2 bg-black text-white dark:bg-white dark:text-balck"
+        >
+          {loading ? "Envoi..." : "Envoyer POST /auth/sync"}
+        </button>
+
+        {err && <pre className="mt-3 text-red-600">{err}</pre>}
+        {out && <pre className="mt-3">{JSON.stringify(out, null, 2)}</pre>}
     </div>
   );
 }

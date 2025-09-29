@@ -1,5 +1,8 @@
 const express = require('express');
 const jwt = require('jsonwebtoken');
+const bcrypt = require ('bcryptjs');
+const { signToken } = require('../lib/jwt');
+const { authRequired } = require('../middleware/auth');
 
 // 👇 AJOUTS pour Supabase
 const { createRemoteJWKSet, jwtVerify } = require('jose');
