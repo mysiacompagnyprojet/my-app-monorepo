@@ -115,22 +115,32 @@ function TestSyncButton() {
   const [err, setErr] = useState<string | null>(null);
 
   async function send() {
-    setLoading(true);
-    setErr(null);
-    setOut(null);
-    try {
-      const res = await fetch(`${API}/auth/sync`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ping: true}),
-      });
-      const data = await res.json().catch(() => ({}));
-      setOut({ status: res.status, ok: res.ok, data});
-    } catch (e: any) {
-      setErr(e?.message || String(e));
-    } finally {
-      setLoading(false);
-    }
+    // 1) register (une fois)
+await fetch(`${API}/auth/register`, {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ email: "test@example.com", password: "pass1234" })
+});
+
+// 2) login
+const loginRes = await fetch(`${API}/auth/login`, {
+method: "POST",
+headers: { "Content-Type": "application/json" },
+body: JSON.stringify({ email: "test@example.com", password: "pass1234" })
+});
+const login = await loginRes.json();
+const token = login.token; // <= IMPORTANT
+
+// 3) sync (protégée)
+const syncRes = await fetch(`${API}/auth/sync`, {
+method: "POST",
+headers: {
+"Content-Type": "application/json",
+"Authorization": `Bearer ${token}`
+},
+body: JSON.stringify({ ping: true })
+});
+const sync = await syncRes.json();
   }
   return (
     <div className="w-full">
@@ -146,4 +156,5 @@ function TestSyncButton() {
         {out && <pre className="mt-3">{JSON.stringify(out, null, 2)}</pre>}
     </div>
   );
+  
 }

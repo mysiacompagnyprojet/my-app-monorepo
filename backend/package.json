@@ -12,7 +12,7 @@
     "db:validate": "prisma validate"
   },
   "devDependencies": {
-    "prisma": "^6.16.0"
+    "prisma": "^6.16.2"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

@@ -9,8 +9,16 @@ type HealthResponse = HealthOk | HealthErr;
 export default function HealthCheckPage() {
   const [data, setData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [tokenPresent, setTokenPresent] = useState<boolean | null>(null);
 
   useEffect(() => {
+    // Lire le token côté client (uniquement après montage)
+    if (typeof window !== 'undefined') {
+      const hasToken = !!localStorage.getItem('token');
+      setTokenPresent(hasToken);
+      // (optionnel) console.log('Token présent (localStorage):', hasToken ? 'oui' : 'non');
+    }
+
     const api = process.env.NEXT_PUBLIC_API_URL;
 
     // Sécurise si la variable est absente
@@ -19,9 +27,7 @@ export default function HealthCheckPage() {
       setLoading(false);
       return;
     }
-    <p style={{ color: '#666' }}>
-  Token présent (localStorage) : {typeof window !== 'undefined' && localStorage.getItem('token') ? 'oui' : 'non'}
-</p>
+
     fetch(`${api}/health`, { method: 'GET' })
       .then(async (res) => {
         const json = (await res.json().catch(() => null)) as
@@ -62,9 +68,12 @@ export default function HealthCheckPage() {
       {!loading && (
         <>
           <h2>Résultat</h2>
+
           <p style={{ color: '#666' }}>
-            Token présent (localStorage) : {typeof window !== 'undefined' && localStorage.getItem('token') ? 'oui' : 'non'}
+            Token présent (localStorage) :{' '}
+            {tokenPresent === null ? 'inconnu' : tokenPresent ? 'oui' : 'non'}
           </p>
+
           <pre
             style={{
               background: '#f5f5f5',
@@ -75,6 +84,7 @@ export default function HealthCheckPage() {
           >
             {JSON.stringify(data, null, 2)}
           </pre>
+
           <p style={{ marginTop: 8, color: '#666' }}>
             NEXT_PUBLIC_API_URL = {process.env.NEXT_PUBLIC_API_URL || '(non définie)'}
           </p>
