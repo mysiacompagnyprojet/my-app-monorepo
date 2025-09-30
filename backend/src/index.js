@@ -50,3 +50,24 @@ const server = app.listen(PORT, HOST, () => {
 server.on("error", (err) => console.error("SERVER ERROR:", err));
 process.on("uncaughtException", (err) => console.error("UNCAUGHT EXCEPTION:", err));
 process.on("unhandledRejection", (reason) => console.error("UNHANDLED REJECTION:", reason));
+
+// branchement de la route pour recipes.js
+import recipes from './routes/recipes.js'
+app.use('/recipes', recipes)
+
+// branchement de la route pour import url.js.js
+import importUrl from './routes/import-url.js'
+app.use('/import', importUrl)
+
+// branchement de la route pour import ocr.js
+import importOcr from './routes/import-ocr.js'
+app.use('/import', importOcr)
+
+// branchement de la route pour import ocr.js
+import shoppingList from './routes/shopping-list.js'
+app.use('/shopping-list', shoppingList)
+
+// branchement de la route pour billing.js
+import billing, {billingWebhookHandler} from './routes/billing.js'
+app.use('/billing', billing)
+app.use('/billing', billingWebhookHandler)
