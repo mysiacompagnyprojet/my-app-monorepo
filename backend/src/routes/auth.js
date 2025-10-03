@@ -3,7 +3,7 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { signToken } = require('../lib/jwt');
-const { authRequired } = require('../middleware/auth');
+// inutile : const { authRequired } = require('../middleware/auth');
 const { supabaseAuth } = require('../middleware/supabaseAuth');
 
 const prisma = new PrismaClient();
