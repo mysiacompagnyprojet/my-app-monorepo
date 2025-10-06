@@ -4,7 +4,7 @@ const fetch = global.fetch; // Node 18+ possède fetch nativement
 async function supabaseAuth(req, res, next) {
   //a supprimer je pense, pour tester beug
   console.log('[auth] URL =', process.env.SUPABASE_URL);
-  console.log('[auth] KEY =', (process.env.SUPABASE_KEY || '').slice(0, 10) + '...');
+  console.log('[auth] KEY =', (process.env.SUPABASE_ANON_KEY || '').slice(0, 10) + '...');
   console.log('[auth] has Authorization =', !!req.headers.authorization);
   //jusque là
   try {
@@ -18,7 +18,7 @@ async function supabaseAuth(req, res, next) {
     const r = await fetch(`${process.env.SUPABASE_URL}/auth/v1/user`, {
       headers: {
         Authorization: `Bearer ${token}`,
-        apikey: process.env.SUPABASE_KEY,
+        apikey: process.env.SUPABASE_ANON_KEY,
       },
     });
 

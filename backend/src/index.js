@@ -65,3 +65,14 @@ const server = app.listen(PORT, HOST, () => {
 server.on('error', (err) => console.error('SERVER ERROR:', err));
 process.on('uncaughtException', (err) => console.error('UNCAUGHT EXCEPTION:', err));
 process.on('unhandledRejection', (reason) => console.error('UNHANDLED REJECTION:', reason));
+app.get('/__debug/supabase', (_req, res) => {
+  let apiKey = (process.env.SUPABASE_KEY || '').trim();
+  apiKey = apiKey.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
+  res.json({
+    url: process.env.SUPABASE_PROJECT_URL,
+    keyLen: apiKey.length,
+    keyHead: apiKey.slice(0, 12),
+    keyTail: apiKey.slice(-12),
+    files: process.env.DOTENV_SOURCES || 'unknown'
+  });
+});
