@@ -3,7 +3,6 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const { PrismaClient } = require('@prisma/client');
 const { signToken } = require('../lib/jwt');
-// inutile : const { authRequired } = require('../middleware/auth');
 const { supabaseAuth } = require('../middleware/supabaseAuth');
 
 const prisma = new PrismaClient();
@@ -65,24 +64,36 @@ router.post('/login', async (req, res) => {
 });
 
 /**
- * POST /auth/sync (protégée par Supabase)
+ * POST /auth/sync
+ * Protégée par supabaseAuth : on reçoit un Bearer <sb_access_token>
+ * -> on upsert l'utilisateur par email et on renvoie des infos minimales.
  */
 router.post('/sync', supabaseAuth, async (req, res) => {
-  const { userId, email } = req.user;
+  try {
+    const { email } = req.user;
 
-  const me = await prisma.user.upsert({
-    where: { email },
-    update: {},
-    create: { email, passwordHash: '' },
-    select: { id: true, email: true, createdAt: true, subscriptionStatus: true },
-  });
+    const me = await prisma.user.upsert({
+      where: { email },
+      update: {}, // (rien à mettre pour le moment)
+      create: { email, passwordHash: '' }, // pas de password côté magic link
+      select: {
+        id: true,
+        email: true,
+        createdAt: true,
+        subscriptionStatus: true,
+      },
+    });
 
-  return res.json({
-    ok: true,
-    userId: me.id,
-    email: me.email,
-    subscriptionStatus: me.subscriptionStatus || 'trialing',
-  });
+    return res.json({
+      ok: true,
+      userId: me.id,
+      email: me.email,
+      subscriptionStatus: me.subscriptionStatus || 'trialing',
+    });
+  } catch (e) {
+    console.error('sync error', e);
+    return res.status(500).json({ error: 'internal error' });
+  }
 });
 
 module.exports = router;

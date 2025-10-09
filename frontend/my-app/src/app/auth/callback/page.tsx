@@ -36,7 +36,23 @@ export default function SupabaseCallbackPage() {
 
         // Tu peux stocker le token si tu veux :
         localStorage.setItem('sb:token', session.access_token);
+        // --- Sync avec le backend pour alimenter les cookies utilisés par le middleware ---
+        const API = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
+        try {
+        const r = await fetch(`${API}/auth/sync`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.access_token}` },
+  });
+        const json = await r.json();
+  if (!r.ok) throw new Error(json?.error || 'sync failed');
 
+  // Cookies côté navigateur pour le middleware Next
+  const oneYear = 60 * 60 * 24 * 365;
+  document.cookie = `user_id=${json.userId}; Path=/; Max-Age=${oneYear}; SameSite=Lax`;
+  document.cookie = `subscription_status=${json.subscriptionStatus || 'trialing'}; Path=/; Max-Age=86400; SameSite=Lax`;
+} catch (e) {
+  console.error('sync error', e);
+}
         setMsg('Connexion réussie ✅ redirection...');
         window.location.replace('/');
       } catch (err: any) {

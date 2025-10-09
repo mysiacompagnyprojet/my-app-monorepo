@@ -25,10 +25,19 @@ app.use(
   })
 );
 
-// 2) JSON
+// --- Stripe webhook AVANT express.json() ---
+const { billing, billingWebhookHandler } = require('./routes/billing');
+app.use('/billing', billingWebhookHandler); // ce handler utilise express.raw()
+
+// --- Puis seulement maintenant le JSON ---
 app.use(express.json());
 
-// 3) Routes
+// --- Auth Supabase sur les routes protégées ---
+const { supabaseAuth } = require('./middleware/supabaseAuth');
+app.use(['/recipes', '/import', '/shopping-list'], supabaseAuth);
+app.use('/billing/checkout', supabaseAuth);
+
+// --- Routers "classiques" ---
 const authRouter = require('./routes/auth');
 app.use('/auth', authRouter);
 
@@ -44,11 +53,11 @@ app.use('/import', importOcrRouter);
 const shoppingListRouter = require('./routes/shopping-list');
 app.use('/shopping-list', shoppingListRouter);
 
-const { billing, billingWebhookHandler } = require('./routes/billing');
+// Le router Stripe "checkout" (qui parse du JSON) se monte APRES express.json()
 app.use('/billing', billing);
-app.use('/billing', billingWebhookHandler);
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+// --- Healthcheck au format attendu ---
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 app.get('/', (_req, res) => {
   res.json({ name: 'my-app API', status: 'ok', docs: '/health' });
 });
