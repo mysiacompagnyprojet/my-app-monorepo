@@ -70,18 +70,18 @@ router.post('/login', async (req, res) => {
  */
 router.post('/sync', supabaseAuth, async (req, res) => {
   try {
-    const { email } = req.user;
+    const { email } = req.user || {};
+    if (!email) return res.status(400).json({ error: 'Missing user email from Supabase token' });
 
     const me = await prisma.user.upsert({
       where: { email },
-      update: {}, // (rien à mettre pour le moment)
-      create: { email, passwordHash: '' }, // pas de password côté magic link
-      select: {
-        id: true,
-        email: true,
-        createdAt: true,
-        subscriptionStatus: true,
+      update: {},
+      create: {
+        email,
+        passwordHash: '',              // ok si NOT NULL
+        // subscriptionStatus: 'trialing', // décommente si ce champ existe et n’a pas de default
       },
+      select: { id: true, email: true, createdAt: true, subscriptionStatus: true },
     });
 
     return res.json({
@@ -91,9 +91,14 @@ router.post('/sync', supabaseAuth, async (req, res) => {
       subscriptionStatus: me.subscriptionStatus || 'trialing',
     });
   } catch (e) {
-    console.error('sync error', e);
-    return res.status(500).json({ error: 'internal error' });
+    console.error('sync error', e); // garde ce log
+    // >>> DEV UNIQUEMENT : renvoyer le détail pour diagnostiquer
+    return res.status(500).json({
+      error: 'internal error',
+      message: e?.message,
+      code: e?.code,
+      meta: e?.meta,
+    });
   }
 });
-
 module.exports = router;

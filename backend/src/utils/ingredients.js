@@ -1,8 +1,9 @@
 // Type "ligne d'ingrédient" V1
 // { name: string; quantity: number; unit: string }
-function mergeIngredients(lines) {
-const map = new Map()
+function mergeIngredients(lines = []) {
+const map = new Map();
 for (const l of lines) {
+if (!l) continue;
 const key = `${l.name.trim().toLowerCase()}|${l.unit}`
 const prev = map.get(key)
 map.set(key, { name: l.name.trim(), unit: l.unit, quantity: (prev?.quantity || 0) + (l.quantity || 0) })
