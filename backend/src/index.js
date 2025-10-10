@@ -5,12 +5,16 @@ const cors = require('cors');
 
 const app = express();
 
-// 1) CORS
+// 0) Health (simple & avant tout)
+app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+// 1) CORS (origines autorisées)
 const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
-  'http://localhost:5173',
-  process.env.FRONTEND_VERCEL_URL || '', // ton Vercel
+  process.env.FRONTEND_URL || '',
+  process.env.FRONTEND_VERCEL_URL || '',
+  process.env.APP_URL || '', // ex: https://ton-app.vercel.app
 ].filter(Boolean);
 
 app.use(
@@ -25,19 +29,18 @@ app.use(
   })
 );
 
-// --- Stripe webhook AVANT express.json() ---
+// 2) Stripe webhook DOIT être avant express.json()
 const { billing, billingWebhookHandler } = require('./routes/billing');
-app.use('/billing', billingWebhookHandler); // ce handler utilise express.raw()
+app.use('/billing/webhook', billingWebhookHandler());
 
-// --- Puis seulement maintenant le JSON ---
+// 3) JSON parser (après le webhook)
 app.use(express.json());
 
-// --- Auth Supabase sur les routes protégées ---
+// 4) Auth Supabase pour les routes qui nécessitent req.user
 const { supabaseAuth } = require('./middleware/supabaseAuth');
-app.use(['/recipes', '/import', '/shopping-list'], supabaseAuth);
-app.use('/billing/checkout', supabaseAuth);
+app.use(['/recipes', '/import', '/shopping-list', '/billing/checkout'], supabaseAuth);
 
-// --- Routers "classiques" ---
+// 5) Routes
 const authRouter = require('./routes/auth');
 app.use('/auth', authRouter);
 
@@ -53,35 +56,14 @@ app.use('/import', importOcrRouter);
 const shoppingListRouter = require('./routes/shopping-list');
 app.use('/shopping-list', shoppingListRouter);
 
-// Le router Stripe "checkout" (qui parse du JSON) se monte APRES express.json()
-app.use('/billing', billing);
-
-// --- Healthcheck au format attendu ---
-app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+// 6) Root
 app.get('/', (_req, res) => {
   res.json({ name: 'my-app API', status: 'ok', docs: '/health' });
 });
 
-// 4) Listen
+// 7) Listen
 const PORT = process.env.PORT || 4000;
 const HOST = process.env.HOST || '0.0.0.0';
-
-const server = app.listen(PORT, HOST, () => {
-  const addr = server.address();
-  console.log(`API up on http://${HOST}:${PORT}`, '| bound to:', addr);
-});
-
-server.on('error', (err) => console.error('SERVER ERROR:', err));
-process.on('uncaughtException', (err) => console.error('UNCAUGHT EXCEPTION:', err));
-process.on('unhandledRejection', (reason) => console.error('UNHANDLED REJECTION:', reason));
-app.get('/__debug/supabase', (_req, res) => {
-  let apiKey = (process.env.SUPABASE_KEY || '').trim();
-  apiKey = apiKey.replace(/^"+|"+$/g, '').replace(/^'+|'+$/g, '');
-  res.json({
-    url: process.env.SUPABASE_PROJECT_URL,
-    keyLen: apiKey.length,
-    keyHead: apiKey.slice(0, 12),
-    keyTail: apiKey.slice(-12),
-    files: process.env.DOTENV_SOURCES || 'unknown'
-  });
+app.listen(PORT, HOST, () => {
+  console.log(`API running on http://${HOST}:${PORT}`);
 });

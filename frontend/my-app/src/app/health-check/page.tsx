@@ -2,93 +2,40 @@
 
 import { useEffect, useState } from 'react';
 
-type HealthOk = { ok: boolean };
+// On définit le type de réponse possible
+type HealthOk = { status: 'ok' };
 type HealthErr = { error: string };
 type HealthResponse = HealthOk | HealthErr;
 
-export default function HealthCheckPage() {
+export default function Page() {
   const [data, setData] = useState<HealthResponse | null>(null);
   const [loading, setLoading] = useState(true);
-  const [tokenPresent, setTokenPresent] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Lire le token côté client (uniquement après montage)
-    if (typeof window !== 'undefined') {
-      const hasToken = !!localStorage.getItem('token');
-      setTokenPresent(hasToken);
-      // (optionnel) console.log('Token présent (localStorage):', hasToken ? 'oui' : 'non');
+    async function checkHealth() {
+      try {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_BACKEND_URL}/health`
+        );
+        const json: HealthResponse = await res.json();
+        setData(json);
+      } catch (err) {
+        setData({ error: 'Connexion impossible au backend' });
+      } finally {
+        setLoading(false);
+      }
     }
-
-    const api = process.env.NEXT_PUBLIC_API_URL;
-
-    // Sécurise si la variable est absente
-    if (!api) {
-      setData({ error: 'NEXT_PUBLIC_API_URL manquante côté frontend' });
-      setLoading(false);
-      return;
-    }
-
-    fetch(`${api}/health`, { method: 'GET' })
-      .then(async (res) => {
-        const json = (await res.json().catch(() => null)) as
-          | { ok?: boolean; error?: string }
-          | null;
-
-        if (!res.ok) {
-          throw new Error(json?.error ?? `HTTP ${res.status}`);
-        }
-
-        if (json && typeof json.ok === 'boolean') {
-          setData({ ok: json.ok });
-        } else {
-          setData({ error: 'Réponse vide' });
-        }
-      })
-      .catch((err: unknown) => {
-        const message =
-          err instanceof Error
-            ? err.message
-            : typeof err === 'string'
-            ? err
-            : JSON.stringify(err);
-        setData({ error: message });
-      })
-      .finally(() => setLoading(false));
+    checkHealth();
   }, []);
 
+  if (loading) return <main style={{ padding: 24 }}>⏳ Vérification...</main>;
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Test API Render</h1>
-      <p>
-        <strong>Tester /health</strong>
-      </p>
-
-      {loading && <p>Chargement…</p>}
-
-      {!loading && (
-        <>
-          <h2>Résultat</h2>
-
-          <p style={{ color: '#666' }}>
-            Token présent (localStorage) :{' '}
-            {tokenPresent === null ? 'inconnu' : tokenPresent ? 'oui' : 'non'}
-          </p>
-
-          <pre
-            style={{
-              background: '#f5f5f5',
-              padding: 12,
-              borderRadius: 8,
-              overflowX: 'auto',
-            }}
-          >
-            {JSON.stringify(data, null, 2)}
-          </pre>
-
-          <p style={{ marginTop: 8, color: '#666' }}>
-            NEXT_PUBLIC_API_URL = {process.env.NEXT_PUBLIC_API_URL || '(non définie)'}
-          </p>
-        </>
+    <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
+      {data && 'status' in data && data.status === 'ok' ? (
+        <div>✅ Backend OK</div>
+      ) : (
+        <div style={{ color: 'red' }}>❌ Backend KO : {(data as HealthErr)?.error}</div>
       )}
     </main>
   );

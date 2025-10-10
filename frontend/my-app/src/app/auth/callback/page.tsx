@@ -1,69 +1,62 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+const API = process.env.NEXT_PUBLIC_BACKEND_URL!;
 
 export default function SupabaseCallbackPage() {
   const [msg, setMsg] = useState('Connexion en cours...');
   const searchParams = useSearchParams();
+  const router = useRouter();
 
   useEffect(() => {
     (async () => {
       try {
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // --- récupère le code dans l’URL ---
+        // 1) Échange le code contre une session
         const code = searchParams.get('code');
-
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(code); // ✅ ici on passe juste "code"
-            if (error) throw error;
-        // Exemple : tu peux stocker la session
-            localStorage.setItem('sb:token', data.session?.access_token ?? '');
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+          if (error) throw error;
+          if (data.session?.access_token) {
+            localStorage.setItem('sb:token', data.session.access_token);
+          }
         }
 
-        // --- vérifie la session ---
+        // 2) Récupère la session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
+        const token = session?.access_token;
+        if (!token) throw new Error('Pas de session');
 
-        if (!session?.access_token) {
-          throw new Error('Pas de token de session trouvé.');
-        }
-
-        // Tu peux stocker le token si tu veux :
-        localStorage.setItem('sb:token', session.access_token);
-        // --- Sync avec le backend pour alimenter les cookies utilisés par le middleware ---
-        const API = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
-        try {
+        // 3) Synchronise côté backend et pose les cookies pour le middleware
         const r = await fetch(`${API}/auth/sync`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
-  });
-        const json = await r.json();
-  if (!r.ok) throw new Error(json?.error || 'sync failed');
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ ping: true }),
+          credentials: 'include',
+        });
+        if (!r.ok) throw new Error(await r.text());
+        const out = await r.json(); // { userId, subscriptionStatus, ... }
 
-  // Cookies côté navigateur pour le middleware Next
-  const oneYear = 60 * 60 * 24 * 365;
-  document.cookie = `user_id=${json.userId}; Path=/; Max-Age=${oneYear}; SameSite=Lax`;
-  document.cookie = `subscription_status=${json.subscriptionStatus || 'trialing'}; Path=/; Max-Age=86400; SameSite=Lax`;
-} catch (e) {
-  console.error('sync error', e);
-}
+        // Cookies simples (non httpOnly) pour middleware Next
+        document.cookie = `user_id=${out.userId}; Path=/; Max-Age=2592000; SameSite=Lax`;
+        document.cookie = `subscription_status=${out.subscriptionStatus || 'trialing'}; Path=/; Max-Age=2592000; SameSite=Lax`;
+
         setMsg('Connexion réussie ✅ redirection...');
-        window.location.replace('/');
-      } catch (err: any) {
-        setMsg(`Erreur: ${err.message}`);
+        router.replace('/');
+      } catch (e: any) {
+        console.error(e);
+        setMsg(`Erreur: ${e.message || e}`);
       }
     })();
-  }, [searchParams]);
+  }, []);
 
-  return (
-    <main style={{ padding: 24 }}>
-      <p>{msg}</p>
-    </main>
-  );
+  return <main style={{ padding: 24 }}>{msg}</main>;
 }
+
