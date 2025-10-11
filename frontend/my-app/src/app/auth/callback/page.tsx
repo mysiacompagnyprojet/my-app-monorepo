@@ -9,7 +9,6 @@ const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 const API = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.NEXT_PUBLIC_API_URL || '';
 
 if (process.env.NODE_ENV === 'production' && !API) {
-  // En prod, on exige la présence de l'URL backend
   throw new Error('NEXT_PUBLIC_BACKEND_URL manquante en production');
 }
 
@@ -21,7 +20,7 @@ export default function SupabaseCallbackPage() {
   useEffect(() => {
     (async () => {
       try {
-        // 0) Si l’URL contient une erreur Supabase dans le fragment (#error=...)
+        // 0) erreur supabase dans le hash ?
         if (typeof window !== 'undefined' && window.location.hash.includes('error=')) {
           const hash = new URLSearchParams(window.location.hash.replace(/^#/, ''));
           const err = hash.get('error');
@@ -31,7 +30,7 @@ export default function SupabaseCallbackPage() {
 
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-        // 1) Échange le code (si présent) contre une session
+        // 1) échange code -> session
         const code = searchParams.get('code');
         if (code) {
           const { data, error } = await supabase.auth.exchangeCodeForSession(code);
@@ -41,15 +40,13 @@ export default function SupabaseCallbackPage() {
           }
         }
 
-        // 2) Récupère la session actuelle
+        // 2) récup session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
-        if (!session?.access_token) {
-          throw new Error('Aucune session active. Le lien a peut-être expiré. Renvoie-toi un lien magique.');
-        }
+        if (!session?.access_token) throw new Error('Aucune session active. Le lien a peut-être expiré.');
         const token = session.access_token;
-        let out: any = null;
-        // 3) Synchronise côté backend (si une API est configurée)
+
+        // 3) sync backend
         if (!API) {
           console.warn('NEXT_PUBLIC_BACKEND_URL est vide; saut de la synchronisation backend.');
         } else {
@@ -60,26 +57,30 @@ export default function SupabaseCallbackPage() {
               'Authorization': `Bearer ${token}`,
             },
             body: JSON.stringify({ ping: true }),
-            credentials: 'include', // nécessite CORS côté serveur
+            credentials: 'include',
           });
 
           if (!r.ok) {
             let text = '';
-          try { text = await r.text(); } catch {}
-          throw new Error(`Appel /auth/sync a échoué (${r.status}). ${text || 'Aucun corps de réponse'}`);
+            try { text = await r.text(); } catch {}
+            throw new Error(`Appel /auth/sync a échoué (${r.status}). ${text || 'Aucun corps de réponse'}`);
           }
 
+          // 👇 tu avais supprimé cette ligne par inadvertance
+          const out: { userId?: string; subscriptionStatus?: string } = await r.json();
+
+          if (!out?.userId) {
+            throw new Error('Réponse /auth/sync invalide: userId manquant');
+          }
+
+          // Cookies lisibles par le middleware Next (dev / non httpOnly)
           const oneMonth = 60 * 60 * 24 * 30;
           const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
           const secureAttr = isHttps ? '; Secure' : '';
-          const domainAttr =
-  // si tu déploies sur un domaine custom (ex: app.mondomaine.com), mets ton domaine ici :
-  // '; Domain=mondomaine.com'
-  '';
+          const domainAttr = ''; // ex: '; Domain=mondomaine.com' en prod sur domaine
 
-// Cookies lisibles par le middleware Next (non httpOnly)
-    document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
-    document.cookie = `subscription_status=${out.subscriptionStatus || 'trialing'}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
+          document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
+          document.cookie = `subscription_status=${out.subscriptionStatus || 'trialing'}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
         }
 
         setMsg('Connexion réussie ✅ redirection...');

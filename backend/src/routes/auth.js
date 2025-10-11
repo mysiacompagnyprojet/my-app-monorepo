@@ -68,19 +68,21 @@ router.post('/login', async (req, res) => {
  * Protégée par supabaseAuth : on reçoit un Bearer <sb_access_token>
  * -> on upsert l'utilisateur par email et on renvoie des infos minimales.
  */
+
+/**
+ * POST /auth/sync
+ * Protégée par supabaseAuth : on reçoit un Bearer <sb_access_token>
+ * -> on upsert l'utilisateur PAR ID (auth.uid) et on met à jour l'email.
+ */
 router.post('/sync', supabaseAuth, async (req, res) => {
   try {
-    const { email } = req.user || {};
-    if (!email) return res.status(400).json({ error: 'Missing user email from Supabase token' });
+    const { userId, email } = req.user || {};
+    if (!userId) return res.status(400).json({ error: 'Missing user id from Supabase token' });
 
     const me = await prisma.user.upsert({
-      where: { email },
-      update: {},
-      create: {
-        email,
-        passwordHash: '',              // ok si NOT NULL
-        // subscriptionStatus: 'trialing', // décommente si ce champ existe et n’a pas de default
-      },
+      where: { id: userId },                  // ✅ clé = auth.uid()
+      update: { email, updatedAt: new Date() },
+      create: { id: userId, email, passwordHash: '' }, // passwordHash vide si NOT NULL
       select: { id: true, email: true, createdAt: true, subscriptionStatus: true },
     });
 
@@ -91,8 +93,7 @@ router.post('/sync', supabaseAuth, async (req, res) => {
       subscriptionStatus: me.subscriptionStatus || 'trialing',
     });
   } catch (e) {
-    console.error('sync error', e); // garde ce log
-    // >>> DEV UNIQUEMENT : renvoyer le détail pour diagnostiquer
+    console.error('sync error', e);
     return res.status(500).json({
       error: 'internal error',
       message: e?.message,

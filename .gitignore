@@ -6,7 +6,7 @@ build/
 .cache/
 .next/
 out/
-.env
+.env*
 .env.*.local
 .vscode/
 .idea/
@@ -24,3 +24,5 @@ ios/Pods/
 DerivedData
 .log
 token.txt
+/src/generated/prisma
+.vercel
