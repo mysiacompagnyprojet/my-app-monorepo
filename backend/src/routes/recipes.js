@@ -28,33 +28,61 @@ router.get('/', needAuth, async (req, res) => {
   res.json({ ok: true, recipes });
 });
 
-// POST /recipes
+// POST /recipes/changement ici
+// POST /recipes  — crée une recette
 router.post('/', needAuth, async (req, res) => {
-  const { userId } = req.user;
-  const { title, servings, steps, imageUrl, notes, ingredients } = req.body;
-  if (!title || !servings || !Array.isArray(ingredients)) {
-    return res.status(400).json({ ok: false, error: 'Champs manquants' });
-  }
-  const merged = mergeIngredients(ingredients);
-  const recipe = await prisma.recipe.create({
-    data: {
-      userId,
-      title,
-      servings: parseInt(servings, 10) || 1,
-      steps: Array.isArray(steps) ? steps : [],
-      imageUrl: imageUrl || null,
-      notes: notes || null,
-      ingredients: {
-        create: merged.map((l) => ({
-          name: l.name,
-          quantity: l.quantity,
-          unit: l.unit,
-        })),
-      },
-    },
-    include: { ingredients: true },
-  });
-  res.json({ ok: true, recipe });
-});
+  try {
+    // 1) Normalisation + lecture sûre
+    const body = req.body ?? {};
+    let { title, servings, steps, imageUrl, notes } = body;
 
+    // Accepte steps stringifié (cas fréquent quand l'appel envoie du texte)
+    if (typeof steps === 'string') {
+      try { steps = JSON.parse(steps); } catch {}
+    }
+
+    // 2) Validations claires (messages précis)
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
+    }
+
+    // servings: nombre >= 1 (par défaut 1 si absent)
+    if (servings == null) servings = 1;
+    servings = Number(servings);
+    if (!Number.isFinite(servings) || servings < 1) {
+      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" });
+    }
+
+    // steps: tableau (par défaut tableau vide)
+    if (steps == null) steps = [];
+    if (!Array.isArray(steps)) {
+      return res.status(400).json({ ok: false, error: "Champ 'steps' doit être un tableau" });
+    }
+
+    // imageUrl/notes optionnels
+    if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
+      imageUrl = imageUrl.url; // au cas où un import te donne { url: "..."}
+    }
+    if (notes == null) notes = '';
+
+    // 3) Création en base
+    const recipe = await prisma.recipe.create({
+      data: {
+        userId: req.user.userId,  // injecté par supabaseAuth / needAuth
+        title,
+        servings,
+        steps,         // jsonb
+        imageUrl: imageUrl || null,
+        notes
+      },
+      select: { id: true, title: true, servings: true, steps: true, imageUrl: true, notes: true, createdAt: true }
+    });
+
+    return res.status(201).json({ ok: true, recipe });
+  } catch (e) {
+    console.error('POST /recipes error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
+//ici
 module.exports = router;
