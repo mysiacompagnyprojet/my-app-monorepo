@@ -13,19 +13,22 @@ function needAuth(req, res, next) {
 
 // POST /billing/checkout { email?: string }
 router.post('/checkout', needAuth, async (req, res) => {
-  const { userId, email } = { userId: req.user.userId, email: req.body.email };
+  const userId = req.user.userId;
+  const email = req.body.email || req.user?.email || undefined;
+
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
-    success_url:
-      process.env.APP_URL + '/premium/success?session_id={CHECKOUT_SESSION_ID}',
+    success_url: process.env.APP_URL + '/premium/success?session_id={CHECKOUT_SESSION_ID}',
     cancel_url: process.env.APP_URL + '/premium/cancel',
     customer_email: email,
     line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
     subscription_data: {
       trial_period_days: parseInt(process.env.TRIAL_DAYS || '14', 10),
+      metadata: { app_user_id: userId }, // 👈 important pour le webhook
     },
-    metadata: { app_user_id: userId },
+    // (on retire metadata au niveau session, pas utile ici)
   });
+
   res.json({ ok: true, url: session.url });
 });
 
@@ -33,7 +36,7 @@ router.post('/checkout', needAuth, async (req, res) => {
 function billingWebhookHandler() {
   const wh = express.Router();
   wh.post(
-    '/webhook',
+    '/', // 👈 correspond à /billing/webhook côté index.js
     express.raw({ type: 'application/json' }),
     async (req, res) => {
       try {
@@ -49,7 +52,16 @@ function billingWebhookHandler() {
           event.type === 'customer.subscription.updated'
         ) {
           const sub = event.data.object;
-          const status = sub.status;
+
+          const raw = sub.status;
+          const allowed = new Set(['trialing','active','past_due','canceled']);
+          const status =
+            allowed.has(raw) ? raw :
+            raw === 'unpaid' ? 'past_due' :
+            raw === 'incomplete' ? 'trialing' :
+            raw === 'incomplete_expired' ? 'canceled' :
+            'past_due';
+
           const endsAt = sub.current_period_end
             ? new Date(sub.current_period_end * 1000)
             : null;
@@ -89,3 +101,4 @@ function billingWebhookHandler() {
 }
 
 module.exports = { billing: router, billingWebhookHandler };
+

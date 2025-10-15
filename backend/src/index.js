@@ -40,6 +40,9 @@ app.use(express.json());
 const { supabaseAuth } = require('./middleware/supabaseAuth');
 app.use(['/recipes', '/import', '/shopping-list', '/billing/checkout'], supabaseAuth);
 
+// 👈 assure le montage de /billing/checkout
+app.use('/billing', billing); 
+
 // 5) Routes
 const authRouter = require('./routes/auth');
 app.use('/auth', authRouter);
