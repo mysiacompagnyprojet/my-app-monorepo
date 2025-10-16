@@ -1,11 +1,10 @@
 // backend/src/routes/auth.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { PrismaClient } = require('@prisma/client');
+const { prisma } = require('../lib/prisma');
 const { signToken } = require('../lib/jwt');
 const { supabaseAuth } = require('../middleware/supabaseAuth');
 
-const prisma = new PrismaClient();
 const router = express.Router();
 
 /**

@@ -7,6 +7,9 @@ const { parseRawLine } = require('../utils/ingredients');
 const router = express.Router();
 const fetch = global.fetch; // utiliser le fetch natif de Node 18+
 
+const { checkAndIncrementLimit } = require('../utils/limits');
+// ...
+
 function needAuth(req, res, next) {
   if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
   next();
@@ -19,6 +22,9 @@ router.post('/url', needAuth, async (req, res) => {
 
     const html = await (await fetch(url)).text();
     const $ = cheerio.load(html);
+
+    const chk = await checkAndIncrementLimit(req.user.userId, 'lunch'); // adapte le type
+    if (!chk.allowed) return res.status(402).json({ ok: false, error: 'limit_reached' });
 
     // 1) JSON-LD Recipe
     let recipeJson = null;
@@ -76,6 +82,7 @@ router.post('/url', needAuth, async (req, res) => {
       draft: { title, servings, steps, imageUrl, ingredients },
     });
   } catch (e) {
+    console.error('POST /import/url error:', e);
     res.status(400).json({ ok: false, error: e.message });
   }
 });

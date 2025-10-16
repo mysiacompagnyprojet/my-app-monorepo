@@ -1,7 +1,7 @@
 // backend/src/routes/recipes.js
 const express = require('express');
 const { prisma } = require('../lib/prisma');
-const { mergeIngredients } = require('../utils/ingredients');
+const { enrichIngredientWithCost } = require('../utils/costs');
 
 const router = express.Router();
 
@@ -22,60 +22,70 @@ router.get('/', needAuth, async (req, res) => {
       servings: true,
       imageUrl: true,
       createdAt: true,
-      ingredients: { select: { name: true, quantity: true, unit: true } },
+      ingredients: { select: { name: true, quantity: true, unit: true, costRecipe: true } },
     },
   });
   res.json({ ok: true, recipes });
 });
 
-// POST /recipes/changement ici
-// POST /recipes  — crée une recette
-router.post('/', needAuth, async (req, res) => {
+// POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
+router.post('/', async (req, res) => {
+  req.user = { userId: 'test-user-1' }; // 👈 simule un utilisateur//ancien = router.post('/', needAuth, async (req, res) => {
   try {
-    // 1) Normalisation + lecture sûre
     const body = req.body ?? {};
-    let { title, servings, steps, imageUrl, notes } = body;
+    let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
-    // Accepte steps stringifié (cas fréquent quand l'appel envoie du texte)
+    // steps peut arriver stringifié
     if (typeof steps === 'string') {
-      try { steps = JSON.parse(steps); } catch {}
+      try { steps = JSON.parse(steps); } catch { /* ignore */ }
     }
 
-    // 2) Validations claires (messages précis)
+    // Validations
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
     }
 
-    // servings: nombre >= 1 (par défaut 1 si absent)
     if (servings == null) servings = 1;
     servings = Number(servings);
     if (!Number.isFinite(servings) || servings < 1) {
       return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" });
     }
 
-    // steps: tableau (par défaut tableau vide)
     if (steps == null) steps = [];
     if (!Array.isArray(steps)) {
       return res.status(400).json({ ok: false, error: "Champ 'steps' doit être un tableau" });
     }
 
-    // imageUrl/notes optionnels
     if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
-      imageUrl = imageUrl.url; // au cas où un import te donne { url: "..."}
+      imageUrl = imageUrl.url;
     }
     if (notes == null) notes = '';
 
-    // 3) Création en base
+    // Ingrédients
+    if (!Array.isArray(ingredients)) ingredients = [];
+    const ingData = await Promise.all(
+      ingredients.map(async (i) => {
+        const base = {
+          name: String(i?.name || '').trim(),
+          quantity: Number(i?.quantity || 0),
+          unit: String(i?.unit || '').trim(),
+        };
+        return await enrichIngredientWithCost(base); // { airtableId, unitPriceBuy, costRecipe, ... }
+      })
+    );
+
+    // Création en base
     const recipe = await prisma.recipe.create({
       data: {
-        userId: req.user.userId,  // injecté par supabaseAuth / needAuth
+        userId: req.user.userId,
         title,
         servings,
-        steps,         // jsonb
+        steps,
         imageUrl: imageUrl || null,
-        notes
+        notes,
+        ingredients: ingData.length ? { createMany: { data: ingData } } : undefined,
       },
-      select: { id: true, title: true, servings: true, steps: true, imageUrl: true, notes: true, createdAt: true }
+      include: { ingredients: true },
     });
 
     return res.status(201).json({ ok: true, recipe });
@@ -84,5 +94,5 @@ router.post('/', needAuth, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
 });
-//ici
+
 module.exports = router;
