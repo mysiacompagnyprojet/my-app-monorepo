@@ -24,7 +24,7 @@ export function middleware(req: NextRequest) {
   }
 
   // === 3) Pages premium : besoin d'un statut actif (tu laisses 'trialing' passer) ===
-  if (path.startsWith('/premium')) {
+  if (path.startsWith('/premium/success') || path.startsWith('/premium/cancel')) {
     if (!sub || (sub !== 'active' && sub !== 'trialing')) {
       return NextResponse.redirect(new URL('/pricing', url));
     }
