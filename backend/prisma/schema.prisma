@@ -1,13 +1,15 @@
-generator client {
-  provider = "prisma-client-js"
-  output   = "../src/generated/prisma"
-}
-
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
+
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/prisma"
+}
+
 
 model User {
   id                 String              @id @default(uuid())
@@ -23,29 +25,31 @@ model User {
 }
 
 model Recipe {
-  id          String             @id @default(uuid())
-  userId      String
+  id          String             @id @default(uuid()) @db.Uuid
+  userId      String             @db.Uuid
   title       String
-  servings    Int
-  steps       Json
+  servings    Int                @default(1)
+  steps       Json?
   imageUrl    String?
   notes       String?
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   user        User               @relation(fields: [userId], references: [id])
   ingredients RecipeIngredient[]
+  @@index([userId])
 }
 
 model RecipeIngredient {
-  id           String  @id @default(uuid())
-  recipeId     String
+  id           String  @id @default(uuid()) @db.Uuid
+  recipeId     String  @db.Uuid
   name         String
-  quantity     Float
-  unit         String
-  airtableId   String?
-  unitPriceBuy Float?
-  costRecipe   Float?
+  quantity     Float   @default(0)
+  unit         String  // "g" | "ml" | "piece" (stocké en string)
+  airtableId   String? // ⚠️ Airtable renvoie "recXXXX...", surtout PAS @db.Uuid
+  unitPriceBuy Float? // prix d'achat à l'unité (ppu)
+  costRecipe   Float? // coût recette (quantity * ppu normalisé)
   recipe       Recipe  @relation(fields: [recipeId], references: [id])
+  @@index([recipeId])
 }
 
 model ImportLimit {

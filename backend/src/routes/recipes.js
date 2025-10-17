@@ -31,7 +31,9 @@ router.get('/', needAuth, async (req, res) => {
 // POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
 router.post('/', async (req, res) => {
   req.user = { userId: 'test-user-1' }; // 👈 simule un utilisateur//ancien = router.post('/', needAuth, async (req, res) => {
-  try {
+  console.log('POST /recipes req.user =', req.user);
+
+    try {
     const body = req.body ?? {};
     let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
@@ -73,6 +75,7 @@ router.post('/', async (req, res) => {
         return await enrichIngredientWithCost(base); // { airtableId, unitPriceBuy, costRecipe, ... }
       })
     );
+    console.log('create data.userId =', req.user?.userId);
 
     // Création en base
     const recipe = await prisma.recipe.create({

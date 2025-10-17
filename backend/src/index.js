@@ -17,9 +17,7 @@ const allowedOrigins = [
   process.env.APP_URL || '', // ex: https://ton-app.vercel.app
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
+app.use(cors({origin: (origin, cb) => {
       if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error('Not allowed by CORS'));
     },
@@ -36,8 +34,11 @@ app.use('/billing/webhook', billingWebhookHandler());
 // 3) JSON parser (après le webhook)
 app.use(express.json());
 
+
+
 // 4) Auth Supabase pour les routes qui nécessitent req.user
 const { supabaseAuth } = require('./middleware/supabaseAuth');
+app.use(supabaseAuth);
 app.use(['/recipes', '/import', '/shopping-list', '/billing/checkout'], supabaseAuth);
 
 // 👈 assure le montage de /billing/checkout
