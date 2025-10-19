@@ -4,6 +4,7 @@ const express = require('express');
 const cors = require('cors');
 
 const app = express();
+const { supabaseAuth } = require('./middleware/supabaseAuth');
 
 // 0) Health (simple & avant tout)
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
@@ -34,11 +35,10 @@ app.use('/billing/webhook', billingWebhookHandler());
 // 3) JSON parser (après le webhook)
 app.use(express.json());
 
-
+app.use(supabaseAuth);
 
 // 4) Auth Supabase pour les routes qui nécessitent req.user
-const { supabaseAuth } = require('./middleware/supabaseAuth');
-app.use(supabaseAuth);
+
 app.use(['/recipes', '/import', '/shopping-list', '/billing/checkout'], supabaseAuth);
 
 // 👈 assure le montage de /billing/checkout

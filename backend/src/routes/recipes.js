@@ -29,20 +29,17 @@ router.get('/', needAuth, async (req, res) => {
 });
 
 // POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
-router.post('/', async (req, res) => {
-  req.user = { userId: 'test-user-1' }; // 👈 simule un utilisateur//ancien = router.post('/', needAuth, async (req, res) => {
+router.post('/', needAuth, async (req, res) => {
   console.log('POST /recipes req.user =', req.user);
 
-    try {
+  try {
     const body = req.body ?? {};
     let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
-    // steps peut arriver stringifié
     if (typeof steps === 'string') {
       try { steps = JSON.parse(steps); } catch { /* ignore */ }
     }
 
-    // Validations
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
     }
@@ -63,7 +60,6 @@ router.post('/', async (req, res) => {
     }
     if (notes == null) notes = '';
 
-    // Ingrédients
     if (!Array.isArray(ingredients)) ingredients = [];
     const ingData = await Promise.all(
       ingredients.map(async (i) => {
@@ -75,12 +71,13 @@ router.post('/', async (req, res) => {
         return await enrichIngredientWithCost(base); // { airtableId, unitPriceBuy, costRecipe, ... }
       })
     );
-    console.log('create data.userId =', req.user?.userId);
 
-    // Création en base
+    console.log('create data.userId =', req.user?.userId);
+    console.log('ingData =', ingData);
+
     const recipe = await prisma.recipe.create({
       data: {
-        userId: req.user.userId,
+        userId: req.user.userId, // <-- UUID requis
         title,
         servings,
         steps,

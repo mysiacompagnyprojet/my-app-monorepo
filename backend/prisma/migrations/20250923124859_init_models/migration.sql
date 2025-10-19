@@ -35,7 +35,7 @@ CREATE TABLE "public"."Recipe" (
 );
 
 -- CreateTable
-CREATE TABLE "public"."RecipeIngredient" (
+CREATE TABLE "public"."Ingredients" (
     "id" TEXT NOT NULL,
     "recipeId" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -45,7 +45,7 @@ CREATE TABLE "public"."RecipeIngredient" (
     "unitPriceBuy" DOUBLE PRECISION,
     "costRecipe" DOUBLE PRECISION,
 
-    CONSTRAINT "RecipeIngredient_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Ingredients_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -68,7 +68,7 @@ CREATE UNIQUE INDEX "ImportLimit_userId_key" ON "public"."ImportLimit"("userId")
 ALTER TABLE "public"."Recipe" ADD CONSTRAINT "Recipe_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "public"."RecipeIngredient" ADD CONSTRAINT "RecipeIngredient_recipeId_fkey" FOREIGN KEY ("recipeId") REFERENCES "public"."Recipe"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "public"."Ingredients" ADD CONSTRAINT "Ingredients_recipeId_fkey" FOREIGN KEY ("recipeId") REFERENCES "public"."Recipe"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "public"."ImportLimit" ADD CONSTRAINT "ImportLimit_userId_fkey" FOREIGN KEY ("userId") REFERENCES "public"."User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

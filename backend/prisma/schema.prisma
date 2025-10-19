@@ -35,11 +35,11 @@ model Recipe {
   createdAt   DateTime           @default(now())
   updatedAt   DateTime           @updatedAt
   user        User               @relation(fields: [userId], references: [id])
-  ingredients RecipeIngredient[]
+  ingredients Ingredient[]
   @@index([userId])
 }
 
-model RecipeIngredient {
+model Ingredient {
   id           String  @id @default(uuid()) @db.Uuid
   recipeId     String  @db.Uuid
   name         String
@@ -50,6 +50,8 @@ model RecipeIngredient {
   costRecipe   Float? // coût recette (quantity * ppu normalisé)
   recipe       Recipe  @relation(fields: [recipeId], references: [id])
   @@index([recipeId])
+  @@map("Ingredients") // ← mappe le modèle Prisma sur la table "Ingredients"
+
 }
 
 model ImportLimit {
