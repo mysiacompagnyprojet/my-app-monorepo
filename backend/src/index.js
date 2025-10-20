@@ -5,7 +5,7 @@ const cors = require('cors');
 
 const app = express();
 const { supabaseAuth } = require('./middleware/supabaseAuth');
-
+const devAirtable = require('./routes/dev-airtable');
 // 0) Health (simple & avant tout)
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
@@ -35,14 +35,11 @@ app.use('/billing/webhook', billingWebhookHandler());
 // 3) JSON parser (après le webhook)
 app.use(express.json());
 
+// ⚠️ Route dev publique AVANT l’auth
+app.use(devAirtable);
+
+// Auth globale pour le reste
 app.use(supabaseAuth);
-
-// 4) Auth Supabase pour les routes qui nécessitent req.user
-
-app.use(['/recipes', '/import', '/shopping-list', '/billing/checkout'], supabaseAuth);
-
-// 👈 assure le montage de /billing/checkout
-app.use('/billing', billing); 
 
 // 5) Routes
 const authRouter = require('./routes/auth');
@@ -59,6 +56,9 @@ app.use('/import', importOcrRouter);
 
 const shoppingListRouter = require('./routes/shopping-list');
 app.use('/shopping-list', shoppingListRouter);
+
+// 👈 assure le montage de /billing/checkout
+app.use('/billing', billing); 
 
 // 6) Root
 app.get('/', (_req, res) => {
