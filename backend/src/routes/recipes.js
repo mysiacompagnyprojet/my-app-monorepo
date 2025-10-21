@@ -2,6 +2,7 @@
 const express = require('express');
 const { prisma } = require('../lib/prisma');
 const { enrichIngredientWithCost } = require('../utils/costs');
+const { normalizeUnit } = require('../utils/units');
 
 const router = express.Router();
 
@@ -66,12 +67,13 @@ router.post('/', needAuth, async (req, res) => {
         const base = {
           name: String(i?.name || '').trim(),
           quantity: Number(i?.quantity || 0),
-          unit: String(i?.unit || '').trim(),
+          unit: normalizeUnit(i?.unit),
         };
         return await enrichIngredientWithCost(base); // { airtableId, unitPriceBuy, costRecipe, ... }
       })
     );
 
+    console.log('POST /recipes req.user =', req.user);
     console.log('create data.userId =', req.user?.userId);
     console.log('ingData =', ingData);
 

@@ -1,5 +1,6 @@
 // backend/src/services/airtable.js
 const Airtable = require('airtable');
+const { stripAccents } = require('../utils/units');
 
 // ========= CONFIG : noms de colonnes EXACTS dans ta table =========
 const COL_NAME = 'NOM';
@@ -7,8 +8,10 @@ const COL_UNIT = 'Unité (g/ml, pièce)';
 const COL_REF_QTY = 'Quantité de référence';   // ex: 1000 pour g/ml, 1 pour pièce
 const COL_BUY_PRICE = "Prix d'achat";          // prix payé pour la quantité de référence
 // Certaines tables ont déjà un prix normalisé :
-const COL_PRICE_KG_L_PIECE = 'Prix kg/L/pièce'; // si existe, sinon sera undefined
-const COL_PRICE_AU_KG_L = 'Prix au kg/l';       // si existe, sinon sera undefined
+const COL_PRICE_KG_L_PIECE = 'Prix kg/L/pièce'; // déjà €/g, €/ml ou €/pièce dans ta base
+const COL_PRICE_AU_KG_L = 'Prix au kg/l';       // €/kg ou €/L
+// (NOUVEAU) Colonne "type" (select: g, cl, L, ml, pièce, botte, etc.)
+const COL_UNIT_KIND = "Type d'unité"; // adapte si ta colonne s'appelle "Type" au lieu de "Type..."
 // ==================================================================
 
 const BASE_ID = process.env.AIRTABLE_BASE_ID;
@@ -18,28 +21,58 @@ if (!BASE_ID) console.warn('[Airtable] AIRTABLE_BASE_ID manquant');
 
 const base = new Airtable({ apiKey: process.env.AIRTABLE_API_KEY }).base(BASE_ID);
 
+// =========================
+// Cache (avec TTL 1 minute)
+// =========================
+const TTL_MS = 60 * 1000;
+const _cache = new Map(); // key -> { value, t }
+const now = () => Date.now();
+function cacheGet(key) {
+  const e = _cache.get(key);
+  if (!e) return null;
+  if (now() - e.t > TTL_MS) { _cache.delete(key); return null; }
+  return e.value;
+}
+function cacheSet(key, value) {
+  _cache.set(key, { value, t: now() });
+}
+
 // ----- Utils d’unité -----
 function canonUnit(uRaw) {
-  const u = String(uRaw || '').trim().toLowerCase();
+  const u = String(uRaw || '')
+    .trim()
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // retire accents
   if (!u) return null;
-  // on renvoie l’unité "de base" utilisée pour le prix unitaire:
-  // - grammes pour le solide:    'g'
-  // - millilitres pour le liquide:'ml'
-  // - unité/pièce:               'piece'
+
   if (['g', 'gramme', 'grammes'].includes(u)) return 'g';
-  if (['kg', 'kilogramme', 'kilogrammes'].includes(u)) return 'kg'; // on convertira ensuite en 'g'
+  if (['kg', 'kilogramme', 'kilogrammes'].includes(u)) return 'kg';
+  if (['mg'].includes(u)) return 'mg';
+
   if (['ml', 'millilitre', 'millilitres'].includes(u)) return 'ml';
-  if (['l', 'litre', 'litres'].includes(u)) return 'l';              // on convertira ensuite en 'ml'
-  if (['piece', 'pièce', 'unite', 'unité', 'pc'].includes(u)) return 'piece';
-  return u; // au pire on renvoie brut
+  if (['l', 'litre', 'litres'].includes(u)) return 'l';
+  if (['cl'].includes(u)) return 'cl';
+  if (['dl'].includes(u)) return 'dl';
+
+  if (['piece', 'pièce', 'unite', 'unité', 'pc', 'botte'].includes(u)) return 'piece';
+  return u; // inconnu -> brut
 }
 
 function toBaseUnit(unit) {
   // La "base" côté prix unitaire: g / ml / piece
   const u = canonUnit(unit);
-  if (u === 'kg') return { unit: 'g', factor: 1000 };      // 1 kg -> 1000 g
-  if (u === 'l')  return { unit: 'ml', factor: 1000 };     // 1 L  -> 1000 ml
-  if (u === 'g' || u === 'ml' || u === 'piece') return { unit: u, factor: 1 };
+
+  if (u === 'mg') return { unit: 'g',  factor: 0.001 };  // 1 mg -> 0.001 g
+  if (u === 'kg') return { unit: 'g',  factor: 1000 };   // 1 kg -> 1000 g
+  if (u === 'g')  return { unit: 'g',  factor: 1 };
+
+  if (u === 'cl') return { unit: 'ml', factor: 10 };     // 1 cl -> 10 ml
+  if (u === 'dl') return { unit: 'ml', factor: 100 };    // 1 dl -> 100 ml
+  if (u === 'l')  return { unit: 'ml', factor: 1000 };   // 1 L  -> 1000 ml
+  if (u === 'ml') return { unit: 'ml', factor: 1 };
+
+  if (u === 'piece') return { unit: 'piece', factor: 1 };
+
   // fallback inconnu -> on traite comme "piece"
   return { unit: 'piece', factor: 1 };
 }
@@ -52,47 +85,60 @@ function toBaseQty(qty, unit) {
 // ----- Calcul du prix unitaire (par g/ml/pièce) -----
 function computePPUFromRow(fields) {
   // 1) Essaye d’utiliser un prix normalisé existant
-  const priceKgLPiece = Number(fields[COL_PRICE_KG_L_PIECE] ?? NaN);
-  const priceAuKgL    = Number(fields[COL_PRICE_AU_KG_L] ?? NaN);
-  const unitRaw       = fields[COL_UNIT];
-  const u = canonUnit(unitRaw);
+  const priceKgLPiece = Number(fields[COL_PRICE_KG_L_PIECE] ?? NaN); // déjà €/g, €/ml, €/pièce chez toi
+  const priceAuKgL    = Number(fields[COL_PRICE_AU_KG_L] ?? NaN);    // €/kg ou €/L
 
-  // Cas "pièce" : si le prix normalisé est par pièce, on peut le prendre tel quel
-  if (u === 'piece') {
-    if (!Number.isNaN(priceKgLPiece)) return { ppu: priceKgLPiece, unit: 'piece' };
-    if (!Number.isNaN(priceAuKgL))    return { ppu: priceAuKgL,    unit: 'piece' };
-  }
-
-  // Cas g/ml : si la colonne est "prix au kg/l", on convertit vers g/ml
-  // - prix €/kg -> €/g en divisant par 1000
-  // - prix €/l  -> €/ml en divisant par 1000
-  if (!Number.isNaN(priceKgLPiece)) {
-    if (u === 'g' || u === 'kg') return { ppu: priceKgLPiece / 1000, unit: 'g' };
-    if (u === 'ml' || u === 'l') return { ppu: priceKgLPiece / 1000, unit: 'ml' };
-  }
-  if (!Number.isNaN(priceAuKgL)) {
-    if (u === 'g' || u === 'kg') return { ppu: priceAuKgL / 1000, unit: 'g' };
-    if (u === 'ml' || u === 'l') return { ppu: priceAuKgL / 1000, unit: 'ml' };
-  }
-
-  // 2) Sinon, calcule: ppu = Prix d’achat / Quantité de référence
-  const refQty = Number(fields[COL_REF_QTY] ?? NaN);
-  const buyPrice = Number(fields[COL_BUY_PRICE] ?? NaN);
-  if (!Number.isFinite(refQty) || refQty <= 0 || !Number.isFinite(buyPrice)) {
-    return { ppu: null, unit: null };
-  }
-
-  // La quantité de référence est exprimée dans l’unité affichée (ex: 1000 g / 1000 ml / 1 pièce)
+  // on préfère le "Type..." si présent ; sinon on retombe sur "Unité (g/ml, pièce)"
+  const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
   const { unit: baseU, factor } = toBaseUnit(unitRaw);
-  // Si refQty=1000 et unit=kg (rare), on convertit avant
-  const refInBase = refQty * (canonUnit(unitRaw) === 'kg' || canonUnit(unitRaw) === 'l' ? 1000 : 1);
 
-  const ppu = buyPrice / (refInBase || 1); // prix par g/ml/pièce
-  return { ppu, unit: baseU };
+  // Cas 1 : ta colonne "Prix kg/L/pièce" est déjà normalisée -> PAS de /1000
+  if (Number.isFinite(priceKgLPiece)) {
+    return { ppu: priceKgLPiece, unit: baseU };
+  }
+
+  // Cas 2 : si on a "Prix au kg/l" (€/kg ou €/L), convertir vers €/g ou €/ml
+  if (Number.isFinite(priceAuKgL)) {
+    if (baseU === 'g' || baseU === 'ml') return { ppu: priceAuKgL / 1000, unit: baseU };
+    if (baseU === 'piece')               return { ppu: priceAuKgL,        unit: 'piece' }; // cas exotique
+  }
+
+  // Cas 3 : fallback -> calcule: ppu = Prix d’achat / (Quantité de référence convertie vers l’unité de base)
+  const refQty   = Number(fields[COL_REF_QTY] ?? NaN);
+  const buyPrice = Number(fields[COL_BUY_PRICE] ?? NaN);
+
+  if (Number.isFinite(refQty) && refQty > 0 && Number.isFinite(buyPrice)) {
+    const refInBase = refQty * factor; // conversion kg/L/cl/dl -> g/ml
+    const ppu = buyPrice / (refInBase || 1); // prix par g/ml/pièce
+    return { ppu, unit: baseU };
+  }
+
+  return { ppu: null, unit: null };
 }
 
-// Cache simple
-const cache = new Map(); // key = nom en minuscule
+// =====================
+// Aide fuzzy (fallback)
+// =====================
+function normName(s = '') {
+  return stripAccents(String(s).trim().toLowerCase());
+}
+function levenshtein(a = '', b = '') {
+  const m = a.length, n = b.length;
+  const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+  for (let i = 0; i <= m; i++) dp[i][0] = i;
+  for (let j = 0; j <= n; j++) dp[0][j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i][j] = Math.min(
+        dp[i - 1][j] + 1,
+        dp[i][j - 1] + 1,
+        dp[i - 1][j - 1] + cost
+      );
+    }
+  }
+  return dp[m][n];
+}
 
 /**
  * Retourne:
@@ -105,30 +151,66 @@ const cache = new Map(); // key = nom en minuscule
  * ou null si non trouvé.
  */
 async function getIngredientPriceByName(name) {
-  const key = String(name || '').trim().toLowerCase();
-  if (!key) return null;
+  const raw = String(name || '').trim();
+  if (!raw) return null;
 
-  if (cache.has(key)) return cache.get(key);
+  const cacheKey = `n:${raw.toLowerCase()}`;
+  const fromCache = cacheGet(cacheKey);
+  if (fromCache !== null) return fromCache;
 
-  const formula = `LOWER({${COL_NAME}}) = LOWER("${key.replace(/"/g, '\\"')}")`;
-  const records = await base(TABLE)
+  // 1) essai exact insensible à la casse sur COL_NAME
+  const formula = `LOWER({${COL_NAME}}) = LOWER("${raw.replace(/"/g, '\\"')}")`;
+  const exact = await base(TABLE)
     .select({ filterByFormula: formula, maxRecords: 1 })
     .all();
 
-  if (!records.length) { cache.set(key, null); return null; }
-  const r = records[0];
-  const fields = r.fields || {};
+  if (exact.length) {
+    const r = exact[0];
+    const fields = r.fields || {};
+    const { ppu, unit } = computePPUFromRow(fields);
+    const out = {
+      airtableId: r.id,
+      name: fields[COL_NAME] ?? raw,
+      unit,
+      pricePerUnit: Number.isFinite(ppu) ? ppu : null,
+    };
+    cacheSet(cacheKey, out);
+    return out;
+  }
 
-  const { ppu, unit } = computePPUFromRow(fields);
-  const result = {
-    airtableId: r.id,
-    name: fields[COL_NAME] ?? name,
-    unit,                             // base: g/ml/piece
-    pricePerUnit: Number.isFinite(ppu) ? ppu : null,
-  };
+  // 2) fallback fuzzy: on prend un paquet et on choisit le plus proche
+  const wanted = normName(raw);
+  const batch = await base(TABLE).select({ maxRecords: 50 }).all();
 
-  cache.set(key, result);
-  return result;
+  let best = null;
+  for (const r of batch) {
+    const fields = r.fields || {};
+    const nm = String(fields[COL_NAME] ?? '');
+    const dist = levenshtein(wanted, normName(nm));
+    const maxLen = Math.max(wanted.length, nm.length) || 1;
+    const ratio = 1 - dist / maxLen; // 0..1
+    if (!best || ratio > best.ratio) {
+      best = { r, dist, ratio };
+    }
+  }
+
+  // petit seuil: tolère fautes courtes ou pluriels/singuliers
+  if (best && (best.dist <= 2 || best.ratio >= 0.8)) {
+    const r = best.r;
+    const fields = r.fields || {};
+    const { ppu, unit } = computePPUFromRow(fields);
+    const out = {
+      airtableId: r.id,
+      name: fields[COL_NAME] ?? raw,
+      unit,
+      pricePerUnit: Number.isFinite(ppu) ? ppu : null,
+    };
+    cacheSet(cacheKey, out);
+    return out;
+  }
+
+  cacheSet(cacheKey, null);
+  return null;
 }
 
 module.exports = { getIngredientPriceByName, canonUnit, toBaseUnit, toBaseQty };
