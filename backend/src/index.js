@@ -57,6 +57,9 @@ app.use('/import', importOcrRouter);
 const shoppingListRouter = require('./routes/shopping-list');
 app.use('/shopping-list', shoppingListRouter);
 
+app.use('/recipe-drafts', require('./routes/recipeDrafts'));
+
+
 // 👈 assure le montage de /billing/checkout
 app.use('/billing', billing); 
 

@@ -4,70 +4,107 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-
 generator client {
   provider = "prisma-client-js"
-  //output   = "../src/generated/prisma"
 }
 
+/**
+ * ──────────────────────────────────────────────────────────
+ * IMPORTANT : on s'aligne sur la base existante
+ * - Pas d'enum SubscriptionStatus (la colonne est TEXT + check en DB)
+ * - On mappe les colonnes physiques en minuscules : createdat/updatedat/subscriptionstatus
+ * - UUID générés par la DB : dbgenerated("gen_random_uuid()")
+ * - steps par défaut: '[]'::jsonb (compatible avec toutes versions Prisma)
+ * ──────────────────────────────────────────────────────────
+ */
 
 model User {
-  id                 String              @id @default(uuid())
-  email              String              @unique
-  passwordHash       String
-  createdAt          DateTime            @default(now())
+  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String    @unique
+  passwordHash       String    @default("")
   stripeCustomerId   String?
-  subscriptionEndsAt DateTime?
-  subscriptionStatus SubscriptionStatus?
-  updatedAt          DateTime            @updatedAt
-  ImportLimit        ImportLimit?
-  Recipes            Recipe[]
+  subscriptionEndsAt DateTime? @db.Timestamptz(6)
+
+  // Colonnes mappées sur la DB existante
+  subscriptionStatus String?  @default("trialing") @map("subscriptionstatus")
+  createdAt          DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+
+  ImportLimit  ImportLimit?
+  Recipes      Recipe[]
+  // ✅ ajoute cette ligne :
+  RecipeDrafts RecipeDraft[]
 }
 
 model Recipe {
-  id          String             @id @default(uuid()) @db.Uuid
-  userId      String             @db.Uuid
-  title       String
-  servings    Int                @default(1)
-  steps       Json?
-  imageUrl    String?
-  notes       String?
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  user        User               @relation(fields: [userId], references: [id])
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId   String  @db.Uuid
+  title    String
+  servings Int
+  steps    Json    @default(dbgenerated("'[]'::jsonb"))
+  imageUrl String?
+  notes    String?
+
+  // Mappés vers colonnes existantes en base
+  createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+
   ingredients Ingredient[]
-  @@index([userId])
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "idx_recipe_user")
 }
 
 model Ingredient {
-  id           String  @id @default(uuid()) @db.Uuid
-  recipeId     String  @db.Uuid
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId     String   @db.Uuid
   name         String
-  quantity     Float   @default(0)
-  unit         String  // "g" | "ml" | "piece" (stocké en string)
-  airtableId   String? // ⚠️ Airtable renvoie "recXXXX...", surtout PAS @db.Uuid
-  unitPriceBuy Float? // prix d'achat à l'unité (ppu)
-  costRecipe   Float? // coût recette (quantity * ppu normalisé)
-  recipe       Recipe  @relation(fields: [recipeId], references: [id])
-  @@index([recipeId])
-  @@map("Ingredients") // ← mappe le modèle Prisma sur la table "Ingredients"
+  quantity     Float
+  unit         String
+  airtableId   String?
+  unitPriceBuy Float?
+  costRecipe   Float?
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt    DateTime @default(now()) @db.Timestamptz(6)
 
+  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([recipeId], map: "idx_ri_recipe")
+  @@map("Ingredients")
 }
 
 model ImportLimit {
-  id          String   @id @default(uuid())
-  userId      String   @unique
+  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String   @unique @db.Uuid
   breakfasts  Int      @default(0)
   lunches     Int      @default(0)
   snacks      Int      @default(0)
   dinners     Int      @default(0)
-  periodStart DateTime @default(now())
-  user        User     @relation(fields: [userId], references: [id])
+  periodStart DateTime @default(now()) @db.Timestamptz(6)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
-enum SubscriptionStatus {
-  trialing
-  active
-  past_due
-  canceled
+/**
+ * ───────────── New: RecipeDraft (table de brouillons) ─────────────
+ */
+
+model RecipeDraft {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId String @db.Uuid
+
+  sourceUrl String?
+  title     String?
+  imageUrl  String?
+  rawText   String?
+  parsed    Json?
+  status    String  @default("new")
+
+  createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([userId], map: "idx_recipedraft_user")
 }
