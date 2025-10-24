@@ -3,6 +3,8 @@ const express = require('express');
 const { prisma } = require('../lib/prisma');
 const { enrichIngredientWithCost } = require('../utils/costs');
 const { normalizeUnit } = require('../utils/units');
+// ✅ Ajout pour le flux "from-draft"
+const { cleanAndNormalizeIngredients } = require('../utils/ingredients'); // adapte le chemin/nom si besoin
 
 const router = express.Router();
 
@@ -93,6 +95,81 @@ router.post('/', needAuth, async (req, res) => {
     return res.status(201).json({ ok: true, recipe });
   } catch (e) {
     console.error('POST /recipes error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
+
+/**
+ * POST /recipes/from-draft/:draftId
+ * Importe un brouillon (recipeDraft) en recette finale.
+ * Pré-requis :
+ *  - prisma.recipeDraft (avec champs: id, parsed, status, updatedAt, ...)
+ *  - utils: cleanAndNormalizeIngredients(rawIngredients) -> [{ nameCanon, quantity, unit, ... }]
+ *  - utils: enrichIngredientWithCost(base) -> enrichit via Airtable + calcule coûts
+ *  - le modèle recipe accepte un champ JSON "source" { type: 'draft', draftId } (adapte si ton schéma diffère)
+ */
+router.post('/from-draft/:draftId', needAuth, async (req, res) => {
+  try {
+    const { draftId } = req.params;
+
+    const draft = await prisma.recipeDraft.findUnique({ where: { id: draftId } });
+    if (!draft) return res.status(404).json({ ok: false, error: 'DRAFT_NOT_FOUND' });
+
+    if (!draft.parsed) {
+      return res.status(400).json({ ok: false, error: 'DRAFT_NOT_PARSED', message: 'Remplis draft.parsed avant import.' });
+    }
+
+    // On récupère les infos "propres" depuis parsed
+    const data = draft.parsed || {};
+    const title = String(data.title || '').trim();
+    if (!title) return res.status(400).json({ ok: false, error: "parsed.title manquant" });
+
+    const servings = Number(data.servings || 1);
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+    const imageUrl = data.imageUrl || null;
+    const notes = typeof data.notes === 'string' ? data.notes : '';
+    const rawIngredients = Array.isArray(data.ingredients) ? data.ingredients : [];
+
+    // Nettoyage + normalisation (articles/pluriels/quantités + unit via normalizeUnit si utilisé dans l'util)
+    const normalized = cleanAndNormalizeIngredients(rawIngredients);
+
+    // Enrichissement via Airtable + coûts
+    const ingData = await Promise.all(
+      normalized.map(async (i) => {
+        const base = {
+          name: i.nameCanon,
+          quantity: Number(i.quantity || 0),
+          unit: i.unit || null,
+        };
+        return await enrichIngredientWithCost(base);
+      })
+    );
+
+    // Création de la vraie recette
+    const recipe = await prisma.recipe.create({
+      data: {
+        userId: req.user.userId,
+        title,
+        servings: Number.isFinite(servings) && servings > 0 ? servings : 1,
+        steps,
+        imageUrl: imageUrl || null,
+        notes,
+        ingredients: ingData.length ? { createMany: { data: ingData } } : undefined,
+        // ⚠️ Assure-toi que ce champ existe dans ton schéma (JSON/Json)
+        source: { type: 'draft', draftId },
+      },
+      include: { ingredients: true },
+    });
+
+    // Marque le draft comme importé
+    await prisma.recipeDraft.update({
+      where: { id: draftId },
+      data: { status: 'imported', updatedAt: new Date() },
+    });
+
+    return res.json({ ok: true, recipe });
+  } catch (e) {
+    console.error('POST /recipes/from-draft error:', e);
     return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
 });

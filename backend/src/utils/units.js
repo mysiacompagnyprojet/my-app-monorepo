@@ -19,6 +19,11 @@ function canonUnit(uRaw) {
   return u;
 }
 
+// ✅ alias backward-compat : recipes.js importe normalizeUnit
+function normalizeUnit(uRaw) {
+  return canonUnit(uRaw);
+}
+
 function toBaseUnit(unit) {
   const u = canonUnit(unit);
   if (u === 'mg') return { unit: 'g', factor: 0.001 };
@@ -40,29 +45,14 @@ function toBaseQty(qty, unit) {
   return { qty: Number(qty || 0) * factor, unit: baseU };
 }
 
-/**
- * Dictionnaire (modifiable) : poids moyen d'1 pièce en grammes.
- * Mets uniquement les produits pour lesquels Airtable renvoie un PPU en "g",
- * afin qu'on puisse convertir "piece" -> "g" côté recette.
- */
+/** Dictionnaire poids moyen d'1 pièce en grammes (modifiable) */
 const PIECE_TO_G = {
-  // exemples (ajuste quand tu veux)
-  'carotte': 80,
-  'tomate': 120,
-  'oignon': 110,
-  'ail': 5,
+  carotte: 80,
+  tomate: 120,
+  oignon: 110,
+  ail: 5,
 };
 
-/**
- * Convertit la quantité recette vers l'unité utilisée par le PPU Airtable,
- * uniquement pour le cas "piece" -> "g" selon un poids moyen défini ci-dessus.
- *
- * @param {string} name        - nom de l’ingrédient (pour lookup dans PIECE_TO_G)
- * @param {number} qty         - quantité reçue de la recette
- * @param {string} unitRecipe  - unité de la recette (canonisée)
- * @param {string} unitPrice   - unité de base du PPU (g/ml/piece)
- * @returns {{ qty: number, unit: string, note?: string }}
- */
 function convertUnitForPricing(name, qty, unitRecipe, unitPrice) {
   const recU = canonUnit(unitRecipe);
   const priceU = canonUnit(unitPrice);
@@ -74,15 +64,16 @@ function convertUnitForPricing(name, qty, unitRecipe, unitPrice) {
     }
     return { qty: Number(qty || 0) * Number(weight || 0), unit: 'g' };
   }
-  // autres cas: pas de conversion spéciale
   return { qty: Number(qty || 0), unit: recU };
 }
 
 module.exports = {
   stripAccents,
   canonUnit,
+  normalizeUnit,   // ✅ ajouté
   toBaseUnit,
   toBaseQty,
   convertUnitForPricing,
   PIECE_TO_G,
 };
+
