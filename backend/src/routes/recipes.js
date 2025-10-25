@@ -2,9 +2,8 @@
 const express = require('express');
 const { prisma } = require('../lib/prisma');
 const { enrichIngredientWithCost } = require('../utils/costs');
-const { normalizeUnit } = require('../utils/units');
-// ✅ Ajout pour le flux "from-draft"
-const { cleanAndNormalizeIngredients } = require('../utils/ingredients'); // adapte le chemin/nom si besoin
+const { canonUnit, normalizeUnit } = require('../utils/units');
+const { cleanAndNormalizeIngredients, tidyName } = require('../utils/ingredients');
 
 const router = express.Router();
 
@@ -31,63 +30,84 @@ router.get('/', needAuth, async (req, res) => {
   res.json({ ok: true, recipes });
 });
 
-// POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
+/**
+ * POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
+ * ⚠️ Pipeline ingrédients sécurisé :
+ *   (1) cleanAndNormalizeIngredients  → [{ nameCanon, quantityNum, unit }]
+ *   (2) enrichIngredientWithCost(base) → whitelist des champs coût (pas de réécriture name/unit/quantity)
+ *   (3) garde-fou final (tidyName + canon unit) avant insert Prisma
+ */
 router.post('/', needAuth, async (req, res) => {
-  console.log('POST /recipes req.user =', req.user);
-
   try {
     const body = req.body ?? {};
     let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
     if (typeof steps === 'string') {
-      try { steps = JSON.parse(steps); } catch { /* ignore */ }
+      try { steps = JSON.parse(steps); } catch { steps = []; }
     }
 
     if (!title || typeof title !== 'string' || !title.trim()) {
       return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
     }
 
-    if (servings == null) servings = 1;
-    servings = Number(servings);
+    servings = Number(servings ?? 1);
     if (!Number.isFinite(servings) || servings < 1) {
       return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" });
     }
 
-    if (steps == null) steps = [];
-    if (!Array.isArray(steps)) {
-      return res.status(400).json({ ok: false, error: "Champ 'steps' doit être un tableau" });
-    }
-
+    steps = Array.isArray(steps) ? steps : [];
     if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
       imageUrl = imageUrl.url;
     }
-    if (notes == null) notes = '';
+    notes = typeof notes === 'string' ? notes : '';
+    ingredients = Array.isArray(ingredients) ? ingredients : [];
 
-    if (!Array.isArray(ingredients)) ingredients = [];
+    // 1) Normalisation forte
+    // (on accepte {name, quantity, unit} bruts comme ton front les envoie)
+    const normalized = cleanAndNormalizeIngredients(
+      ingredients.map(i => ({
+        name: i?.name,
+        quantity: i?.quantity,
+        unit: i?.unit,
+      }))
+    );
+
+    // 2) Enrichissement (whitelist)
     const ingData = await Promise.all(
-      ingredients.map(async (i) => {
+      normalized.map(async (i) => {
         const base = {
-          name: String(i?.name || '').trim(),
-          quantity: Number(i?.quantity || 0),
-          unit: normalizeUnit(i?.unit),
+          name: i.nameCanon,                                   // "Pomme de terre"
+          quantity: i.quantityNum != null ? i.quantityNum : 0, // 500
+          unit: i.unit || 'piece',                             // "g" | "ml" | "piece"
         };
-        return await enrichIngredientWithCost(base); // { airtableId, unitPriceBuy, costRecipe, ... }
+        const enriched = await enrichIngredientWithCost(base);
+        return {
+          ...base, // le nettoyé garde la main
+          // whitelist des champs de coût / référence externe :
+          airtableId: enriched?.airtableId ?? null,
+          unitPriceBuy: enriched?.unitPriceBuy ?? null,
+          costRecipe: enriched?.costRecipe ?? null,
+        };
       })
     );
 
-    console.log('POST /recipes req.user =', req.user);
-    console.log('create data.userId =', req.user?.userId);
-    console.log('ingData =', ingData);
+    // 3) Garde-fou final
+    const ingDataFinal = ingData.map(i => ({
+      ...i,
+      name: tidyName(i.name),
+      quantity: Number(i.quantity || 0),
+      unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
+    }));
 
     const recipe = await prisma.recipe.create({
       data: {
-        userId: req.user.userId, // <-- UUID requis
+        userId: req.user.userId,
         title,
         servings,
         steps,
         imageUrl: imageUrl || null,
         notes,
-        ingredients: ingData.length ? { createMany: { data: ingData } } : undefined,
+        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
       },
       include: { ingredients: true },
     });
@@ -102,11 +122,7 @@ router.post('/', needAuth, async (req, res) => {
 /**
  * POST /recipes/from-draft/:draftId
  * Importe un brouillon (recipeDraft) en recette finale.
- * Pré-requis :
- *  - prisma.recipeDraft (avec champs: id, parsed, status, updatedAt, ...)
- *  - utils: cleanAndNormalizeIngredients(rawIngredients) -> [{ nameCanon, quantity, unit, ... }]
- *  - utils: enrichIngredientWithCost(base) -> enrichit via Airtable + calcule coûts
- *  - le modèle recipe accepte un champ JSON "source" { type: 'draft', draftId } (adapte si ton schéma diffère)
+ * Pipeline identique à POST /recipes (sécurisé).
  */
 router.post('/from-draft/:draftId', needAuth, async (req, res) => {
   try {
@@ -119,7 +135,6 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
       return res.status(400).json({ ok: false, error: 'DRAFT_NOT_PARSED', message: 'Remplis draft.parsed avant import.' });
     }
 
-    // On récupère les infos "propres" depuis parsed
     const data = draft.parsed || {};
     const title = String(data.title || '').trim();
     if (!title) return res.status(400).json({ ok: false, error: "parsed.title manquant" });
@@ -130,22 +145,38 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
     const notes = typeof data.notes === 'string' ? data.notes : '';
     const rawIngredients = Array.isArray(data.ingredients) ? data.ingredients : [];
 
-    // Nettoyage + normalisation (articles/pluriels/quantités + unit via normalizeUnit si utilisé dans l'util)
+    // 1) Normalisation forte
     const normalized = cleanAndNormalizeIngredients(rawIngredients);
 
-    // Enrichissement via Airtable + coûts
+    // 2) Enrichissement (whitelist)
     const ingData = await Promise.all(
       normalized.map(async (i) => {
         const base = {
           name: i.nameCanon,
-          quantity: Number(i.quantity || 0),
-          unit: i.unit || null,
+          quantity: i.quantityNum != null ? i.quantityNum : 0,
+          unit: i.unit || 'piece',
         };
-        return await enrichIngredientWithCost(base);
+        const enriched = await enrichIngredientWithCost(base);
+        return {
+          ...base,
+          airtableId: enriched?.airtableId ?? null,
+          unitPriceBuy: enriched?.unitPriceBuy ?? null,
+          costRecipe: enriched?.costRecipe ?? null,
+        };
       })
     );
 
-    // Création de la vraie recette
+    // 3) Garde-fou final
+    const ingDataFinal = ingData.map(i => ({
+      ...i,
+      name: tidyName(i.name),
+      quantity: Number(i.quantity || 0),
+      unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
+    }));
+
+    // console.log('normalized =', normalized);
+    // console.log('ingData(final) =', ingDataFinal);
+
     const recipe = await prisma.recipe.create({
       data: {
         userId: req.user.userId,
@@ -154,14 +185,11 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
         steps,
         imageUrl: imageUrl || null,
         notes,
-        ingredients: ingData.length ? { createMany: { data: ingData } } : undefined,
-        // ⚠️ Assure-toi que ce champ existe dans ton schéma (JSON/Json)
-        source: { type: 'draft', draftId },
+        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
       },
       include: { ingredients: true },
     });
 
-    // Marque le draft comme importé
     await prisma.recipeDraft.update({
       where: { id: draftId },
       data: { status: 'imported', updatedAt: new Date() },
@@ -175,3 +203,4 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
 });
 
 module.exports = router;
+
