@@ -92,6 +92,9 @@ function computePPUFromRow(fields) {
   const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
   const { unit: baseU, factor } = toBaseUnit(unitRaw);
 
+  console.log('[AIRTABLE]', { name, unitRaw, utf8: Buffer.from(unitRaw, 'utf8').toString('utf8') });
+
+
   // Cas 1 : ta colonne "Prix kg/L/pièce" est déjà normalisée -> PAS de /1000
   if (Number.isFinite(priceKgLPiece)) {
     return { ppu: priceKgLPiece, unit: baseU };
