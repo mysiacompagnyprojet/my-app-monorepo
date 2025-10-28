@@ -12,93 +12,137 @@ function needAuth(req, res, next) {
   next();
 }
 
-// POST /shopping-list { recipeIds: string[] }
+/**
+ * POST /shopping-list
+ * body: { recipeIds: string[] }
+ *
+ * But : fusionner les ingrédients de plusieurs recettes de l'utilisateur,
+ * enrichir avec les prix Airtable, et retourner les totaux.
+ *
+ * Réponse:
+ * {
+ *   ok: true,
+ *   items: [{
+ *     name, unit, quantity,
+ *     unitPriceBuy, recipeCost, buyPrice,
+ *     airtableId, unitNormalized, note?
+ *   }],
+ *   totals: { recipeCost, buyPrice }
+ * }
+ */
 router.post('/', needAuth, async (req, res) => {
-  const { recipeIds } = req.body || {};
-  if (!Array.isArray(recipeIds) || recipeIds.length === 0) {
-    return res.status(400).json({ ok: false, error: 'recipeIds requis' });
-  }
+  try {
+    const { recipeIds } = req.body || {};
+    if (!Array.isArray(recipeIds) || recipeIds.length === 0) {
+      return res.status(400).json({ ok: false, error: 'recipeIds[] requis' });
+    }
 
-  // récupère recettes + ingrédients de l’utilisateur
-  const recipes = await prisma.recipe.findMany({
-    where: { id: { in: recipeIds }, userId: req.user.userId },
-    select: {
-      id: true,
-      title: true,
-      ingredients: {
-        select: { name: true, quantity: true, unit: true },
+    // On ne traite que les recettes appartenant à l'utilisateur
+    const recipes = await prisma.recipe.findMany({
+      where: { id: { in: recipeIds }, userId: req.user.userId },
+      select: {
+        id: true,
+        title: true,
+        ingredients: {
+          select: { name: true, quantity: true, unit: true },
+        },
       },
-    },
-  });
-
-  const allLines = recipes.flatMap((r) =>
-    r.ingredients.map((i) => ({
-      name: i.name,
-      quantity: i.quantity,
-      unit: i.unit,
-    }))
-  );
-
-  const merged = mergeIngredients(allLines);
-
-  let totalRecipeCost = 0;
-  let totalBuyPrice = 0;
-  const withPrices = [];
-
-  for (const l of merged) {
-    const price = await getIngredientPriceByName(l.name);
-    if (!price) {
-      withPrices.push({
-        ...l,
-        unitPriceBuy: null,
-        recipeCost: 0,
-        buyPrice: 0,
-        airtableId: null,
-        unitNormalized: null,
-        note: 'non trouvé dans Airtable',
-      });
-      continue;
-    }
-
-    const priceUnit = price.unit; // g / ml / piece (base PPU)
-    const unitRecipeCanon = canonUnit(l.unit);
-
-    // tente conversion "piece -> g" quand le PPU est en g
-    const conv = convertUnitForPricing(l.name, l.quantity, unitRecipeCanon, priceUnit);
-
-    let recipeCost = 0;
-    let buyPrice = 0;
-    let note;
-
-    if (price.pricePerUnit && conv.unit === priceUnit) {
-      // unités compatibles (après conversion éventuelle)
-      recipeCost = Number(conv.qty) * Number(price.pricePerUnit);
-      buyPrice = recipeCost; // si achat à la demande (sinon logique panier à définir)
-      totalRecipeCost += recipeCost;
-      totalBuyPrice += buyPrice;
-    } else {
-      // incompatibilité: on garde 0 et on documente
-      note = conv.note || 'unité incompatible (conversion manquante)';
-    }
-
-    withPrices.push({
-      name: l.name,
-      unit: l.unit,
-      quantity: l.quantity,
-      unitPriceBuy: price.pricePerUnit,
-      recipeCost,
-      buyPrice,
-      airtableId: price.airtableId,
-      unitNormalized: priceUnit, // l’unité “base” du PPU (g/ml/piece)
-      ...(note ? { note } : {}),
     });
-  }
 
-  res.json({
-    ok: true,
-    items: withPrices,
-    totals: { recipeCost: totalRecipeCost, buyPrice: totalBuyPrice },
-  });
+    // Aplatit tous les ingrédients
+    const allLines = recipes.flatMap((r) =>
+      r.ingredients.map((i) => ({
+        name: i.name,
+        quantity: Number(i.quantity || 0),
+        unit: i.unit,
+      }))
+    );
+
+    // Fusionne par (name + unit) pour totaliser les quantités
+    const merged = mergeIngredients(allLines);
+
+    // Enrichissement prix en parallèle (Airtable)
+    const pricedItems = await Promise.all(
+      merged.map(async (l) => {
+        const price = await getIngredientPriceByName(l.name);
+
+        if (!price) {
+          return {
+            ...l,
+            unitPriceBuy: null,
+            recipeCost: 0,
+            buyPrice: 0,
+            airtableId: null,
+            unitNormalized: null,
+            note: 'non trouvé dans Airtable',
+          };
+        }
+
+        const priceUnit = price.unit; // unité de base du PPU (g/ml/piece)
+        const unitRecipeCanon = canonUnit(l.unit);
+
+        // Conversion éventuelle (ex: piece -> g) pour matcher l’unité du PPU
+        const conv = convertUnitForPricing(
+          l.name,
+          l.quantity,
+          unitRecipeCanon,
+          priceUnit
+        );
+
+        let recipeCost = 0;
+        let buyPrice = 0;
+        let note;
+
+        const pricePerUnit = Number(price.pricePerUnit);
+
+        if (
+          Number.isFinite(pricePerUnit) &&
+          conv &&
+          conv.unit === priceUnit &&
+          Number.isFinite(Number(conv.qty))
+        ) {
+          // Unités compatibles après conversion éventuelle
+          recipeCost = Number(conv.qty) * pricePerUnit;
+          // Hypothèse simple: on achète pile la quantité nécessaire
+          buyPrice = recipeCost;
+        } else {
+          note = (conv && conv.note) || 'unité incompatible (conversion manquante)';
+        }
+
+        return {
+          name: l.name,
+          unit: l.unit,
+          quantity: l.quantity,
+          unitPriceBuy: Number.isFinite(pricePerUnit) ? pricePerUnit : null,
+          recipeCost,
+          buyPrice,
+          airtableId: price.airtableId ?? null,
+          unitNormalized: priceUnit || null,
+          ...(note ? { note } : {}),
+        };
+      })
+    );
+
+    // Totaux
+    const totals = pricedItems.reduce(
+      (acc, row) => {
+        acc.recipeCost += Number(row.recipeCost || 0);
+        acc.buyPrice += Number(row.buyPrice || 0);
+        return acc;
+      },
+      { recipeCost: 0, buyPrice: 0 }
+    );
+
+    return res.json({
+      ok: true,
+      items: pricedItems,
+      totals,
+    });
+  } catch (e) {
+    console.error('POST /shopping-list error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error' });
+  }
 });
 
 module.exports = router;
+
