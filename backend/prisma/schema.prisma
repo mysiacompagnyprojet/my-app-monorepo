@@ -9,13 +9,11 @@ generator client {
 }
 
 /**
- * ──────────────────────────────────────────────────────────
- * IMPORTANT : on s'aligne sur la base existante
- * - Pas d'enum SubscriptionStatus (la colonne est TEXT + check en DB)
- * - On mappe les colonnes physiques en minuscules : createdat/updatedat/subscriptionstatus
- * - UUID générés par la DB : dbgenerated("gen_random_uuid()")
- * - steps par défaut: '[]'::jsonb (compatible avec toutes versions Prisma)
- * ──────────────────────────────────────────────────────────
+ * Aligné sur ta base existante :
+ * - Pas d'ENUM pour subscriptionStatus (TEXT en base) → String? @map("subscriptionstatus")
+ * - Colonnes physiques en minuscules: createdat/updatedat/subscriptionstatus
+ * - UUID générés par la DB: dbgenerated("gen_random_uuid()")
+ * - steps par défaut: '[]'::jsonb
  */
 
 model User {
@@ -25,32 +23,31 @@ model User {
   stripeCustomerId   String?
   subscriptionEndsAt DateTime? @db.Timestamptz(6)
 
-  // Colonnes mappées sur la DB existante
+  // colonnes mappées
   subscriptionStatus String?  @default("trialing") @map("subscriptionstatus")
-  createdAt          DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
+  createdAt          DateTime @default(now())       @map("createdat") @db.Timestamptz(6)
   updatedAt          DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
 
+  // relations
   ImportLimit  ImportLimit?
   Recipes      Recipe[]
-  // ✅ ajoute cette ligne :
   RecipeDrafts RecipeDraft[]
 }
 
 model Recipe {
-  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId   String  @db.Uuid
-  title    String
-  servings Int
-  steps    Json    @default(dbgenerated("'[]'::jsonb"))
-  imageUrl String?
-  notes    String?
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
+  title     String
+  servings  Int      @default(1)
+  steps     Json     @default(dbgenerated("'[]'::jsonb"))
+  imageUrl  String?
+  notes     String?  @default("")
 
-  // Mappés vers colonnes existantes en base
   createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
 
-  ingredients Ingredient[]
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ingredients Ingredient[]
 
   @@index([userId], map: "idx_recipe_user")
 }
@@ -59,7 +56,7 @@ model Ingredient {
   id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   recipeId     String   @db.Uuid
   name         String
-  quantity     Float
+  quantity     Float    @default(0)
   unit         String
   airtableId   String?
   unitPriceBuy Float?
@@ -70,36 +67,36 @@ model Ingredient {
   recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([recipeId], map: "idx_ri_recipe")
-  @@map("Ingredients")
+  @@map("Ingredients") // si la table s’appelle déjà "Ingredients" en base
 }
 
+//
+// 1:1 strict avec User : on utilise userId comme clé primaire (pas besoin d’un champ id séparé)
+//
 model ImportLimit {
-  id          String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String   @unique @db.Uuid
+  userId      String   @id @db.Uuid
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
   breakfasts  Int      @default(0)
   lunches     Int      @default(0)
   snacks      Int      @default(0)
   dinners     Int      @default(0)
+
   periodStart DateTime @default(now()) @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @db.Timestamptz(6)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
-/**
- * ───────────── New: RecipeDraft (table de brouillons) ─────────────
- */
-
 model RecipeDraft {
-  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId String @db.Uuid
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String   @db.Uuid
 
   sourceUrl String?
   title     String?
   imageUrl  String?
   rawText   String?
   parsed    Json?
-  status    String  @default("new")
+  status    String   @default("new")
 
   createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
@@ -108,3 +105,4 @@ model RecipeDraft {
 
   @@index([userId], map: "idx_recipedraft_user")
 }
+

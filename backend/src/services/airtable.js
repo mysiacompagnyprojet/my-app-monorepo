@@ -4,12 +4,12 @@ const { stripAccents } = require('../utils/units');
 
 // ========= CONFIG : noms de colonnes EXACTS dans ta table =========
 const COL_NAME = 'NOM';
-const COL_UNIT = 'Unité (g/ml, pièce)';
+const COL_UNIT = 'Unité (g,ml, pièce)';
 const COL_REF_QTY = 'Quantité de référence';   // ex: 1000 pour g/ml, 1 pour pièce
 const COL_BUY_PRICE = "Prix d'achat";          // prix payé pour la quantité de référence
 // Certaines tables ont déjà un prix normalisé :
-const COL_PRICE_KG_L_PIECE = 'Prix kg/L/pièce'; // déjà €/g, €/ml ou €/pièce dans ta base
-const COL_PRICE_AU_KG_L = 'Prix au kg/l';       // €/kg ou €/L
+const COL_PRICE_KG_L_PIECE = 'Prix kg/L/piéce'; // déjà €/g, €/ml ou €/pièce dans ta base
+const COL_PRICE_AU_KG_L = 'Prix au kg/L';       // €/kg ou €/L
 // (NOUVEAU) Colonne "type" (select: g, cl, L, ml, pièce, botte, etc.)
 const COL_UNIT_KIND = "Type d'unité"; // adapte si ta colonne s'appelle "Type" au lieu de "Type..."
 // ==================================================================
@@ -92,7 +92,9 @@ function computePPUFromRow(fields) {
   const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
   const { unit: baseU, factor } = toBaseUnit(unitRaw);
 
-  console.log('[AIRTABLE]', { name, unitRaw, utf8: Buffer.from(unitRaw, 'utf8').toString('utf8') });
+  const itemName = fields[COL_NAME] ?? '(inconnu)'; // on récupère le nom de l’ingrédient
+  const unitUtf8 = unitRaw ? Buffer.from(String(unitRaw), 'utf8').toString('utf8') : null; // évite les erreurs si vide
+  console.log('[AIRTABLE]', { itemName, unitRaw, utf8: unitUtf8 });
 
 
   // Cas 1 : ta colonne "Prix kg/L/pièce" est déjà normalisée -> PAS de /1000

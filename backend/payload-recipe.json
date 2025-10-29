@@ -1,0 +1,10 @@
+{
+  "title": "Purée maison",
+  "servings": 2,
+  "steps": ["Cuire les pommes de terre", "Écraser", "Mélanger"],
+  "ingredients": [
+    { "name": "Pomme de terre", "quantity": 500, "unit": "g" },
+    { "name": "Oeuf", "quantity": 2, "unit": "pièces" },
+    { "name": "Huile d'olive", "quantity": 10, "unit": "ml" }
+  ]
+}

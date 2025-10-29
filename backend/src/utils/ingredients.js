@@ -158,10 +158,45 @@ function cleanAndNormalizeIngredients(rawList = []) {
   });
 }
 
+/**
+ * Fusion brut des lignes { name, quantity, unit[, costRecipe] }
+ * → totalise par (tidyName(name) + unité canonisée)
+ * Retour: [{ name, unit, quantity, costRecipe }]
+ */
+function mergeIngredients(rows = []) {
+  const map = new Map();
+  for (const r of rows || []) {
+    if (!r) continue;
+    const name = tidyName(r.name);
+    const unit = canonUnit(r.unit) || normalizeUnit(r.unit) || 'piece';
+    const qty = Number(r.quantity || 0);
+    const cost = Number(r.costRecipe || 0);
+
+    const key = `${name.toLowerCase()}|${unit}`;
+    const prev = map.get(key);
+    if (prev) {
+      map.set(key, {
+        name,
+        unit,
+        quantity: Number(prev.quantity) + qty,
+        costRecipe: Number(prev.costRecipe || 0) + cost,
+      });
+    } else {
+      map.set(key, {
+        name,
+        unit,
+        quantity: qty,
+        costRecipe: cost,
+      });
+    }
+  }
+  return Array.from(map.values());
+}
+
 module.exports = {
   cleanAndNormalizeIngredients,
   tidyName,
   parseQuantity,
+  mergeIngredientsCanon,
+  mergeIngredients, // 👈 ajouté pour /shopping-list
 };
-
-
