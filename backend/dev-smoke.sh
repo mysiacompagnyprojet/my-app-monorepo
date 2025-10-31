@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Charge .env si présent (pour éviter d'exporter à la main dans Bash)
+if [ -f .env.bash ]; then set -a; . ./.env.bash; set +a; fi
+
+
 # --- Config requise ---
 : "${SUPABASE_URL:?Missing SUPABASE_URL}"
 : "${SUPABASE_ANON_KEY:?Missing SUPABASE_ANON_KEY}"
