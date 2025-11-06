@@ -2,9 +2,9 @@
   "name": "my-app",
   "version": "0.1.0",
   "private": true,
-  
-  "engines": { "node": ">=20.18" },
-
+  "engines": {
+    "node": ">=20.18"
+  },
   "scripts": {
     "dev": "next dev -p 3000",
     "dev:turbopack": "next dev --turbopack",
@@ -14,7 +14,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.58.0",
+    "@supabase/supabase-js": "^2.79.0",
     "next": "15.5.3",
     "react": "19.1.0",
     "react-dom": "19.1.0"
