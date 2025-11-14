@@ -1,12 +1,12 @@
 // backend/src/utils/limits.js
 const { prisma } = require('../lib/prisma');
 
-// Petits plus : on permet de surcharger les plafonds par variables d'env (optionnel)
+// Surcharges possibles par variables d'env, sinon valeurs ci-dessous.
 const DEFAULT_CAPS = {
-  breakfasts: Number(process.env.IMPORT_CAP_BREAKFASTS ?? 4),
-  lunches:    Number(process.env.IMPORT_CAP_LUNCHES    ?? 8),
-  snacks:     Number(process.env.IMPORT_CAP_SNACKS     ?? 8),
-  dinners:    Number(process.env.IMPORT_CAP_DINNERS    ?? 8),
+  breakfasts: Number(process.env.IMPORT_CAP_BREAKFASTS ?? 12),
+  lunches:    Number(process.env.IMPORT_CAP_LUNCHES    ?? 12),
+  snacks:     Number(process.env.IMPORT_CAP_SNACKS     ?? 12),
+  dinners:    Number(process.env.IMPORT_CAP_DINNERS    ?? 12),
 };
 
 /** Mappe 'breakfast'|'lunch'|'snack'|'dinner' -> clé de table */
@@ -42,7 +42,7 @@ async function checkAndIncrementLimit(userId, kind) {
   const field = resolveField(kind);
   const caps = DEFAULT_CAPS;
   const current = Number(lim[field] || 0);
-  const cap = Number.isFinite(Number(caps[field])) ? Number(caps[field]) : 8;
+  const cap = Number.isFinite(Number(caps[field])) ? Number(caps[field]) : 12;
 
   // Si non premium et déjà au plafond -> bloqué
   if (sub !== 'active' && current >= cap) {
@@ -80,4 +80,3 @@ function limitGate(kind) {
 }
 
 module.exports = { checkAndIncrementLimit, limitGate };
-

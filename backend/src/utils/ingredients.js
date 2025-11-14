@@ -7,6 +7,7 @@ const ARTICLE_RE_START = /^(de la|de l’|de l'|de|du|des|d’|d')\s+/i;
 
 const PLURALS = new Map([
   ['oeufs', 'oeuf'],
+  ['œufs', 'œuf'],
   ['oignons', 'oignon'],
   ['tomates', 'tomate'],
   ['pommes de terre', 'pomme de terre'],
@@ -113,7 +114,9 @@ function parseAny(raw) {
 
   // Chaîne "300 g spaghetti" / "2 tomates"
   const txt = String(raw).replace(/\s+/g, ' ').trim();
-  const m = txt.match(/^(\d+([.,]\d+)?)\s*(g|kg|mg|ml|l|dl|cl|pi[eè]ce|pieces?|pce|pc|cs|cc|botte|unite|unité)?\s*(.*)$/i);
+  const m = txt.match(
+    /^(\d+([.,]\d+)?)\s*(g|kg|mg|ml|l|dl|cl|pi[eè]ce|pieces?|pce|pc|cs|cc|botte|unite|unité)?\s*(.*)$/i
+  );
   if (m) {
     const qNum = parseQuantity(m[1]);
     const unitRaw = m[3] || 'piece';
@@ -125,6 +128,17 @@ function parseAny(raw) {
 
   // Fallback : pas de quantité → 1 piece
   return { nameCanon: tidyName(txt), quantityNum: 1, unit: 'piece' };
+}
+
+// ✅ Ajout : parseRawLine utilisé par /import/url
+function parseRawLine(line) {
+  const p = parseAny(line);
+  if (!p) return null;
+  return {
+    name: p.nameCanon,
+    quantity: Number(p.quantityNum || 0),
+    unit: p.unit || 'piece',
+  };
 }
 
 function mergeIngredientsCanon(lines = []) {
@@ -148,12 +162,12 @@ function mergeIngredientsCanon(lines = []) {
  */
 function cleanAndNormalizeIngredients(rawList = []) {
   const parsed = rawList.map(parseAny).filter(Boolean);
-  return mergeIngredientsCanon(parsed).map(i => {
+  return mergeIngredientsCanon(parsed).map((i) => {
     const u = canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece';
     return {
-      nameCanon: i.nameCanon,                  // ex: "Pomme de terre"
-      quantityNum: Number(i.quantityNum || 0), // ex: 500
-      unit: u === 'piece' ? 'piece' : u,       // force ASCII sur 'piece'
+      nameCanon: i.nameCanon,
+      quantityNum: Number(i.quantityNum || 0),
+      unit: u === 'piece' ? 'piece' : u,
     };
   });
 }
@@ -198,5 +212,6 @@ module.exports = {
   tidyName,
   parseQuantity,
   mergeIngredientsCanon,
-  mergeIngredients, // 👈 ajouté pour /shopping-list
+  mergeIngredients, // pour /shopping-list
+  parseRawLine,     // ✅ désormais bien exportée
 };
