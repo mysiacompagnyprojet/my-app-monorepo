@@ -1,4 +1,4 @@
-// backend/src/routes/import-url.js
+// backend/src/routes/import-url.js 
 const express = require('express');
 const cheerio = require('cheerio');
 const { prisma } = require('../lib/prisma');
@@ -8,9 +8,16 @@ const { checkAndIncrementLimit } = require('../utils/limits');
 const router = express.Router();
 const fetch = global.fetch; // utiliser le fetch natif de Node 18+
 
+// Regex réutilisable pour détecter une "tête" d'ingrédient
+const ING_REGEX = /(\d|g\b|kg\b|ml\b|l\b|cuill|œuf|oeuf|lait|farine|sucre|beurre|huile|sel|poivre)/i;
+
 function needAuth(req, res, next) {
   if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
   next();
+}
+
+function hostnameOf(u) {
+  try { return new URL(u).hostname.toLowerCase(); } catch { return ''; }
 }
 
 router.post('/url', needAuth, async (req, res) => {
@@ -24,6 +31,8 @@ router.post('/url', needAuth, async (req, res) => {
       return res.status(402).json({ ok: false, error: 'limit_reached' });
     }
 
+    const host = hostnameOf(url);
+
     // ⚠️ On récupère la page avec des en-têtes "navigateur" pour éviter certains blocages
     const r = await fetch(url, {
       headers: {
@@ -35,8 +44,12 @@ router.post('/url', needAuth, async (req, res) => {
     });
 
     if (!r.ok) {
-      // ex : 403/404/bloqué par le site
-      return res.status(400).json({ ok: false, error: `fetch failed (${r.status})` });
+      // Exemple : Facebook / Instagram qui renvoient 400/403 aux robots
+      let msg = `fetch failed (${r.status})`;
+      if (/facebook\.com|instagram\.com/.test(host)) {
+        msg = "Ce site bloque l'accès automatique. Utilise l’import photo (OCR) pour cette recette.";
+      }
+      return res.status(400).json({ ok: false, error: msg });
     }
 
     const html = await r.text();
@@ -89,21 +102,33 @@ router.post('/url', needAuth, async (req, res) => {
       rawIngredients = Array.isArray(recipeJson.recipeIngredient) ? recipeJson.recipeIngredient : [];
     } else {
       // 2) Fallback heuristique (best-effort) si pas de JSON-LD
+
+      // Titre
       title = $('h1').first().text().trim() || $('title').text().trim() || 'Recette';
 
+      // Tous les <li> de la page
       const listCandidates = $('li')
         .map((i, el) => $(el).text().trim())
-        .get();
+        .get()
+        .filter(Boolean);
 
-      rawIngredients = listCandidates
-        .filter((t) =>
-          /(\d|g\b|kg\b|ml\b|l\b|cuill|œuf|oeuf|lait|farine|sucre|beurre|huile|sel|poivre)/i.test(t)
-        )
-        .slice(0, 40);
+      // Sépare ingrédients / étapes potentielles
+      const liIngredients = listCandidates.filter((t) => ING_REGEX.test(t));
+      const liSteps = listCandidates.filter((t) => !ING_REGEX.test(t));
 
-      steps = $('p')
+      rawIngredients = liIngredients.slice(0, 40);
+
+      // Paragraphes (souvent utilisés pour la préparation)
+      const pSteps = $('p')
         .map((i, el) => $(el).text().trim())
         .get()
+        .filter(Boolean);
+
+      // Combine toutes les sources d'étapes possibles
+      const combinedSteps = [...liSteps, ...pSteps];
+
+      steps = combinedSteps
+        .map((s) => s.replace(/\s+/g, ' ').trim())
         .filter(Boolean)
         .slice(0, 12);
 
@@ -111,7 +136,7 @@ router.post('/url', needAuth, async (req, res) => {
       servings = 1;
     }
 
-    // 3) Enrichissement avec OpenGraph (pratique pour Facebook & co)
+    // 3) Enrichissement avec OpenGraph (pratique pour Pinterest & co)
     const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
     const ogDesc = $('meta[property="og:description"]').attr('content')?.trim();
     const ogImage = $('meta[property="og:image"]').attr('content')?.trim();
@@ -133,9 +158,7 @@ router.post('/url', needAuth, async (req, res) => {
         .map((s) => s.trim())
         .filter(Boolean);
 
-      const guessed = lines.filter((t) =>
-        /(\d|g\b|kg\b|ml\b|l\b|cuill|œuf|oeuf|farine|sucre|beurre|huile)/i.test(t)
-      );
+      const guessed = lines.filter((t) => ING_REGEX.test(t));
 
       if (guessed.length) {
         rawIngredients = guessed.slice(0, 40);
@@ -145,6 +168,11 @@ router.post('/url', needAuth, async (req, res) => {
       if (other.length && steps.length === 0) {
         steps = other.slice(0, 12);
       }
+    }
+
+    // Dernier filet de sécurité : si aucune étape -> au moins un placeholder
+    if (!steps || steps.length === 0) {
+      steps = ['Ajouter ici les étapes de la recette (non détectées automatiquement).'];
     }
 
     // 4) Normalisation finale des ingrédients
