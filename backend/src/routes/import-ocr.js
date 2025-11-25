@@ -30,38 +30,60 @@ async function getWorker() {
 
 // ───────────────────── “Mini IA locale” : scoring + filtrage des lignes ─────────
 
-// Lignes clairement parasites (bannières, cookies, boutons, etc.)
+// Lignes clairement parasites (bannières, cookies, boutons, pubs, etc.)
 const HARD_JUNK_PATTERNS = [
+  // bannières cookies / privacy
   /we use cookies/i,
   /privacy policy/i,
   /cookies? policy/i,
   /if you continue to use this site/i,
   /we will assume that you are happy/i,
+  // petits artefacts
   /^\d{1,2}:\d{2}\s*$/i, // ex: "12:47"
   /^\s*4g\s*$/i,
+  // stores / app
   /app store/i,
   /google play/i,
   /android/i,
   /ios/i,
+  // contenus hors recette / marque de l'appli
   /recime/i,
   /signaler une erreur d'importation/i,
   /ouvrir dans/i,
   /ok\b.*privacy/i,
+
+  // marques/pub fréquentes (Marmiton & co)
+  /monoprix/i,
+  /hbo/i,
+  /black\s*friday/i,
+  /mode\s+maison/i,
+  /canva/i,
+
+  // GÉNÉRAL : pubs / marketing
+  /\b(pub|publicit[ée]|annonce sponsoris[ée]e?|sponsorise[ée]?)\b/i,
+  /\b(offre|promotion|promo|r[ée]duction|soldes?)\b/i,
+  /\b(j'en profite|j en profite|profitez|profite-en|profite en)\b/i,
+  /-\s*\d{1,3}\s*%/, // -30%
+  /\b\d{1,3}\s*%\b/, // 30 %
 ];
 
 // Lignes peu probables pour une recette : URL, domaines, boutons, etc.
 const URL_REGEX = /(https?:\/\/|www\.)/i;
 const DOMAIN_REGEX = /[a-z0-9\-]+\.[a-z]{2,}(\/|$)/i;
-const BUTTON_WORDS = /(ok|annuler|accepter|refuser|privacy|policy|conditions|mentions)/i;
+const BUTTON_WORDS =
+  /(ok|annuler|accepter|refuser|privacy|policy|conditions|mentions)/i;
 
 // Verbes culinaires typiques (pour repérer les vraies étapes)
-const COOKING_VERBS = /(faites|ajoutez|versez|mélangez|cuire|cuisez|chauffez|préchauffez|saisissez|nappez|servez|réservez|coupez|hachez|poêlez|dorez|fouettez|incorporez|déposez)/i;
+const COOKING_VERBS =
+  /(faites|ajoutez|versez|mélangez|cuire|cuisez|chauffez|préchauffez|saisissez|nappez|servez|réservez|coupez|hachez|poêlez|dorez|fouettez|incorporez|déposez|napper|mélanger|réchauffer|récupérer|retirer|mettre|presser|bouillir|faire bouillir)/i;
 
 // Indices d’ingrédients (quantité + unité / aliment)
-const ING_HINT = /(\d+\s*(g|kg|mg|ml|cl|l|cuill|cuillère|pincée|tranche|pièce|oeuf|œuf))/i;
+const ING_HINT =
+  /(\d+\s*(g|kg|mg|ml|cl|l|cuill|cuillère|pincée|tranche|pièce|pieces|oeuf|œuf))/i;
 
 // Mots utiles de structuration
-const SECTION_HINTS = /(ingr[ée]dients?|instructions?|étape\s*\d+|etape\s*\d+|astuces?|variantes?)/i;
+const SECTION_HINTS =
+  /(ingr[ée]dients?|instructions?|étape\s*\d+|etape\s*\d+|astuces?|variantes?)/i;
 
 // Score une ligne : positif = intéressant, négatif = parasite
 function scoreLine(line) {
@@ -77,6 +99,18 @@ function scoreLine(line) {
   if (URL_REGEX.test(txt) || DOMAIN_REGEX.test(txt)) score -= 5;
   if (BUTTON_WORDS.test(txt)) score -= 4;
 
+  // Grosse bannière en MAJUSCULES + %
+  const words = txt.split(/\s+/);
+  const upperWords = words.filter(
+    (w) =>
+      w.length > 2 &&
+      w === w.toUpperCase() &&
+      /[A-ZÀÂÇÉÈÊËÎÏÔÛÙÜŸ]/.test(w),
+  );
+  if (upperWords.length >= 3 && /%/.test(txt)) {
+    score -= 6;
+  }
+
   // Texte très court ou très long = souvent bruit
   if (txt.length < 4) score -= 1;
   if (txt.length > 220) score -= 1;
@@ -91,7 +125,6 @@ function scoreLine(line) {
   if (/^[\s•\-\u2022]+/.test(txt)) score += 1;
 
   // Phrase complète
-  const words = txt.split(/\s+/);
   if (words.length >= 5) score += 1;
 
   return score;
@@ -151,6 +184,11 @@ function extractServings(lines) {
     const m = l.match(/portions?\s*:\s*(\d+)/i);
     if (m) return parseInt(m[1], 10) || 1;
   }
+  // Marmiton : "8 personnes" → on détecte aussi ça
+  for (const l of lines) {
+    const m = l.match(/(\d+)\s*personnes?/i);
+    if (m) return parseInt(m[1], 10) || 1;
+  }
   return 1;
 }
 
@@ -185,7 +223,7 @@ function normalizeStepNumbers(stepParagraphs = []) {
   return stepParagraphs.map((txt) => {
     let t = String(txt || '').trim();
     t = t.replace(/^[\s•\-·\u2022]*\d+[\.\)\-]\s*/, '');
-    return `${n++}. ${t}`;
+    return `Étape ${n++} ${t.replace(/^Étape\s*\d+\s*/i, '').trim()}`;
   });
 }
 
@@ -194,14 +232,17 @@ function dedupeSteps(stepList = []) {
   const out = [];
 
   for (const step of stepList) {
-    const body = String(step).replace(/^\d+\.\s*/, '').trim();
+    const body = String(step).replace(/^Étape\s*\d+\s*/i, '').trim();
     const bodyLower = body.toLowerCase();
 
     let merged = false;
 
     for (let i = 0; i < out.length; i++) {
       const other = out[i];
-      const otherBody = other.replace(/^\d+\.\s*/, '').trim().toLowerCase();
+      const otherBody = other
+        .replace(/^Étape\s*\d+\s*/i, '')
+        .trim()
+        .toLowerCase();
 
       const minLen = Math.min(otherBody.length, bodyLower.length);
       if (minLen < 20) continue;
@@ -269,7 +310,7 @@ function parseOcrIngredient(line) {
 
   // 3 cuillères à soupe / 1 cuillère à soupe / 2 cuillères à café ...
   m = txt.match(
-    /^(\d+(?:[.,]\d+)?)\s*(cuill(?:ère|er)?s?(?:\s+à\s+soupe|\s+a\s+soupe|\s+à\s+caf[ée]|\s+a\s+caf[ée])?)\b(.+)?$/i
+    /^(\d+(?:[.,]\d+)?)\s*(cuill(?:ère|er)?s?(?:\s+à\s+soupe|\s+a\s+soupe|\s+à\s+caf[ée]|\s+a\s+caf[ée])?)\b(.+)?$/i,
   );
   if (m) {
     const quantity = parseFloat(m[1].replace(',', '.')) || 0;
@@ -293,16 +334,14 @@ function parseOcrIngredient(line) {
 
   // 3 oeufs / 2 œufs / 3 gousses d'ail ...
   m = txt.match(
-    /^(\d+(?:[.,]\d+)?)\s*(oeufs?|œufs?|gousses?|tranches?|bouch[ée]es?|steaks?)\b(.+)?$/i
+    /^(\d+(?:[.,]\d+)?)\s*(oeufs?|œufs?|gousses?|tranches?|bouch[ée]es?|steaks?)\b(.+)?$/i,
   );
   if (m) {
     const quantity = parseFloat(m[1].replace(',', '.')) || 0;
     const unit = 'piece';
     const nameRest = (m[3] || '').trim();
     const name =
-      nameRest ||
-      txt.replace(/^\d+(?:[.,]\d+)?\s*/, '').trim() ||
-      original;
+      nameRest || txt.replace(/^\d+(?:[.,]\d+)?\s*/, '').trim() || original;
     return { quantity, unit, name };
   }
 
@@ -351,6 +390,9 @@ function beautifyIngredients(list = []) {
  * - ingredientLines
  * - stepLines (numérotées 1., 2., 3.)
  * - notesLines (infos + astuces)
+ *
+ * AVEC FALLBACK : si on ne trouve pas la section Ingrédients
+ * OU si aucun ingrédient n'est trouvé → on reclasse ligne par ligne.
  */
 function splitIngredientsAndSteps(filteredLines) {
   const lines = filteredLines.slice();
@@ -363,24 +405,26 @@ function splitIngredientsAndSteps(filteredLines) {
       /^pr[ée]paration\s*:/i.test(l) ||
       /^cuisson\s*:/i.test(l) ||
       /^temps\s*total\s*:/i.test(l) ||
+      /^temps total\s*:/i.test(l) ||
       /^portions?\s*:/i.test(l)
     ) {
       metaLines.push(l);
     }
   }
 
+  let ingredientLines = [];
+  let stepLinesRaw = [];
+  let tipsLines = [];
+
+  // indices des sections "Ingrédients" et "Instructions"
   const idxIngr = lines.findIndex((l) => /^ingr[ée]dients?/i.test(l));
   const idxInstr = lines.findIndex(
     (l, idx) =>
       idx > (idxIngr >= 0 ? idxIngr : -1) &&
-      /(instructions?|étape\s*1|etape\s*1)/i.test(l)
+      /(instructions?|étape\s*1|etape\s*1)/i.test(l),
   );
 
-  const ingredientLines = [];
-  const stepLinesRaw = [];
-  const tipsLines = [];
-
-  // ── Ingrédients ──
+  // ── 1) Tentative classique avec section "Ingrédients" détectée ──
   if (idxIngr >= 0) {
     const end = idxInstr >= 0 ? idxInstr : lines.length;
     for (let i = idxIngr + 1; i < end; i++) {
@@ -392,12 +436,17 @@ function splitIngredientsAndSteps(filteredLines) {
       if (/^temps total\b/i.test(line)) continue;
       if (/^portions?\b/i.test(line)) continue;
 
-      if (/^pour la sauce\b/i.test(line)) continue;
-
       // "(facultatif)" -> on ignore complètement
-      if (/\(facultatif\)/i.test(line)) {
+      if (/\(facultatif\)/i.test(line)) continue;
+
+      // ligne avec "personnes" -> meta, pas ingrédient
+      if (/personnes?/i.test(line)) {
+        metaLines.push(line);
         continue;
       }
+
+      // "Pour la pâte :", "Pour la crème au chocolat :" → on ignore (titres de section)
+      if (/^pour la\b/i.test(line)) continue;
 
       // "Parmesan :" etc. -> plutôt note
       if (/^[A-Z].*:\s*$/.test(line) && !ING_HINT.test(line)) {
@@ -408,30 +457,99 @@ function splitIngredientsAndSteps(filteredLines) {
       line = cleanIngredientLine(line);
       if (!line) continue;
 
-      const prevIdx = ingredientLines.length - 1;
       const hasQty = ING_HINT.test(line);
+      const hasVerb = COOKING_VERBS.test(line.toLowerCase());
 
-      // si la ligne actuelle ne ressemble pas à un ingrédient mais suit un ingrédient
-      // → on la fusionne dans la précédente (C2 modéré)
-      if (!hasQty && prevIdx >= 0) {
-        const prev = ingredientLines[prevIdx];
-        if (!/[.!?…]$/.test(prev) && line.length < 80) {
-          ingredientLines[prevIdx] = `${prev} ${line}`.trim();
-          continue;
+      // si la ligne contient un verbe de cuisine → ce n'est pas un ingrédient
+      if (hasVerb) continue;
+
+      const prevIdx = ingredientLines.length - 1;
+
+      // Si pas de quantité : on fusionne avec la ligne précédente (ex: "(éventuellement allégée)")
+      if (!hasQty) {
+        if (prevIdx >= 0 && ingredientLines[prevIdx].length < 120) {
+          ingredientLines[prevIdx] = `${ingredientLines[prevIdx]} ${line}`.trim();
         }
+        continue;
       }
 
+      // OK, vraie ligne d'ingrédient
       ingredientLines.push(line);
+    }
+
+    // Étapes + Astuces classiques
+    if (idxInstr >= 0) {
+      let inTips = false;
+
+      for (let i = idxInstr + 1; i < lines.length; i++) {
+        let line = lines[i];
+        if (!line) continue;
+
+        const norm = line
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase()
+          .trim();
+
+        if (/^etape\s*\d+\s*:?/i.test(norm)) {
+          inTips = false;
+          // on garde seulement le texte après "ÉTAPE X"
+          line = line.replace(/^[ÉE]TAPE\s*\d+\s*:?\s*/i, '');
+          if (line.trim()) stepLinesRaw.push(line.trim());
+          continue;
+        }
+
+        if (/(astuces?|variantes?|conseils?)/i.test(line)) {
+          inTips = true;
+          tipsLines.push(line);
+          continue;
+        }
+
+        if (inTips) {
+          if (
+            /^ingr[ée]dients?$/i.test(line) ||
+            /^instructions?$/i.test(line) ||
+            /^etape\s*\d+\s*:/i.test(norm)
+          ) {
+            inTips = false;
+            i--;
+            continue;
+          }
+          tipsLines.push(line);
+          continue;
+        }
+
+        line = line.replace(/^[•\-·\u2022]+\s*/, '');
+        line = line.replace(/^\d+[\.\)]\s*/, '');
+        line = line.trim();
+        if (!line) continue;
+
+        stepLinesRaw.push(line);
+      }
     }
   }
 
-  // ── Étapes + Astuces ──
-  if (idxInstr >= 0) {
+  // ── 2) FALLBACK : aucune section "Ingrédients" OU aucun ingrédient trouvé ──
+  if (!ingredientLines.length) {
+    ingredientLines = [];
+    stepLinesRaw = [];
+    tipsLines = tipsLines || [];
     let inTips = false;
 
-    for (let i = idxInstr + 1; i < lines.length; i++) {
-      let line = lines[i];
+    for (const rawLine of lines) {
+      let line = rawLine.trim();
       if (!line) continue;
+
+      // déjà pris en compte comme meta ?
+      if (
+        /^pr[ée]paration\s*:/i.test(line) ||
+        /^cuisson\s*:/i.test(line) ||
+        /^temps\s*total\s*:/i.test(line) ||
+        /^temps total\s*:/i.test(line) ||
+        /^portions?\s*:/i.test(line)
+      ) {
+        continue;
+      }
 
       const norm = line
         .normalize('NFD')
@@ -439,38 +557,53 @@ function splitIngredientsAndSteps(filteredLines) {
         .toLowerCase()
         .trim();
 
-      if (/^etape\s*\d+\s*:/.test(norm)) {
-        inTips = false;
-        stepLinesRaw.push(line);
-        continue;
-      }
-
+      // Début ou bloc d'astuces
       if (/(astuces?|variantes?|conseils?)/i.test(line)) {
         inTips = true;
         tipsLines.push(line);
         continue;
       }
-
       if (inTips) {
-        if (
-          /^ingr[ée]dients?$/i.test(line) ||
-          /^instructions?$/i.test(line) ||
-          /^etape\s*\d+\s*:/i.test(norm)
-        ) {
+        if (/^etape\s*\d+/.test(norm) || /^ingredients?/.test(norm)) {
           inTips = false;
-          i--;
+        } else {
+          tipsLines.push(line);
           continue;
         }
-        tipsLines.push(line);
+      }
+
+      const hasQty = ING_HINT.test(line);
+      const hasVerb = COOKING_VERBS.test(line) || /^etape\s*\d+/.test(norm);
+
+      // ligne "8 personnes" → meta
+      if (/personnes?/i.test(line)) {
+        metaLines.push(line);
         continue;
       }
 
-      line = line.replace(/^[•\-·\u2022]+\s*/, '');
-      line = line.replace(/^\d+[\.\)]\s*/, '');
-      line = line.trim();
-      if (!line) continue;
+      if (hasQty && !hasVerb) {
+        // on le traite comme ingrédient
+        line = cleanIngredientLine(line);
+        if (!line) continue;
 
-      stepLinesRaw.push(line);
+        const prevIdx = ingredientLines.length - 1;
+        if (
+          !ING_HINT.test(line) &&
+          prevIdx >= 0 &&
+          ingredientLines[prevIdx].length < 120
+        ) {
+          ingredientLines[prevIdx] = `${ingredientLines[prevIdx]} ${line}`.trim();
+        } else {
+          ingredientLines.push(line);
+        }
+      } else if (hasVerb || /^etape\s*\d+/.test(norm)) {
+        // texte d'étape
+        line = line.replace(/^[ÉE]TAPE\s*\d+\s*:?\s*/i, '');
+        if (line.trim()) stepLinesRaw.push(line.trim());
+      } else {
+        // texte neutre : plutôt étape (ex: "Préparation de la pâte")
+        stepLinesRaw.push(line);
+      }
     }
   }
 
@@ -504,7 +637,9 @@ function splitIngredientsAndSteps(filteredLines) {
 router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ ok: false, error: 'Aucun fichier reçu' });
+      return res
+        .status(400)
+        .json({ ok: false, error: 'Aucun fichier reçu' });
     }
 
     const worker = await getWorker();
@@ -512,14 +647,17 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
 
     const rawText = String(data.text || '').trim();
     if (!rawText) {
-      return res.status(400).json({ ok: false, error: 'Texte OCR vide' });
+      return res
+        .status(400)
+        .json({ ok: false, error: 'Texte OCR vide' });
     }
 
     const filteredLines = smartFilterLinesFromText(rawText);
     if (!filteredLines.length) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Impossible de détecter une recette dans cette image' });
+      return res.status(400).json({
+        ok: false,
+        error: 'Impossible de détecter une recette dans cette image',
+      });
     }
 
     const { servings, ingredientLines, stepLines, notesLines } =
@@ -527,7 +665,6 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
 
     // 3) Parse des lignes d'ingrédients -> { name, quantity, unit }
     const ingredientsRaw = ingredientLines.map((line) => {
-      // 3.1 parseur OCR spécifique
       const parsedOcr = parseOcrIngredient(line);
       if (parsedOcr) {
         return {
@@ -537,7 +674,6 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
         };
       }
 
-      // 3.2 fallback : parseRawLine (utilitaire global)
       const parsed = parseRawLine(cleanIngredientLine(line));
       if (parsed) {
         return {
@@ -547,7 +683,6 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
         };
       }
 
-      // 3.3 ultime fallback : tout dans name
       return {
         name: cleanIngredientLine(line),
         quantity: 0,
@@ -555,7 +690,6 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
       };
     });
 
-    // 4) Beautifier final : format propre pour l'affichage
     const ingredients = beautifyIngredients(ingredientsRaw);
 
     const draft = {
@@ -570,11 +704,16 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
     return res.json({ ok: true, draft });
   } catch (e) {
     console.error('POST /import/ocr error:', e);
-    return res.status(500).json({ ok: false, error: e.message || 'ocr_error' });
+    return res
+      .status(500)
+      .json({ ok: false, error: e.message || 'ocr_error' });
   }
 });
 
 module.exports = router;
+
+
+
 
 
 
