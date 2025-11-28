@@ -36,7 +36,7 @@ function selectParser(host) {
   if (host.includes('marmiton.org')) return parseMarmiton;
   if (host.includes('schaer.com')) return parseSchaer;
   if (host.includes('mangerbouger.fr')) return parseMangerBouger;
-  if (host.includes('cuisineaddict.com')) return parseCuisineAddict;
+  if (host.includes('cuisine-addict.com')) return parseCuisineAddict;
 
   // Fallback pour tous les autres sites
   return parseGeneric;
