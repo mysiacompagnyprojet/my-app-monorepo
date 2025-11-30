@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api' // si l'import casse, remplace temporairement par un chemin relatif
 
@@ -14,14 +14,13 @@ type Draft = {
   imageUrl?: string | null
   notes?: string | null
   steps?: string[] // peut venir d'un import
-  // certains imports fournissent { ingredients: [{ name, quantity, unit }]} ou { ingredients: [{ raw: string }] }
   ingredients?: Array<Line | { raw: string }>
 }
 
 // ───────────────────────────────────────────────────────────────────────────────
-// Composant
+// Composant interne avec TOUTE la logique
 // ───────────────────────────────────────────────────────────────────────────────
-export default function NewRecipePage() {
+function NewRecipeInner() {
   const router = useRouter()
   const search = useSearchParams()
 
@@ -82,7 +81,6 @@ export default function NewRecipePage() {
     const safeNotes = (d.notes || '') as string
     const safeSteps = Array.isArray(d.steps) && d.steps.length ? d.steps.map((s) => String(s)) : ['']
 
-    // Les imports peuvent fournir des lignes "raw" (texte libre) → on les place en "name" pour édition
     const rawIngs: Line[] = Array.isArray(d.ingredients)
       ? d.ingredients.map((it) => {
           if ('raw' in it) {
@@ -136,11 +134,10 @@ export default function NewRecipePage() {
     } catch {
       // ignore
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, shouldPrefill])
+  }, [mounted, shouldPrefill, search])
 
   // ──────────────────────────────────────────────
-  // Chargement manuel du brouillon (si pas ?prefill=1)
+  // Chargement manuel du brouillon
   // ──────────────────────────────────────────────
   function prefillFromSessionManually() {
     try {
@@ -166,7 +163,7 @@ export default function NewRecipePage() {
   // Submit
   // ──────────────────────────────────────────────
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault() // évite le rechargement
+    e.preventDefault()
     try {
       setStatus('Enregistrement en cours…')
 
@@ -201,7 +198,7 @@ export default function NewRecipePage() {
 
       try { sessionStorage.removeItem('recipeDraft') } catch {}
       setStatus('✅ Recette enregistrée')
-      router.push('/recipes') // redirection vers la liste
+      router.push('/recipes')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
     }
@@ -214,12 +211,10 @@ export default function NewRecipePage() {
     <div style={styles.container}>
       <h1 style={styles.h1}>Nouvelle recette</h1>
 
-      {/* Bandeau d’info */}
       {status && (
         <div role="status" style={styles.status}>{status}</div>
       )}
 
-      {/* Proposition de charger un brouillon si présent en session */}
       {mounted && search.get('prefill') !== '1' && sessionStorage.getItem('recipeDraft') && (
         <div style={styles.draftBox}>
           Un brouillon d’import est disponible.&nbsp;
@@ -330,7 +325,6 @@ export default function NewRecipePage() {
           + Ajouter une étape
         </button>
 
-        {/* Submit */}
         <div style={{ marginTop: 16 }}>
           <button type="submit" style={styles.primaryBtn}>Enregistrer</button>
         </div>
@@ -339,8 +333,24 @@ export default function NewRecipePage() {
   )
 }
 
+// ──────────────────────────────────────────────
+// Force dynamique (sécurité pour Next 15 + searchParams)
+// ──────────────────────────────────────────────
+export const dynamic = 'force-dynamic'
+
+// ──────────────────────────────────────────────
+// Wrapper exporté avec Suspense
+// ──────────────────────────────────────────────
+export default function NewRecipePage() {
+  return (
+    <Suspense fallback={<main style={styles.container}>Chargement…</main>}>
+      <NewRecipeInner />
+    </Suspense>
+  )
+}
+
 // ───────────────────────────────────────────────────────────────────────────────
-// Styles inline minimalistes (lisibles et “jolis” sans dépendances)
+// Styles
 // ───────────────────────────────────────────────────────────────────────────────
 const styles: Record<string, React.CSSProperties> = {
   container: {
