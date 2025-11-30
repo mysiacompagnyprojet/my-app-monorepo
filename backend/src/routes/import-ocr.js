@@ -4,6 +4,7 @@ const express = require('express');
 const multer = require('multer');
 const { createWorker } = require('tesseract.js');
 const { parseRawLine } = require('../utils/ingredients');
+const { cleanOcrLine, splitOcrLines } = require('../utils/ocrText'); // ⬅️ nouveau
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -133,6 +134,7 @@ function scoreLine(line) {
 /**
  * Nettoyage intelligent de base :
  * - découpe le texte brut en lignes
+ * - nettoie chaque ligne (cleanOcrLine)
  * - calcule un score par ligne
  * - garde les lignes “intéressantes” + leurs voisines proches
  */
@@ -140,7 +142,7 @@ function smartFilterLinesFromText(rawText) {
   const rawLines = String(rawText || '')
     .replace(/\r/g, '')
     .split('\n')
-    .map((s) => s.trim())
+    .map((s) => cleanOcrLine(s)) // ⬅️ on utilise le nettoyage avancé
     .filter(Boolean);
 
   if (!rawLines.length) return [];
@@ -227,7 +229,7 @@ function normalizeStepNumbers(stepParagraphs = []) {
   });
 }
 
-// dédoublonnage C2 : on garde la version la plus longue si 2 étapes sont quasi identiques
+// dédoublonnage : on garde la version la plus longue si 2 étapes sont quasi identiques
 function dedupeSteps(stepList = []) {
   const out = [];
 
@@ -393,6 +395,7 @@ function beautifyIngredients(list = []) {
  *
  * AVEC FALLBACK : si on ne trouve pas la section Ingrédients
  * OU si aucun ingrédient n'est trouvé → on reclasse ligne par ligne.
+ * On utilise aussi splitOcrLines pour aider dans les cas bordéliques.
  */
 function splitIngredientsAndSteps(filteredLines) {
   const lines = filteredLines.slice();
@@ -536,6 +539,18 @@ function splitIngredientsAndSteps(filteredLines) {
     tipsLines = tipsLines || [];
     let inTips = false;
 
+    // ⬇️ On utilise ici splitOcrLines pour aider à séparer ingrédients / reste
+    const { ingredientsLines: probableIngs, stepsLines: probableSteps } =
+      splitOcrLines(lines);
+
+    if (probableIngs.length) {
+      ingredientLines = probableIngs.slice();
+    }
+
+    if (probableSteps.length) {
+      stepLinesRaw = probableSteps.slice();
+    }
+
     for (const rawLine of lines) {
       let line = rawLine.trim();
       if (!line) continue;
@@ -652,6 +667,7 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
         .json({ ok: false, error: 'Texte OCR vide' });
     }
 
+    // 1) Filtrage intelligent des lignes (avec nettoyage avancé)
     const filteredLines = smartFilterLinesFromText(rawText);
     if (!filteredLines.length) {
       return res.status(400).json({
@@ -660,6 +676,7 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
       });
     }
 
+    // 2) Découpage en portions / ingrédients / étapes / notes
     const { servings, ingredientLines, stepLines, notesLines } =
       splitIngredientsAndSteps(filteredLines);
 
@@ -711,6 +728,7 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
 });
 
 module.exports = router;
+
 
 
 
