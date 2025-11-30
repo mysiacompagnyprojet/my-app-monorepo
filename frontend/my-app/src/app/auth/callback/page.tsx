@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { createClient } from '@supabase/supabase-js';
 
@@ -22,7 +22,8 @@ type SyncResponse = {
   subscriptionStatus?: string | null;
 };
 
-export default function SupabaseCallbackPage() {
+// ✅ Toute ta logique est déplacée dans ce composant interne
+function SupabaseCallbackInner() {
   const [msg, setMsg] = useState('Connexion en cours...');
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -85,7 +86,6 @@ export default function SupabaseCallbackPage() {
               'Content-Type': 'application/json',
               Authorization: `Bearer ${token}`,
             },
-            // Pas besoin de cookies pour cet appel: on s’appuie sur le Bearer Supabase
             credentials: 'include',
             body: JSON.stringify({ ping: true }),
           });
@@ -108,23 +108,21 @@ export default function SupabaseCallbackPage() {
 
           subscriptionStatus = out.subscriptionStatus ?? 'trialing';
 
-          // Cookies lisibles par Next (non httpOnly) — utiles si tu as un middleware
           const oneMonth = 60 * 60 * 24 * 30;
           const isHttps =
             typeof window !== 'undefined' &&
             window.location.protocol === 'https:';
           const secureAttr = isHttps ? '; Secure' : '';
-          const domainAttr = ''; // ex: '; Domain=mondomaine.com' en prod
+          const domainAttr = '';
 
           document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
           document.cookie = `subscription_status=${subscriptionStatus}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
         }
 
         // 4) Redirection selon l’abonnement
-        // - active/trialing -> page d’accueil
-        // - sinon -> page premium (paiement)
         const dest =
-          subscriptionStatus && !['active', 'trialing'].includes(subscriptionStatus)
+          subscriptionStatus &&
+          !['active', 'trialing'].includes(subscriptionStatus)
             ? '/premium'
             : '/';
         setMsg('Connexion réussie ✅ redirection...');
@@ -139,3 +137,18 @@ export default function SupabaseCallbackPage() {
   return <main style={{ padding: 24 }}>{msg}</main>;
 }
 
+// ⚠️ Empêche le pré-rendu statique trop agressif
+export const dynamic = 'force-dynamic';
+
+// ✅ Page exportée : juste un wrapper Suspense autour de la logique
+export default function SupabaseCallbackPage() {
+  return (
+    <Suspense
+      fallback={
+        <main style={{ padding: 24 }}>Connexion en cours...</main>
+      }
+    >
+      <SupabaseCallbackInner />
+    </Suspense>
+  );
+}
