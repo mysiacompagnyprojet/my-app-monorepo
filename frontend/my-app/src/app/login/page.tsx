@@ -87,7 +87,15 @@ export default function LoginPage() {
           "Configuration Supabase manquante : NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY"
         );
       }
-      const redirectTo = `${window.location.origin}/auth/callback`;
+
+      // 👇 IMPORTANT : on force l'origine en prod sur le domaine Vercel
+      const origin =
+        typeof window !== 'undefined' && window.location.origin.includes('localhost')
+          ? window.location.origin
+          : 'https://my-app-monorepo.vercel.app';
+
+      const redirectTo = `${origin}/auth/callback`;
+
       const { error } = await supabase.auth.signInWithOtp({
         email,
         options: { emailRedirectTo: redirectTo },

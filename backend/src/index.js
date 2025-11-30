@@ -38,22 +38,33 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
+  'https://my-app-monorepo.vercel.app',
   process.env.FRONTEND_URL || '',
   process.env.FRONTEND_VERCEL_URL || '',
   process.env.APP_URL || '', // ex: https://ton-app.vercel.app
 ].filter(Boolean);
 
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
-      return cb(new Error('Not allowed by CORS'));
-    },
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-);
+app.use(cors({
+  origin: (origin, cb) => {
+    // Requêtes sans Origin (curl, Postman…) → OK
+    if (!origin) return cb(null, true);
+
+    const isAllowedExplicit = allowedOrigins.includes(origin);
+    const isVercel = origin.endsWith('.vercel.app');
+    const isNgrok = origin.includes('ngrok-free.app');
+
+    if (isAllowedExplicit || isVercel || isNgrok) {
+      return cb(null, true);
+    }
+
+    console.error('CORS bloqué pour origin =', origin);
+    return cb(new Error('Not allowed by CORS'));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+}));
+
 
 // 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
 app.use(devAirtable);
