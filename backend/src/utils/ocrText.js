@@ -34,9 +34,6 @@ const HARD_JUNK_PATTERNS = [
   /black\s*friday/i,
   /canva/i,
 
-  // bruit OCR vu sur certains imports
-  /kms\s+lj/i,
-
   // GÉNÉRAL : pubs / marketing
   /\b(pub|publicit[ée]|annonce sponsoris[ée]e?|sponsorise[ée]?)\b/i,
   /\b(offre|promotion|promo|r[ée]duction|soldes?)\b/i,
@@ -45,7 +42,7 @@ const HARD_JUNK_PATTERNS = [
   /\b\d{1,3}\s*%\b/, // 30 %
 ];
 
-// Métadonnées de sites de recettes (mrrecette & co)
+// Métadonnées de sites de recettes (mrrecette & co, erreurs à éviter, etc.)
 const META_LINE_PATTERNS = [
   /^r[ée]alis[ée] par\b/i,
   /^type de plat\b/i,
@@ -59,7 +56,7 @@ const META_LINE_PATTERNS = [
   /^garnitures?\b/i,
   /^[ée]tapes? de pr[ée]paration\b/i,
   /^informations? utiles\b/i,
-  /^indications? du fabricant\b/i,
+  /^erreurs?\s+à\s+éviter\b/i,
 ];
 
 const URL_REGEX = /(https?:\/\/|www\.)/i;
@@ -69,11 +66,11 @@ const BUTTON_WORDS =
 
 // Verbes culinaires typiques (pour repérer les vraies étapes)
 const COOKING_VERBS =
-  /(faites|ajoutez|versez|m[ée]langez?|cuire|cuisez|chauffez|pr[ée]chauffez|saisissez|nappez?|servez?|r[ée]servez?|coupez?|hachez?|po[êe]lez?|dorez?|fouettez?|incorporez?|d[ée]posez?|m[ée]langer|r[ée]chauffer|r[ée]cup[ée]rer|retirer|mettre|mettez|pressez?|bouillir|faire bouillir|laisser|laissez|mariner|marinez|r[ée]partir|r[ée]partissez|parsemer|parsemez|griller|grillez|égoutter|égouttez)/i;
+  /(faites|ajoutez|versez|m[ée]langez|cuire|cuisez|chauffez|pr[ée]chauffez|saisissez|nappez|servez|r[ée]servez|coupez|hachez|po[êe]lez|dorez|fouettez|incorporez|d[ée]posez|m[ée]langer|r[ée]chauffer|r[ée]cup[ée]rer|retirer|mettre|mettez|pressez|bouillir|faire bouillir|laisser|laissez|mariner|marine[rz]?|rincer|rincez|griller|grillez|[ée]goutter|[ée]gouttez|egoutter|egouttez)/i;
 
 // Indices d’ingrédients (quantité + unité / aliment)
 const ING_HINT =
-  /(\d+\s*(g|kg|mg|ml|cl|l|cuill|cuill[èe]re|pinc[ée]e|tranche|pi[eè]ce|oeuf|œuf|noix|graines?|gousses?))/i;
+  /(\d+\s*(g|kg|mg|ml|cl|l|cuill|cuill[èe]re|pinc[ée]e|tranche|tasses?|tasse|verres?|livres?|livre|lb|c\.?\s*à\s*soupe|c\.?\s*à\s*caf[ée]|pi[eè]ce|oeuf|œuf|noix|graines?|gousses?))/i;
 
 // Mots utiles de structuration
 const SECTION_HINTS =
@@ -100,7 +97,7 @@ function scoreLine(line) {
   if (URL_REGEX.test(txt) || DOMAIN_REGEX.test(txt)) score -= 5;
   if (BUTTON_WORDS.test(txt)) score -= 4;
 
-  // Grosse bannière en MAJUSCULES + %.
+  // Grosse bannière en MAJUSCULES + %
   const words = txt.split(/\s+/);
   const upperWords = words.filter(
     (w) =>
@@ -115,6 +112,12 @@ function scoreLine(line) {
   // Texte très court ou très long = souvent bruit
   if (txt.length < 4) score -= 1;
   if (txt.length > 260) score -= 1;
+
+  // Lignes “bizarres” (presque pas de voyelles) → poubelle
+  const hasVowel = /[aeiouyàâäéèêëîïôöùûüœ]/i.test(txt);
+  if (!hasVowel && !/\d/.test(txt) && txt.length <= 12) {
+    score -= 5;
+  }
 
   // Mots-clés importants
   if (SECTION_HINTS.test(txt)) score += 5;
@@ -171,7 +174,7 @@ function smartFilterLinesFromText(rawText) {
     const { line, score } = scored[i];
     if (!keep[i]) continue;
     if (score <= -5) continue; // lignes vraiment toxiques
-    if (isMetaLine(line)) continue; // on jette les lignes méta ici, on les récupèrera plus tard
+    if (isMetaLine(line)) continue; // on jette les lignes méta
     filtered.push(line);
   }
 
@@ -203,28 +206,15 @@ function cleanRawTextLine(line) {
   let s = String(line || '').trim();
   if (!s) return '';
 
-  // enlever puces et symboles type ►, ➡, etc. + ">" au début
-  s = s.replace(/^[\-–—*•●▶➡➜>]+\s*/, '');
-
-  // enlever un "|" isolé au début
-  s = s.replace(/^\|\s*/, '');
-
-  // "Q régime alimentaire", "Q ingrédients" → on enlève le Q
-  s = s.replace(/^Q\s+(?=r[ée]gime\b)/i, '');
-  s = s.replace(/^Q\s+(?=ingr[ée]dients?\b)/i, '');
+  // enlever puces et symboles type ►, ➡, etc.
+  s = s.replace(/^[\-–—*•●▶➡➜\s]+/, '');
 
   // enlever les numéros visuels du site : [01], 01., 02), O2, 02 200 g etc.
   s = s.replace(/^[\[\(]?\s*[O0]?\s*\d{1,2}\s*[\]\).:-]?\s*/i, '');
 
-  // cas OCR "Os 3 gousses..." (le "Os" vient souvent du "03")
-  s = s.replace(/^[Oo]s\s+(?=\d)/, '');
-
-  // préfixes bizarres "(m]", "[m]", "(x]" etc.
-  s = s.replace(/^[\(\[]\s*[A-Za-z]+\]?\s+/i, '');
-
-  // enlever le préfixe OCR "A |", "O |", "I |", "A ", "O ", "I "
-  s = s.replace(/^[AOI]\s*\|\s*/, '');
-  s = s.replace(/^[AOI]\s+/, '');
+  // enlever le préfixe OCR "A |", "O |", "I |", "Q "
+  s = s.replace(/^[AOIQ]\s*\|\s*/, '');
+  s = s.replace(/^[AOIQ]\s+/, '');
 
   return s.trim();
 }
@@ -272,7 +262,6 @@ function mergeLinesToParagraphs(lines = []) {
   return out;
 }
 
-// découpe une ligne d'étape trop longue en phrases
 function splitLongStepLine(text) {
   const sentences = text.split(/(?<=\.)\s+/g);
   return sentences.filter((s) => s.trim().length > 3);
@@ -337,52 +326,106 @@ function parseOcrIngredient(line) {
 
   // titres / sections -> pas un ingrédient
   if (/^pour la\b/i.test(txt)) return null;
-  if (/^(garnitures?|ingrédients? principaux?)\b/i.test(txt)) return null;
+  if (/^(garnitures?|ingr[ée]dients? principaux?)\b/i.test(txt)) return null;
 
-  // enlever ":" isolé
-  if (/:\s*$/.test(txt) && !ING_HINT.test(txt)) return null;
-
-  // 200 g ... / 20 cl ... / 1 L ...
-  let m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|cl|l)\b\s*(.+)$/i);
-  if (m) {
-    return {
-      quantity: parseFloat(m[1].replace(',', '.')),
-      unit: m[2].toLowerCase(),
-      name: m[3].trim(),
-    };
+  // si on a un ":" avec une partie gauche qui ressemble à un ingrédient,
+  // on coupe après le ":" (cas Pinterest : description après les deux-points)
+  if (txt.includes(':')) {
+    const parts = txt.split(':');
+    if (ING_HINT.test(parts[0])) {
+      txt = parts[0].trim();
+    }
   }
 
-  // cuillère à soupe / café
+  // "Parmesan :" etc. -> plutôt titre de section
+  if (/:$/.test(txt) && !ING_HINT.test(txt)) {
+    return null;
+  }
+
+  // 200 g ... / 20 cl ... / 1 L ...
+  let m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(g|kg|mg|ml|cl|l)\b\s*(.+)?$/i);
+  if (m) {
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = m[2].toLowerCase();
+    let name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
+  }
+
+  // 2 c. à soupe / 1 c. à café ...
   m = txt.match(
-    /^(\d+(?:[.,]\d+)?)\s*(cuill(?:[èe]re)?s?(?:\s+à\s+soupe|\s+à\s+caf[ée]))\b\s*(.+)$/i,
+    /^(\d+(?:[.,]\d+)?)\s*c\.?\s*à\s*(soupe|caf[ée])\b\s*(.+)?$/i,
   );
   if (m) {
-    let unit = m[2].includes('soupe') ? 'cas' : 'cac';
-    return {
-      quantity: parseFloat(m[1].replace(',', '.')),
-      unit,
-      name: m[3].trim(),
-    };
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = m[2].toLowerCase().startsWith('soupe') ? 'cas' : 'cac';
+    const name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
+  }
+
+  // 3 cuillères à soupe / 1 cuillère à café ...
+  m = txt.match(
+    /^(\d+(?:[.,]\d+)?)\s*(cuill(?:[èe]re)?s?(?:\s+à\s+soupe|\s+a\s+soupe|\s+à\s+caf[ée]|\s+a\s+caf[ée])?)\b\s*(.+)?$/i,
+  );
+  if (m) {
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unitRaw = m[2].toLowerCase();
+    let unit = 'piece';
+    if (unitRaw.includes('soupe')) unit = 'cas';
+    else if (unitRaw.includes('caf')) unit = 'cac';
+
+    const name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
+  }
+
+  // 1 pincée de ...
+  m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(pinc[ée]e?s?)\b\s*(.+)?$/i);
+  if (m) {
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = 'pincee';
+    const name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
   }
 
   // 3 gousses d'ail / 2 œufs / 4 tranches ...
-  m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(gousses?|oeufs?|œufs?|tranches?)\b\s*(.+)?$/i);
+  m = txt.match(
+    /^(\d+(?:[.,]\d+)?)\s*(gousses?|oeufs?|œufs?|tranches?|bouch[ée]es?|steaks?)\b\s*(.+)?$/i,
+  );
   if (m) {
-    return {
-      quantity: parseFloat(m[1].replace(',', '.')),
-      unit: 'piece',
-      name: (m[3] || '').trim(),
-    };
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = 'piece';
+    const nameRest = (m[3] || '').trim();
+    const name =
+      nameRest || txt.replace(/^\d+(?:[.,]\d+)?\s*/, '').trim() || original;
+    return { quantity, unit, name };
+  }
+
+  // 2 tasses / 1 tasse / 2 verres ...
+  m = txt.match(
+    /^(\d+(?:[.,]\d+)?)\s*(tasses?|tasse|verres?)\b\s*(.+)?$/i,
+  );
+  if (m) {
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = 'tasse';
+    const name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
+  }
+
+  // 1 livre de porc ...
+  m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(livres?|lb)\b\s*(.+)?$/i);
+  if (m) {
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = 'livre';
+    const name = (m[3] || '').replace(/^de\s+/i, '').trim() || original;
+    return { quantity, unit, name };
   }
 
   // Exemple : "12 graines de sésame"
-  m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(graines?)\b\s*(.+)$/i);
+  m = txt.match(/^(\d+(?:[.,]\d+)?)\s*(graines?)\b\s*(.+)?$/i);
   if (m) {
-    return {
-      quantity: parseFloat(m[1]),
-      unit: 'piece',
-      name: `${m[2]} ${m[3]}`.trim(),
-    };
+    const quantity = parseFloat(m[1].replace(',', '.')) || 0;
+    const unit = 'piece';
+    const name = `${m[2]} ${m[3] || ''}`.trim();
+    return { quantity, unit, name };
   }
 
   return null;
@@ -399,7 +442,7 @@ function beautifyIngredients(list = []) {
 
     // Cas spécifique : d'ail + piece -> Gousses d'ail hachées
     if (/^d[’']ail/i.test(name) && unit === 'piece' && (ing.quantity || 0) >= 1) {
-      name = "Gousses d'ail émincées";
+      name = "Gousses d'ail hachées";
     }
 
     // enlever les "Cuillères à soupe de ..." dans le nom (s'il en reste)
@@ -423,7 +466,7 @@ function beautifyIngredients(list = []) {
     };
   });
 
-  // Dé-doublonner : même nom + même unité → on garde la première ligne non nulle
+  // Dé-doublonner : même nom + même unité → on garde la meilleure ligne
   const byKey = new Map();
   for (const ing of cleaned) {
     const key = `${ing.name.toLowerCase()}|${ing.unit}`;
@@ -455,12 +498,16 @@ function splitIngredientsAndSteps(filteredLines) {
   let stepLinesRaw = [];
   let tipsLines = [];
 
-  // indices sections "Ingrédients" et "Instructions"
+  // indices sections "Ingrédients" et "Instructions/Préparation"
   const idxIngr = lines.findIndex((l) => /^ingr[ée]dients?/i.test(l));
   const idxInstr = lines.findIndex(
     (l, idx) =>
       idx > (idxIngr >= 0 ? idxIngr : -1) &&
-      /(instructions?|[ée]tapes? de pr[ée]paration|[ée]tape\s*1)/i.test(l),
+      (
+        /(instructions?|[ée]tapes? de pr[ée]paration)/i.test(l) ||
+        /^[\s•\-·\u2022]*[ÉE]TAPE\s*1\b/i.test(l) ||
+        /^[\s•\-·\u2022]*\d+[\.\)]\s+/.test(l)
+      ),
   );
 
   // Helper méta (temps, etc.)
@@ -471,7 +518,8 @@ function splitIngredientsAndSteps(filteredLines) {
       /^cuisson\s*:/i.test(line) ||
       /^temps\s*total\s*:/i.test(line) ||
       /^temps total\s*:/i.test(line) ||
-      /^portions?\s*:/i.test(line)
+      /^portions?\s*:/i.test(line) ||
+      /^erreurs?\s+à\s+éviter\b/i.test(line)
     );
   }
 
@@ -502,22 +550,8 @@ function splitIngredientsAndSteps(filteredLines) {
       const hasQty = ING_HINT.test(line);
       const hasVerb = COOKING_VERBS.test(line.toLowerCase());
 
-      // Lignes qui ressemblent à des titres / sections
-      if (/^ingr[ée]dients?\s+principaux\b/i.test(line)) {
-        metaLines.push(line);
-        continue;
-      }
-      if (/^sauce et assaisonnements\b/i.test(line)) {
-        metaLines.push(line);
-        continue;
-      }
-      if (/^garnitures?\b/i.test(line)) {
-        metaLines.push(line);
-        continue;
-      }
-
-      if (hasVerb) {
-        // style "Mariner quelques minutes." → plutôt étape
+      // lignes type "Mariner quelques minutes." -> plutôt étape
+      if (hasVerb && !hasQty) {
         stepLinesRaw.push(line);
         continue;
       }
@@ -619,7 +653,8 @@ function splitIngredientsAndSteps(filteredLines) {
       }
 
       const hasQty = ING_HINT.test(line);
-      const hasVerb = COOKING_VERBS.test(line) || /^etape\s*\d+/.test(norm);
+      const hasVerb =
+        COOKING_VERBS.test(line) || /^etape\s*\d+/.test(norm);
 
       if (/personnes?/i.test(line)) {
         metaLines.push(line);
@@ -641,7 +676,10 @@ function splitIngredientsAndSteps(filteredLines) {
           ingredientLines.push(line);
         }
       } else if (hasVerb || /^etape\s*\d+/.test(norm)) {
-        line = line.replace(/^[\s•\-·\u2022]*[ÉE]TAPE\s*n?[°º]?\s*\d+\s*:?\s*/i, '');
+        line = line.replace(
+          /^[\s•\-·\u2022]*[ÉE]TAPE\s*n?[°º]?\s*\d+\s*:?\s*/i,
+          '',
+        );
         if (line.trim()) stepLinesRaw.push(line.trim());
       } else {
         stepLinesRaw.push(line);
@@ -660,35 +698,24 @@ function splitIngredientsAndSteps(filteredLines) {
     effectiveStepsRaw = [];
   }
 
-  let mergedSteps = mergeLinesToParagraphs(effectiveStepsRaw);
+  // Fusion / découpe des étapes
+  const mergedSteps = mergeLinesToParagraphs(effectiveStepsRaw);
 
-  // découpe intelligente des lignes trop longues
-  let exploded = [];
+  const exploded = [];
   for (const step of mergedSteps) {
-    if (step.length > 180) {
-      exploded.push(...splitLongStepLine(step));
+    if (step.length > 260) {
+      const parts = splitLongStepLine(step);
+      if (parts.length) exploded.push(...parts);
+      else exploded.push(step);
     } else {
       exploded.push(step);
     }
   }
 
-  const normalizedSteps = normalizeStepNumbers(
-    exploded.length ? exploded : mergedSteps,
-  );
+  const normalizedSteps = normalizeStepNumbers(exploded);
   const dedupedSteps = dedupeSteps(normalizedSteps);
 
-  // on ajoute également TOUTES les lignes méta qu'on avait filtrées dès le début (titre, quantité obtenue, régime alimentaire, etc.)
-  const extraMeta = lines.filter((l) => isMetaLine(l));
-  const notesSet = new Set();
-  const notesLines = [];
-
-  for (const m of [...metaLines, ...extraMeta, ...tipsLines]) {
-    const key = m.trim();
-    if (!key) continue;
-    if (notesSet.has(key)) continue;
-    notesSet.add(key);
-    notesLines.push(key);
-  }
+  const notesLines = [...metaLines, ...tipsLines];
 
   return {
     servings,
@@ -708,6 +735,7 @@ module.exports = {
   parseOcrIngredient,
   beautifyIngredients,
 };
+
 
 
 
