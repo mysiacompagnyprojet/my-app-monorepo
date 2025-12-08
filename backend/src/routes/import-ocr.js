@@ -4,20 +4,18 @@ const express = require('express');
 const multer = require('multer');
 const { createWorker } = require('tesseract.js');
 const { parseRawLine } = require('../utils/ingredients');
-
-// Toute l’intelligence OCR est maintenant dans utils/ocrText.js
 const {
   smartFilterLinesFromText,
   splitIngredientsAndSteps,
   parseOcrIngredient,
   beautifyIngredients,
+  guessTitleFromLines,
 } = require('../utils/ocrText');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// ───────────────────── Auth (Supabase déjà branché globalement) ──────────
-
+// Auth : Supabase est branché globalement, ici on vérifie juste la présence de req.user
 function needAuth(req, res, next) {
   if (!req.user?.userId) {
     return res.status(401).json({ error: 'Unauthorized' });
@@ -25,13 +23,11 @@ function needAuth(req, res, next) {
   next();
 }
 
-// ───────────────────── OCR worker partagé ─────────────────────
-
+// OCR worker partagé (évite de recréer Tesseract à chaque requête)
 let workerPromise;
 async function getWorker() {
   if (!workerPromise) {
     workerPromise = (async () => {
-      // Version simple : on initialise directement avec les langues
       const worker = await createWorker('fra+eng');
       return worker;
     })();
@@ -39,75 +35,85 @@ async function getWorker() {
   return workerPromise;
 }
 
-// ───────────────────── Route POST /import/ocr ─────────────────────
-
-router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
+// POST /import/ocr
+// body: form-data avec champ "image" (fichier)
+router.post('/ocr', needAuth, upload.single('image'), async (req, res) => {
   try {
-    if (!req.file) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Aucun fichier reçu' });
+    if (!req.file || !req.file.buffer) {
+      return res.status(400).json({ error: 'IMAGE_MISSING', message: 'Aucun fichier image fourni.' });
     }
 
     const worker = await getWorker();
-    const { data } = await worker.recognize(req.file.buffer);
 
-    const rawText = String(data.text || '').trim();
-    if (!rawText) {
-      return res
-        .status(400)
-        .json({ ok: false, error: 'Texte OCR vide' });
-    }
+    const {
+      data: { text: rawText },
+    } = await worker.recognize(req.file.buffer);
 
-    // 1) Nettoyage / filtrage des lignes
-    const filteredLines = smartFilterLinesFromText(rawText);
-    if (!filteredLines.length) {
+    if (!rawText || !rawText.trim()) {
       return res.status(400).json({
-        ok: false,
-        error: 'Impossible de détecter une recette dans cette image',
+        error: 'OCR_TEXT_EMPTY',
+        message: 'Impossible de lire du texte dans cette image. Essaie avec une photo plus nette ou recadrée.',
       });
     }
 
-    // 2) Découpage en portions / ingrédients / étapes / notes
-    const { servings, ingredientLines, stepLines, notesLines } =
-      splitIngredientsAndSteps(filteredLines);
+    // 1) Filtrage intelligent des lignes
+    const filteredLines = smartFilterLinesFromText(rawText);
+    if (!filteredLines.length) {
+      return res.status(400).json({
+        error: 'OCR_TEXT_FILTERED_EMPTY',
+        message: 'Le texte détecté semble être du bruit (pubs, interface…). Essaie avec une autre capture.',
+      });
+    }
 
-    // 3) Parse des lignes d'ingrédients -> { name, quantity, unit }
+    // 2) Découpage ingrédients / étapes / notes
+    const {
+      servings,
+      ingredientLines,
+      stepLines,
+      notesLines,
+    } = splitIngredientsAndSteps(filteredLines);
+
+    // 3) Mapping ingrédients → { name, quantity, unit }
     const ingredientsRaw = ingredientLines.map((line) => {
-      // a) parse spécifique OCR
-      const parsedOcr = parseOcrIngredient(line);
+      const baseLine = String(line || '').trim();
+
+      // 3.1. Essai avec parseOcrIngredient (spécial OCR)
+      const parsedOcr = parseOcrIngredient(baseLine);
       if (parsedOcr) {
         return {
           name: parsedOcr.name,
           quantity: parsedOcr.quantity,
-          unit: parsedOcr.unit || 'g',
+          unit: parsedOcr.unit || '', // on ne force plus 'g'
         };
       }
 
-      // b) fallback sur le parseur générique de ton appli
-      const parsed = parseRawLine(line);
+      // 3.2. Essai avec parseRawLine (parseur générique)
+      const parsed = parseRawLine(baseLine);
       if (parsed) {
         return {
-          name: parsed.nameCanon || parsed.name || line,
+          name: parsed.nameCanon || parsed.name || baseLine,
           quantity: parsed.quantityNum ?? parsed.quantity ?? 0,
-          unit: parsed.unit || 'g',
+          unit: parsed.unit || '', // on ne force plus 'g'
         };
       }
 
-      // c) dernier recours : on garde la ligne telle quelle
+      // 3.3. Fallback : on garde juste le nom
       return {
-        name: line,
+        name: baseLine,
         quantity: 0,
-        unit: 'g',
+        unit: '',
       };
     });
 
-    // 4) Nettoyage + dédoublonnage des ingrédients
+    // 4) Beautify + dédoublonnage
     const ingredients = beautifyIngredients(ingredientsRaw);
 
-    // 5) Construction du brouillon pour le frontend
+    // 5) Deviner un titre de recette
+    const ocrTitle = guessTitleFromLines(filteredLines);
+
+    // 6) Construction du draft envoyé au frontend
     const draft = {
-      title: 'Recette importée',
+      title: ocrTitle || 'Recette importée',
       servings,
       imageUrl: null,
       notes: notesLines.length ? notesLines.join('\n') : '',
@@ -117,12 +123,12 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
 
     return res.json({ ok: true, draft });
   } catch (e) {
-    console.error('POST /import/ocr error:', e);
-    return res
-      .status(500)
-      .json({ ok: false, error: e.message || 'ocr_error' });
+    console.error('[import-ocr] error:', e);
+    return res.status(500).json({
+      error: 'OCR_INTERNAL_ERROR',
+      message: 'Erreur interne lors de la lecture de l’image.',
+    });
   }
 });
 
 module.exports = router;
-
