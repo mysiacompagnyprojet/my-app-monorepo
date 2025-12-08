@@ -37,7 +37,8 @@ async function getWorker() {
 
 // POST /import/ocr
 // body: form-data avec champ "image" (fichier)
-router.post('/ocr', needAuth, upload.single('image'), async (req, res) => {
+router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
+
   try {
     if (!req.file || !req.file.buffer) {
       return res.status(400).json({ error: 'IMAGE_MISSING', message: 'Aucun fichier image fourni.' });
