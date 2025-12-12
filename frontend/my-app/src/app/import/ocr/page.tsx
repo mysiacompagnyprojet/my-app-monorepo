@@ -22,7 +22,7 @@ export default function ImportOcrPage() {
     if (!files.length || isRunning) return
 
     setIsRunning(true)
-    setStatus(`OCR en cours… (1 / ${files.length})`)
+    setStatus(`OCR en cours… (${Math.min(files.length, 5)} image(s))`)
 
     const base = process.env.NEXT_PUBLIC_BACKEND_URL!
     const token =
@@ -30,6 +30,9 @@ export default function ImportOcrPage() {
       sessionStorage.getItem('sb:token') ||
       localStorage.getItem('token') ||
       ''
+
+    // On limite à 5 images (comme le backend)
+    const selected = files.slice(0, 5)
 
     const merged: OcrDraft = {
       title: '',
@@ -41,60 +44,52 @@ export default function ImportOcrPage() {
     }
 
     try {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i]
-        setStatus(`OCR en cours… (${i + 1} / ${files.length})`)
-
-        const form = new FormData()
-        form.append('file', file)
-
-        const res = await fetch(`${base}/import/ocr`, {
-          method: 'POST',
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-          body: form,
-        })
-
-        if (!res.ok) {
-          const txt = await res.text()
-          setStatus(`❌ Erreur sur le fichier ${i + 1} : ${txt}`)
-          setIsRunning(false)
-          return
-        }
-
-        const data = (await res.json()) as { draft: OcrDraft }
-        const d = data?.draft || {}
-
-        // --- fusion des brouillons ---
-        if (!merged.title && d.title) merged.title = d.title
-        if (!merged.servings && d.servings) merged.servings = d.servings
-        if (!merged.imageUrl && d.imageUrl) merged.imageUrl = d.imageUrl
-
-        // notes : on concatène proprement
-        const parts: string[] = []
-        if (merged.notes) parts.push(merged.notes)
-        if (d.notes) parts.push(d.notes)
-        merged.notes = parts.join('\n\n') || undefined
-
-        if (Array.isArray(d.steps)) {
-          merged.steps = [...(merged.steps || []), ...d.steps]
-        }
-        if (Array.isArray(d.ingredients)) {
-          merged.ingredients = [...(merged.ingredients || []), ...d.ingredients]
-        }
+      // ✅ Un seul appel backend avec plusieurs images
+      const form = new FormData()
+      for (const f of selected) {
+        form.append('files', f) // 👈 champ multi
       }
+
+      const res = await fetch(`${base}/import/ocr`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: form,
+      })
+
+      if (!res.ok) {
+        const txt = await res.text()
+        setStatus(`❌ Erreur OCR : ${txt}`)
+        setIsRunning(false)
+        return
+      }
+
+      const data = (await res.json()) as { draft: OcrDraft }
+      const d = data?.draft || {}
+
+      // --- fusion (ici, backend renvoie déjà un draft global, mais on sécurise) ---
+      if (d.title) merged.title = d.title
+      if (typeof d.servings === 'number') merged.servings = d.servings
+      if (typeof d.imageUrl !== 'undefined') merged.imageUrl = d.imageUrl ?? null
+
+      merged.notes = (d.notes || '').toString().trim() || undefined
+      merged.steps = (Array.isArray(d.steps) ? d.steps : [])
+        .map((s) => String(s || '').trim())
+        .filter(Boolean)
+
+      merged.ingredients = (Array.isArray(d.ingredients) ? d.ingredients : []).filter(Boolean)
 
       // Nettoyage minimal
       merged.title = (merged.title || '').toString().trim() || 'Recette importée'
       merged.servings = Number(merged.servings || 1)
-      merged.steps = (merged.steps || []).map((s) => String(s || '').trim()).filter(Boolean)
-      merged.ingredients = (merged.ingredients || []).filter(Boolean)
 
       // Sauvegarde du brouillon fusionné
       sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
-      setStatus(`✅ OCR OK sur ${files.length} image(s)`)
+      setStatus(`✅ OCR OK sur ${selected.length} image(s)`)
       router.push('/recipes/new?prefill=1')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
+      setIsRunning(false)
+    } finally {
       setIsRunning(false)
     }
   }
@@ -124,6 +119,7 @@ export default function ImportOcrPage() {
       {files.length > 0 && (
         <p style={{ marginBottom: 8 }}>
           {files.length} image(s) sélectionnée(s)
+          {files.length > 5 ? ' — seules les 5 premières seront envoyées.' : ''}
         </p>
       )}
 

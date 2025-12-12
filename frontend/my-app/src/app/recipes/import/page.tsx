@@ -20,7 +20,7 @@ type ImportOcrResponse = { draft: RecipeDraft }
 
 export default function ImportRecipePage() {
   const [url, setUrl] = useState('')
-  const [file, setFile] = useState<File | null>(null)
+  const [files, setFiles] = useState<File[]>([])
   const [status, setStatus] = useState('')
   const router = useRouter()
 
@@ -40,14 +40,18 @@ export default function ImportRecipePage() {
   }
 
   async function importOcr() {
-    if (!file) return
+    if (!files.length) return
     setStatus('OCR en cours...')
 
     const base = process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL
-    const token = localStorage.getItem('sb:token') || sessionStorage.getItem('sb:token')
+    const token = localStorage.getItem('sb:token') || sessionStorage.getItem('sb:token') || ''
+
+    const selected = files.slice(0, 5)
 
     const form = new FormData()
-    form.append('file', file)
+    for (const f of selected) {
+      form.append('files', f) // 👈 multi
+    }
 
     const res = await fetch(`${base}/import/ocr`, {
       method: 'POST',
@@ -62,7 +66,7 @@ export default function ImportRecipePage() {
 
     const data: ImportOcrResponse = await res.json()
     localStorage.setItem('recipe:draft', JSON.stringify(data.draft))
-    setStatus('✅ OCR OK')
+    setStatus(`✅ OCR OK (${selected.length} image(s))`)
     router.push('/recipes/new')
   }
 
@@ -75,8 +79,19 @@ export default function ImportRecipePage() {
       <button onClick={importUrl}>Importer</button>
 
       <h3>Par photo (OCR)</h3>
-      <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} />
-      <button onClick={importOcr} disabled={!file}>OCR</button>
+      <input
+        type="file"
+        accept="image/*"
+        multiple
+        onChange={e => setFiles(Array.from(e.target.files ?? []))}
+      />
+      {files.length > 0 && (
+        <p>
+          {files.length} image(s) sélectionnée(s)
+          {files.length > 5 ? ' — seules les 5 premières seront envoyées.' : ''}
+        </p>
+      )}
+      <button onClick={importOcr} disabled={!files.length}>OCR</button>
 
       <p>{status}</p>
     </div>
