@@ -2,7 +2,6 @@
 
 const express = require('express');
 const multer = require('multer');
-const { createWorker } = require('tesseract.js');
 const { parseRawLine } = require('../utils/ingredients');
 const {
   smartFilterLinesFromText,
@@ -11,6 +10,9 @@ const {
   beautifyIngredients,
   guessTitleFromLines,
 } = require('../utils/ocrText');
+
+// 👉 Google Vision OCR
+const { ocrFromBuffer } = require('../services/vision');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -23,37 +25,25 @@ function needAuth(req, res, next) {
   next();
 }
 
-// OCR worker partagé (évite de recréer Tesseract à chaque requête)
-let workerPromise;
-async function getWorker() {
-  if (!workerPromise) {
-    workerPromise = (async () => {
-      const worker = await createWorker('fra+eng');
-      return worker;
-    })();
-  }
-  return workerPromise;
-}
-
 // POST /import/ocr
-// body: form-data avec champ "image" (fichier)
+// body: form-data avec champ "file" (image)
 router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
-
   try {
     if (!req.file || !req.file.buffer) {
-      return res.status(400).json({ error: 'IMAGE_MISSING', message: 'Aucun fichier image fourni.' });
+      return res.status(400).json({
+        error: 'IMAGE_MISSING',
+        message: 'Aucun fichier image fourni.',
+      });
     }
 
-    const worker = await getWorker();
-
-    const {
-      data: { text: rawText },
-    } = await worker.recognize(req.file.buffer);
+    // 0) OCR via Google Vision
+    const rawText = await ocrFromBuffer(req.file.buffer);
 
     if (!rawText || !rawText.trim()) {
       return res.status(400).json({
         error: 'OCR_TEXT_EMPTY',
-        message: 'Impossible de lire du texte dans cette image. Essaie avec une photo plus nette ou recadrée.',
+        message:
+          'Impossible de lire du texte dans cette image. Essaie avec une photo plus nette ou recadrée.',
       });
     }
 
@@ -62,7 +52,8 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
     if (!filteredLines.length) {
       return res.status(400).json({
         error: 'OCR_TEXT_FILTERED_EMPTY',
-        message: 'Le texte détecté semble être du bruit (pubs, interface…). Essaie avec une autre capture.',
+        message:
+          'Le texte détecté semble être du bruit (pubs, interface…). Essaie avec une autre capture.',
       });
     }
 
@@ -78,27 +69,27 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
     const ingredientsRaw = ingredientLines.map((line) => {
       const baseLine = String(line || '').trim();
 
-      // 3.1. Essai avec parseOcrIngredient (spécial OCR)
+      // 3.1 Essai parseur OCR dédié
       const parsedOcr = parseOcrIngredient(baseLine);
       if (parsedOcr) {
         return {
           name: parsedOcr.name,
           quantity: parsedOcr.quantity,
-          unit: parsedOcr.unit || '', // on ne force plus 'g'
+          unit: parsedOcr.unit || '',
         };
       }
 
-      // 3.2. Essai avec parseRawLine (parseur générique)
+      // 3.2 Essai parseur générique
       const parsed = parseRawLine(baseLine);
       if (parsed) {
         return {
           name: parsed.nameCanon || parsed.name || baseLine,
           quantity: parsed.quantityNum ?? parsed.quantity ?? 0,
-          unit: parsed.unit || '', // on ne force plus 'g'
+          unit: parsed.unit || '',
         };
       }
 
-      // 3.3. Fallback : on garde juste le nom
+      // 3.3 Fallback
       return {
         name: baseLine,
         quantity: 0,
@@ -106,13 +97,13 @@ router.post('/ocr', needAuth, upload.single('file'), async (req, res) => {
       };
     });
 
-    // 4) Beautify + dédoublonnage
+    // 4) Nettoyage + dédoublonnage
     const ingredients = beautifyIngredients(ingredientsRaw);
 
-    // 5) Deviner un titre de recette
+    // 5) Deviner le titre
     const ocrTitle = guessTitleFromLines(filteredLines);
 
-    // 6) Construction du draft envoyé au frontend
+    // 6) Draft final
     const draft = {
       title: ocrTitle || 'Recette importée',
       servings,

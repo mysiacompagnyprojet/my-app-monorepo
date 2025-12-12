@@ -3,3 +3,5 @@ node_modules
 .env
 .env.bash
 /src/@prisma/client
+# Google service account keys
+keys/
