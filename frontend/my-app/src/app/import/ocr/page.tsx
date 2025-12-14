@@ -36,6 +36,7 @@ function OcrPageInner() {
   async function run() {
     try {
       setDebugOut(null)
+      setStatus('')
 
       if (!files.length) {
         setStatus('❌ Ajoute au moins 1 image.')
@@ -54,12 +55,15 @@ function OcrPageInner() {
       for (const f of files) form.append('files', f)
 
       const qs = isDebug ? '?debug=1' : ''
-      const res = await apiFetch(`/import/ocr${qs}`, { method: 'POST', body: form })
-      const data: ImportOcrResponse = await res.json()
 
-      if (!res.ok || (data as any).ok === false) {
-        const err = data as any
-        setStatus('❌ ' + (err?.message || err?.error || 'Erreur OCR'))
+      // IMPORTANT : apiFetch() renvoie déjà le JSON (pas un Response)
+      const data = await apiFetch<ImportOcrResponse>(`/import/ocr${qs}`, {
+        method: 'POST',
+        body: form,
+      })
+
+      if ((data as any)?.ok === false) {
+        setStatus('❌ ' + ((data as any)?.message || (data as any)?.error || 'Erreur OCR'))
         return
       }
 
@@ -74,7 +78,7 @@ function OcrPageInner() {
 
       const merged: OcrDraft = {
         title: (d.title || '').toString().trim() || 'Recette importée',
-        servings: Number(d.servings || 1),
+        servings: Number(d.servings || 1) || 1,
         imageUrl: d.imageUrl ?? null,
         notes: (d.notes || '').toString(),
         steps: Array.isArray(d.steps) ? d.steps.map((s) => String(s || '').trim()).filter(Boolean) : [],
@@ -86,6 +90,7 @@ function OcrPageInner() {
       setStatus(`✅ OCR OK (${files.length} image(s))`)
       router.push('/recipes/new?prefill=1')
     } catch (e: any) {
+      // apiFetch throw déjà des erreurs lisibles (HTTP + message backend)
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
     } finally {
       setIsRunning(false)
@@ -97,7 +102,8 @@ function OcrPageInner() {
       <h1>Importer par photo (OCR)</h1>
 
       <p style={{ marginTop: 8, marginBottom: 16 }}>
-        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un livre, etc.
+        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un
+        livre, etc.
       </p>
 
       <ol style={{ marginLeft: 20, marginBottom: 16 }}>
@@ -150,4 +156,3 @@ export default function Page() {
     </Suspense>
   )
 }
-
