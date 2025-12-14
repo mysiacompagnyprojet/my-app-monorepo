@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { apiFetch } from 'src/lib/api'
 import { useRouter } from 'next/navigation'
 
-// --- Types ---
 type Line = { name: string; quantity: number; unit: string }
 
 type RecipeDraft = {
@@ -20,7 +19,7 @@ type ImportOcrResponse = { draft: RecipeDraft }
 
 export default function ImportRecipePage() {
   const [url, setUrl] = useState('')
-  const [files, setFiles] = useState<File[]>([])
+  const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState('')
   const router = useRouter()
 
@@ -40,18 +39,15 @@ export default function ImportRecipePage() {
   }
 
   async function importOcr() {
-    if (!files.length) return
+    if (!file) return
     setStatus('OCR en cours...')
 
-    const base = process.env.NEXT_PUBLIC_API_BASE || process.env.NEXT_PUBLIC_API_URL
+    const base = process.env.NEXT_PUBLIC_BACKEND_URL!
     const token = localStorage.getItem('sb:token') || sessionStorage.getItem('sb:token') || ''
 
-    const selected = files.slice(0, 5)
-
     const form = new FormData()
-    for (const f of selected) {
-      form.append('files', f) // 👈 multi
-    }
+    // Même pour 1 image : on envoie via "files" (format unique)
+    form.append('files', file)
 
     const res = await fetch(`${base}/import/ocr`, {
       method: 'POST',
@@ -66,7 +62,7 @@ export default function ImportRecipePage() {
 
     const data: ImportOcrResponse = await res.json()
     localStorage.setItem('recipe:draft', JSON.stringify(data.draft))
-    setStatus(`✅ OCR OK (${selected.length} image(s))`)
+    setStatus('✅ OCR OK')
     router.push('/recipes/new')
   }
 
@@ -79,21 +75,11 @@ export default function ImportRecipePage() {
       <button onClick={importUrl}>Importer</button>
 
       <h3>Par photo (OCR)</h3>
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={e => setFiles(Array.from(e.target.files ?? []))}
-      />
-      {files.length > 0 && (
-        <p>
-          {files.length} image(s) sélectionnée(s)
-          {files.length > 5 ? ' — seules les 5 premières seront envoyées.' : ''}
-        </p>
-      )}
-      <button onClick={importOcr} disabled={!files.length}>OCR</button>
+      <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} />
+      <button onClick={importOcr} disabled={!file}>OCR</button>
 
       <p>{status}</p>
     </div>
   )
 }
+

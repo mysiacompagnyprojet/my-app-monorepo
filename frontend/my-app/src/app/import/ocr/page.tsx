@@ -1,94 +1,99 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useMemo, useState } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { apiFetch } from 'src/lib/api'
+
+type OcrIngredient = { name: string; quantity: number; unit: string }
 
 type OcrDraft = {
-  title?: string
-  servings?: number
-  imageUrl?: string | null
-  notes?: string | null
-  steps?: string[]
-  ingredients?: any[]
+  title: string
+  servings: number
+  imageUrl: string | null
+  notes: string
+  steps: string[]
+  ingredients: OcrIngredient[]
+  trash?: string[]
 }
 
-export default function ImportOcrPage() {
+type ImportOcrResponse =
+  | { ok: true; draft: OcrDraft }
+  | { ok: true; debug: any }
+  | { ok: false; error: string; message?: string }
+
+export default function Page() {
+  const router = useRouter()
+  const search = useSearchParams()
+  const isDebug = search.get('debug') === '1'
+
   const [files, setFiles] = useState<File[]>([])
   const [status, setStatus] = useState('')
   const [isRunning, setIsRunning] = useState(false)
-  const router = useRouter()
+  const [debugOut, setDebugOut] = useState<any>(null)
+
+  const canRun = useMemo(() => files.length >= 1 && files.length <= 5 && !isRunning, [files, isRunning])
 
   async function run() {
-    if (!files.length || isRunning) return
-
-    setIsRunning(true)
-    setStatus(`OCR en cours… (${Math.min(files.length, 5)} image(s))`)
-
-    const base = process.env.NEXT_PUBLIC_BACKEND_URL!
-    const token =
-      localStorage.getItem('sb:token') ||
-      sessionStorage.getItem('sb:token') ||
-      localStorage.getItem('token') ||
-      ''
-
-    // On limite à 5 images (comme le backend)
-    const selected = files.slice(0, 5)
-
-    const merged: OcrDraft = {
-      title: '',
-      servings: 1,
-      imageUrl: null,
-      notes: '',
-      steps: [],
-      ingredients: [],
-    }
-
     try {
-      // ✅ Un seul appel backend avec plusieurs images
-      const form = new FormData()
-      for (const f of selected) {
-        form.append('files', f) // 👈 champ multi
+      setDebugOut(null)
+
+      if (!files.length) {
+        setStatus('❌ Ajoute au moins 1 image.')
+        return
       }
 
-      const res = await fetch(`${base}/import/ocr`, {
+      if (files.length > 5) {
+        setStatus("❌ Trop d'images : 5 maximum.")
+        return
+      }
+
+      setIsRunning(true)
+      setStatus('OCR en cours…')
+
+      const form = new FormData()
+      for (const f of files) form.append('files', f)
+
+      const qs = isDebug ? '?debug=1' : ''
+
+      const res = await apiFetch(`/import/ocr${qs}`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: form,
       })
 
-      if (!res.ok) {
-        const txt = await res.text()
-        setStatus(`❌ Erreur OCR : ${txt}`)
+      const data: ImportOcrResponse = await res.json()
+
+      if (!res.ok || (data as any).ok === false) {
+        const err = data as any
+        setStatus('❌ ' + (err?.message || err?.error || 'Erreur OCR'))
         setIsRunning(false)
         return
       }
 
-      const data = (await res.json()) as { draft: OcrDraft }
-      const d = data?.draft || {}
+      // mode debug: on affiche le JSON, pas de redirection
+      if ('debug' in data) {
+        setDebugOut((data as any).debug)
+        setStatus('✅ Debug reçu (aucune redirection)')
+        setIsRunning(false)
+        return
+      }
 
-      // --- fusion (ici, backend renvoie déjà un draft global, mais on sécurise) ---
-      if (d.title) merged.title = d.title
-      if (typeof d.servings === 'number') merged.servings = d.servings
-      if (typeof d.imageUrl !== 'undefined') merged.imageUrl = d.imageUrl ?? null
+      const d = (data as any).draft as OcrDraft
 
-      merged.notes = (d.notes || '').toString().trim() || undefined
-      merged.steps = (Array.isArray(d.steps) ? d.steps : [])
-        .map((s) => String(s || '').trim())
-        .filter(Boolean)
+      const merged: OcrDraft = {
+        title: (d.title || '').toString().trim() || 'Recette importée',
+        servings: Number(d.servings || 1),
+        imageUrl: d.imageUrl ?? null,
+        notes: (d.notes || '').toString(),
+        steps: Array.isArray(d.steps) ? d.steps.map((s) => String(s || '').trim()).filter(Boolean) : [],
+        ingredients: Array.isArray(d.ingredients) ? d.ingredients.filter(Boolean) : [],
+        trash: Array.isArray(d.trash) ? d.trash.map((s) => String(s || '').trim()).filter(Boolean) : [],
+      }
 
-      merged.ingredients = (Array.isArray(d.ingredients) ? d.ingredients : []).filter(Boolean)
-
-      // Nettoyage minimal
-      merged.title = (merged.title || '').toString().trim() || 'Recette importée'
-      merged.servings = Number(merged.servings || 1)
-
-      // Sauvegarde du brouillon fusionné
       sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
-      setStatus(`✅ OCR OK sur ${selected.length} image(s)`)
+      setStatus(`✅ OCR OK (${files.length} image(s))`)
       router.push('/recipes/new?prefill=1')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
-      setIsRunning(false)
     } finally {
       setIsRunning(false)
     }
@@ -99,13 +104,14 @@ export default function ImportOcrPage() {
       <h1>Importer par photo (OCR)</h1>
 
       <p style={{ marginTop: 8, marginBottom: 16 }}>
-        Utilise cette page quand la recette est surtout une <b>image</b> :
-        Pinterest, Instagram, Facebook, photo d&apos;un livre, etc.
+        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un
+        livre, etc.
       </p>
+
       <ol style={{ marginLeft: 20, marginBottom: 16 }}>
         <li>Fais une ou plusieurs captures d&apos;écran de la recette.</li>
         <li>Sélectionne toutes les images en même temps ci-dessous.</li>
-        <li>Nous lisons le texte (OCR) sur chaque image et fusionnons le tout dans une seule fiche.</li>
+        <li>Nous lisons le texte sur toutes les images et fusionnons le tout en une seule fiche.</li>
       </ol>
 
       <input
@@ -118,18 +124,29 @@ export default function ImportOcrPage() {
 
       {files.length > 0 && (
         <p style={{ marginBottom: 8 }}>
-          {files.length} image(s) sélectionnée(s)
-          {files.length > 5 ? ' — seules les 5 premières seront envoyées.' : ''}
+          {files.length} image(s) sélectionnée(s) {files.length > 5 ? '— ❌ max 5' : ''}
         </p>
       )}
 
       <div style={{ marginTop: 8 }}>
-        <button onClick={run} disabled={!files.length || isRunning}>
+        <button onClick={run} disabled={!canRun}>
           {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
         </button>
       </div>
 
       {status && <p style={{ marginTop: 12 }}>{status}</p>}
+
+      {isDebug && (
+        <p style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
+          Mode debug actif : l’API renvoie un objet debug, sans redirection.
+        </p>
+      )}
+
+      {debugOut && (
+        <pre style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8, overflowX: 'auto' }}>
+          {JSON.stringify(debugOut, null, 2)}
+        </pre>
+      )}
     </main>
   )
 }

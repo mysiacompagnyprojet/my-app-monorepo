@@ -2,14 +2,17 @@
 
 const express = require('express');
 const multer = require('multer');
+
 const { parseRawLine } = require('../utils/ingredients');
 const {
-  smartFilterLinesFromText,
+  smartFilterWithTrashFromText,
   splitIngredientsAndSteps,
   parseOcrIngredient,
   beautifyIngredients,
   guessTitleFromLines,
   looksLikeStep,
+  normalizeStepsFromLines,
+  extractNotesFromLines,
 } = require('../utils/ocrText');
 
 const { ocrFromBuffer } = require('../services/vision');
@@ -17,210 +20,204 @@ const { ocrFromBuffer } = require('../services/vision');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// Auth : Supabase est branché globalement, ici on vérifie juste la présence de req.user
+/* ───────────────── AUTH ───────────────── */
 function needAuth(req, res, next) {
-  if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
+  if (!req.user?.userId) {
+    return res.status(401).json({ ok: false, error: 'UNAUTHORIZED' });
+  }
   next();
 }
+
+/* ───────────────── HELPERS ───────────────── */
 
 function isIphoneRequest(req) {
   const ua = String(req.headers['user-agent'] || '');
   return /iPhone|iPad|iPod|iOS/i.test(ua);
 }
 
-// Petit helper : extraction portions si splitIngredientsAndSteps n’a pas trouvé
-function extractServingsFallback(text) {
-  const t = String(text || '');
+function cleanIosRawText(raw) {
+  let t = String(raw || '');
 
-  const m1 = t.match(/portions?\s*:\s*(\d+)/i);
-  if (m1) return parseInt(m1[1], 10);
+  // barre iOS (heure + réseau)
+  t = t.replace(
+    /(^|\n)[^\n]*(4g|5g|lte|wifi)[^\n]*\d{1,2}:\d{2}[^\n]*\n/gi,
+    '\n'
+  );
 
-  const m1b = t.match(/servings?\s*:\s*(\d+)/i);
-  if (m1b) return parseInt(m1b[1], 10);
-
-  const m2 = t.match(/\b(\d+)\s*(personnes|parts)\b/i);
-  if (m2) return parseInt(m2[1], 10);
-
-  return null;
-}
-
-// Nettoyage “iPhone screenshots” (uniquement iPhone, comme tu veux)
-function cleanIosRawText(rawText) {
-  let t = String(rawText || '');
-
-  // retire des morceaux très typiques des barres iOS
-  // (on reste prudent : seulement si on voit 4G/LTE/WiFi + heure)
-  t = t.replace(/(^|\n)[^\n]*(4g|5g|lte|wifi|wi-fi)[^\n]*\b\d{1,2}:\d{2}\b[^\n]*\n/gi, '\n');
-
-  // retire lignes “16 %”
+  // lignes du type "16 %"
   t = t.replace(/(^|\n)\s*\d{1,3}\s*%\s*(\n|$)/g, '\n');
 
   return t;
 }
 
-// POST /import/ocr
-// body: form-data avec champ "file" (1 image) OU "files" (plusieurs images)
+function getPreferredLang(req) {
+  const h = String(req.headers['accept-language'] || '').toLowerCase();
+  if (!h) return 'fr';
+  if (h.startsWith('fr')) return 'fr';
+  if (h.startsWith('en')) return 'en';
+  return 'fr';
+}
+
+function extractServingsFallback(text) {
+  const t = String(text || '');
+
+  let m = t.match(/(\d+)\s*(personnes|parts|portions)/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = t.match(/pour\s*(\d+)\s*(?:à|-)\s*(\d+)/i);
+  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
+
+  return null;
+}
+
+/* ───────────────── ROUTE OCR ───────────────── */
+
 router.post(
   '/ocr',
   needAuth,
   upload.fields([
-    { name: 'file', maxCount: 1 },  // rétrocompat
-    { name: 'files', maxCount: 5 }, // multi-captures
+    { name: 'file', maxCount: 1 },
+    { name: 'files', maxCount: 5 },
   ]),
   async (req, res) => {
     try {
-      const single = req.files?.file?.[0] || null;
-      const multi = Array.isArray(req.files?.files) ? req.files.files : [];
-      const allFiles = multi.length ? multi : (single ? [single] : []);
+      const debug = req.query.debug === '1';
 
-      if (!allFiles.length || !allFiles[0]?.buffer) {
+      const single = req.files?.file?.[0];
+      const multi = Array.isArray(req.files?.files) ? req.files.files : [];
+      const files = multi.length ? multi : single ? [single] : [];
+
+      if (!files.length) {
         return res.status(400).json({
+          ok: false,
           error: 'IMAGE_MISSING',
-          message: 'Aucun fichier image fourni (attendu: file ou files).',
+          message: 'Aucune image fournie',
         });
       }
 
-      const debug = String(req.query.debug || '') === '1';
-
-      // 0) OCR sur chaque image
-      const rawTexts = [];
-      for (const f of allFiles) {
-        const txt = await ocrFromBuffer(f.buffer);
-        rawTexts.push(String(txt || '').trim());
+      if (files.length > 5) {
+        return res.status(400).json({
+          ok: false,
+          error: 'TOO_MANY_IMAGES',
+          message: 'Maximum 5 images autorisées',
+        });
       }
 
-      let rawText = rawTexts.filter(Boolean).join('\n\n');
+      /* ───── OCR ───── */
+      const texts = [];
+      for (const f of files) {
+        const txt = await ocrFromBuffer(f.buffer);
+        texts.push(String(txt || '').trim());
+      }
 
-      // nettoyage iPhone uniquement
+      let rawText = texts.filter(Boolean).join('\n\n');
+
       if (isIphoneRequest(req)) {
         rawText = cleanIosRawText(rawText);
       }
+
+      if (!rawText.trim()) {
+        return res.status(400).json({
+          ok: false,
+          error: 'OCR_EMPTY',
+          message: 'OCR vide : image illisible ou trop floue',
+        });
+      }
+
+      const lang = getPreferredLang(req);
+
+      /* ───── FILTRAGE + TRASH ───── */
+      const filtered = smartFilterWithTrashFromText(rawText, { lang });
+      const lines = filtered.lines || [];
+      const trash = filtered.trash || [];
 
       if (debug) {
         return res.json({
           ok: true,
           debug: {
-            filesCount: allFiles.length,
-            isIphone: isIphoneRequest(req),
-            rawTextsLengths: rawTexts.map((t) => t.length),
+            filesCount: files.length,
+            lang,
             rawTextLength: rawText.length,
-            rawTextFirst2000: rawText.slice(0, 2000),
+            firstLines: lines.slice(0, 40),
+            trashSample: trash.slice(0, 40),
           },
         });
       }
 
-      if (!rawText || !rawText.trim()) {
+      if (!lines.length) {
         return res.status(400).json({
-          error: 'OCR_TEXT_EMPTY',
-          message:
-            "Impossible de lire du texte dans ces images. Essaie avec des photos plus nettes / zoomées / recadrées.",
+          ok: false,
+          error: 'ONLY_NOISE',
+          message: 'Le texte détecté est uniquement du bruit',
         });
       }
 
-      // 1) Filtrage intelligent des lignes
-      const filteredLines = smartFilterLinesFromText(rawText);
-      if (!filteredLines.length) {
-        return res.status(400).json({
-          error: 'OCR_TEXT_FILTERED_EMPTY',
-          message:
-            "Le texte détecté semble être du bruit (pubs, interface…). Essaie avec d’autres captures plus zoomées.",
-        });
-      }
+      /* ───── SPLIT ───── */
+      const split = splitIngredientsAndSteps(lines);
 
-      // 2) Split
-      const split = splitIngredientsAndSteps(filteredLines);
-      let ingredientLines = Array.isArray(split.ingredientLines) ? split.ingredientLines : [];
-      const stepLines = Array.isArray(split.stepLines) ? split.stepLines : [];
-      const notesLines = Array.isArray(split.notesLines) ? split.notesLines : [];
+      let ingredientLines = split.ingredientLines || [];
+      const stepLines = split.stepLines || [];
+      const notesLines = split.notesLines || [];
 
-      // Filtre anti “étapes dans ingrédients”
-      ingredientLines = ingredientLines.filter((l) => !looksLikeStep(l));
+      ingredientLines = ingredientLines.filter(l => !looksLikeStep(l));
 
-      // servings fallback + garde-fou
-      const servingsFromSplit = Number.isFinite(split.servings) ? split.servings : 1;
-      const servingsFallback = extractServingsFallback(rawText);
-      let servings = servingsFromSplit !== 1 ? servingsFromSplit : (servingsFallback || 1);
-      if (!Number.isFinite(servings) || servings < 1 || servings > 20) servings = 1;
+      let servings =
+        split.servings ||
+        extractServingsFallback(rawText) ||
+        1;
 
-      // 3) Ingrédients
-      const ingredientsRaw = ingredientLines
-        .map((line) => {
-          const baseLine = String(line || '').trim();
-          if (!baseLine) return null;
+      if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
-          // cas sel/poivre (pas de quantité forcée)
-          if (/^\s*(sel|poivre)\b/i.test(baseLine) || /sel\s+et\s+poivre/i.test(baseLine)) {
-            return { name: baseLine, quantity: 0, unit: '' };
+      /* ───── INGREDIENTS ───── */
+      const ingredients = beautifyIngredients(
+        ingredientLines.map(line => {
+          const parsed = parseOcrIngredient(line) || parseRawLine(line);
+          if (!parsed) {
+            return { name: line, quantity: 0, unit: '' };
           }
-
-          // parse OCR dédié
-          const parsedOcr = parseOcrIngredient(baseLine);
-          if (parsedOcr) {
-            return {
-              name: parsedOcr.name,
-              quantity: parsedOcr.quantity > 0 ? parsedOcr.quantity : 0,
-              unit: parsedOcr.unit || '',
-            };
-          }
-
-          // parse générique
-          const parsed = parseRawLine(baseLine);
-          if (parsed) {
-            const q = parsed.quantityNum ?? parsed.quantity ?? 0;
-            return {
-              name: parsed.nameCanon || parsed.name || baseLine,
-              quantity: q > 0 ? q : 0,
-              unit: parsed.unit || '',
-            };
-          }
-
-          return null;
+          return {
+            name: parsed.name || line,
+            quantity: parsed.quantity || 0,
+            unit: parsed.unit || '',
+          };
         })
-        .filter(Boolean);
+      );
 
-      const ingredients = beautifyIngredients(ingredientsRaw).filter((i) => {
-        const name = String(i?.name || '').trim();
-        return Boolean(name);
-      });
+      /* ───── STEPS ───── */
+      const steps = normalizeStepsFromLines(stepLines);
 
-      // 4) Steps propres
-      const steps = stepLines
-        .map((s) => String(s || '').trim())
-        .filter(Boolean);
+      /* ───── TITLE + NOTES ───── */
+      const title =
+        guessTitleFromLines(lines) ||
+        'Recette importée';
 
-      // 5) Titre
-      const ocrTitle = guessTitleFromLines(filteredLines);
+      const notes = extractNotesFromLines(notesLines);
 
-      // 6) Notes
-      const baseNotes = notesLines.length ? notesLines.join('\n') : '';
-      const noStepsHint =
-        steps.length === 0
-          ? "\n\n(Aucune étape détectée : si elles sont sur une autre capture, ajoute une image centrée sur “Préparation / Instructions”.)"
-          : '';
-      const notes = (baseNotes + noStepsHint).trim();
-
+      /* ───── RESPONSE ───── */
       return res.json({
         ok: true,
         draft: {
-          title: ocrTitle || 'Recette importée',
+          title,
           servings,
           imageUrl: null,
           notes,
-          steps,
           ingredients,
+          steps,
+          trash,
         },
       });
-    } catch (e) {
-      console.error('[import-ocr] error:', e);
+    } catch (err) {
+      console.error('OCR ERROR:', err);
       return res.status(500).json({
-        error: 'OCR_INTERNAL_ERROR',
-        message: "Erreur interne lors de la lecture de l’image.",
+        ok: false,
+        error: 'INTERNAL_ERROR',
       });
     }
   }
 );
 
 module.exports = router;
+
 
 
 
