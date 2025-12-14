@@ -159,18 +159,14 @@ router.post(
       const stepLines = split.stepLines || [];
       const notesLines = split.notesLines || [];
 
-      ingredientLines = ingredientLines.filter(l => !looksLikeStep(l));
+      ingredientLines = ingredientLines.filter((l) => !looksLikeStep(l));
 
-      let servings =
-        split.servings ||
-        extractServingsFallback(rawText) ||
-        1;
-
+      let servings = split.servings || extractServingsFallback(rawText) || 1;
       if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
       /* ───── INGREDIENTS ───── */
       const ingredients = beautifyIngredients(
-        ingredientLines.map(line => {
+        ingredientLines.map((line) => {
           const parsed = parseOcrIngredient(line) || parseRawLine(line);
           if (!parsed) {
             return { name: line, quantity: 0, unit: '' };
@@ -187,11 +183,10 @@ router.post(
       const steps = normalizeStepsFromLines(stepLines);
 
       /* ───── TITLE + NOTES ───── */
-      const title =
-        guessTitleFromLines(lines) ||
-        'Recette importée';
+      const title = guessTitleFromLines(lines) || 'Recette importée';
 
-      const notes = extractNotesFromLines(notesLines);
+      // IMPORTANT : on passe title pour enlever le doublon dans Notes (Option B)
+      const notes = extractNotesFromLines(notesLines, { title });
 
       /* ───── RESPONSE ───── */
       return res.json({
@@ -217,6 +212,7 @@ router.post(
 );
 
 module.exports = router;
+
 
 
 
