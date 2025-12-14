@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 
@@ -21,7 +21,7 @@ type ImportOcrResponse =
   | { ok: true; debug: any }
   | { ok: false; error: string; message?: string }
 
-export default function Page() {
+function OcrPageInner() {
   const router = useRouter()
   const search = useSearchParams()
   const isDebug = search.get('debug') === '1'
@@ -54,26 +54,19 @@ export default function Page() {
       for (const f of files) form.append('files', f)
 
       const qs = isDebug ? '?debug=1' : ''
-
-      const res = await apiFetch(`/import/ocr${qs}`, {
-        method: 'POST',
-        body: form,
-      })
-
+      const res = await apiFetch(`/import/ocr${qs}`, { method: 'POST', body: form })
       const data: ImportOcrResponse = await res.json()
 
       if (!res.ok || (data as any).ok === false) {
         const err = data as any
         setStatus('❌ ' + (err?.message || err?.error || 'Erreur OCR'))
-        setIsRunning(false)
         return
       }
 
-      // mode debug: on affiche le JSON, pas de redirection
+      // mode debug : pas de redirection
       if ('debug' in data) {
         setDebugOut((data as any).debug)
         setStatus('✅ Debug reçu (aucune redirection)')
-        setIsRunning(false)
         return
       }
 
@@ -104,8 +97,7 @@ export default function Page() {
       <h1>Importer par photo (OCR)</h1>
 
       <p style={{ marginTop: 8, marginBottom: 16 }}>
-        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un
-        livre, etc.
+        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un livre, etc.
       </p>
 
       <ol style={{ marginLeft: 20, marginBottom: 16 }}>
@@ -150,3 +142,12 @@ export default function Page() {
     </main>
   )
 }
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Chargement…</div>}>
+      <OcrPageInner />
+    </Suspense>
+  )
+}
+
