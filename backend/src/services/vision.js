@@ -1,74 +1,41 @@
 // backend/src/services/vision.js
+'use strict';
 
 const vision = require('@google-cloud/vision');
 
+// Client singleton
 let client;
-
 function getClient() {
-  if (client) return client;
-
-  // Client Google Vision créé à la demande
-  try {
-    client = new vision.ImageAnnotatorClient();
-    return client;
-  } catch (err) {
-    const hint =
-      'Google credentials introuvables. Vérifie la variable GOOGLE_APPLICATION_CREDENTIALS ' +
-      'et le fichier keys/vision-ocr.json.';
-    const e = new Error(`${hint}\nOriginal: ${err.message}`);
-    e.cause = err;
-    throw e;
-  }
-}
-
-function normalizeLangHint(langHint) {
-  const l = String(langHint || '').trim();
-  if (!l) return 'fr';
-  // on garde juste "fr" / "en" si c’est "fr-FR"
-  const base = l.split(',')[0].trim();
-  const tag = base.split('-')[0].trim().toLowerCase();
-  if (tag === 'fr') return 'fr';
-  if (tag === 'en') return 'en';
-  return 'fr';
+  if (!client) client = new vision.ImageAnnotatorClient();
+  return client;
 }
 
 /**
- * OCR détaillé (texte + fullTextAnnotation pour exploiter la géométrie)
- * Utilise documentTextDetection (meilleur pour pages longues / mobile)
+ * OCR Google Vision sur un buffer image
+ * @param {Buffer} buf
+ * @param {{ lang?: string }} opts
+ * @returns {Promise<string>}
  */
-async function ocrFromBufferDetailed(buffer, opts = {}) {
-  if (!buffer) {
-    throw new Error('ocrFromBufferDetailed: buffer manquant');
-  }
-
+async function ocrFromBuffer(buf, opts = {}) {
   const c = getClient();
-  const lang = normalizeLangHint(opts.langHint);
+  const lang = (opts.lang || 'fr').toLowerCase();
 
-  const [result] = await c.documentTextDetection({
-    image: { content: buffer },
+  // Vision: languageHints = meilleure détection + moins de mix langues
+  const request = {
+    image: { content: buf },
     imageContext: {
-      languageHints: [lang],
+      languageHints: lang === 'en' ? ['en'] : ['fr'],
     },
-  });
+  };
+
+  const [result] = await c.documentTextDetection(request);
 
   const text =
     result?.fullTextAnnotation?.text ||
     result?.textAnnotations?.[0]?.description ||
     '';
 
-  return {
-    text: String(text).trim(),
-    fullTextAnnotation: result?.fullTextAnnotation || null,
-  };
+  return String(text || '').trim();
 }
 
-/**
- * OCR depuis un buffer image (PNG/JPG)
- * Compat : renvoie juste le texte (string) comme avant
- */
-async function ocrFromBuffer(buffer, opts = {}) {
-  const out = await ocrFromBufferDetailed(buffer, opts);
-  return out.text;
-}
-
-module.exports = { ocrFromBuffer, ocrFromBufferDetailed };
+module.exports = { ocrFromBuffer };

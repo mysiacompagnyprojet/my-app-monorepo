@@ -1,240 +1,124 @@
 // backend/src/routes/import-ocr.js
+'use strict';
 
 const express = require('express');
 const multer = require('multer');
 
-const { parseRawLine } = require('../utils/ingredients');
+const { ocrFromBuffer } = require('../services/vision');
 const {
   smartFilterWithTrashFromText,
-  smartFilterWithTrashFromLines,
   splitIngredientsAndSteps,
+  joinWrappedLinesForSteps,
   parseOcrIngredient,
   beautifyIngredients,
   guessTitleFromLines,
-  looksLikeStep,
-  normalizeStepsFromLines,
-  extractNotesFromLines,
-  extractLinesFromVisionAnnotation,
+  miniReflow,
 } = require('../utils/ocrText');
 
-const { ocrFromBufferDetailed } = require('../services/vision');
+let parseRawLine = null;
+try {
+  parseRawLine = require('../utils/ingredients')?.parseRawLine || null;
+} catch (e) {
+  parseRawLine = null;
+}
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-const MAX_OCR_IMAGES = 10;
+const MAX_FILES = 10;
 
-/* ───────────────── AUTH ───────────────── */
-function needAuth(req, res, next) {
-  if (!req.user?.userId) {
-    return res.status(401).json({ ok: false, error: 'UNAUTHORIZED' });
-  }
-  next();
-}
+router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
+  try {
+    const isDebug = req.query.debug === '1';
 
-/* ───────────────── HELPERS ───────────────── */
+    if (!req.files?.length) {
+      return res.status(400).json({ ok: false, error: 'NO_FILES', message: 'Ajoute au moins 1 image.' });
+    }
 
-function isIphoneRequest(req) {
-  const ua = String(req.headers['user-agent'] || '');
-  return /iPhone|iPad|iPod|iOS/i.test(ua);
-}
+    const texts = [];
+    for (const f of req.files) {
+      const t = await ocrFromBuffer(f.buffer);
+      if (t) texts.push(t);
+    }
 
-function cleanIosRawText(raw) {
-  let t = String(raw || '');
+    const rawText = texts.join('\n\n');
 
-  // barre iOS (heure + réseau)
-  t = t.replace(
-    /(^|\n)[^\n]*(4g|5g|lte|wifi)[^\n]*\d{1,2}:\d{2}[^\n]*\n/gi,
-    '\n'
-  );
+    const filtered = smartFilterWithTrashFromText(rawText);
+    let lines = filtered.lines;
 
-  // lignes du type "16 %"
-  t = t.replace(/(^|\n)\s*\d{1,3}\s*%\s*(\n|$)/g, '\n');
+    const split = splitIngredientsAndSteps(lines);
 
-  return t;
-}
+    lines = miniReflow(split);
 
-function getPreferredLang(req) {
-  const h = String(req.headers['accept-language'] || '').toLowerCase();
-  if (!h) return 'fr';
-  if (h.startsWith('fr')) return 'fr';
-  if (h.startsWith('en')) return 'en';
-  return 'fr';
-}
+    const title = guessTitleFromLines(lines) || 'Recette importée';
 
-function extractServingsFallback(text) {
-  const t = String(text || '');
+    let servings = split.servings || 1;
+    if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
-  let m = t.match(/(\d+)\s*(personnes|parts|portions)/i);
-  if (m) return parseInt(m[1], 10);
+    const ingredients = beautifyIngredients(
+      (split.ingredientLines || [])
+        .map((l) => {
+          const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
 
-  m = t.match(/pour\s*(\d+)\s*(?:à|-)\s*(\d+)/i);
-  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
+          if (!parsed) return { name: l, quantity: 0, unit: '' };
 
-  return null;
-}
-
-/* ───────────────── ROUTE OCR ───────────────── */
-
-router.post(
-  '/ocr',
-  needAuth,
-  upload.fields([
-    { name: 'file', maxCount: 1 },
-    { name: 'files', maxCount: MAX_OCR_IMAGES },
-  ]),
-  async (req, res) => {
-    try {
-      const debug = req.query.debug === '1';
-
-      const single = req.files?.file?.[0];
-      const multi = Array.isArray(req.files?.files) ? req.files.files : [];
-      const files = multi.length ? multi : single ? [single] : [];
-
-      if (!files.length) {
-        return res.status(400).json({
-          ok: false,
-          error: 'IMAGE_MISSING',
-          message: 'Aucune image fournie',
-        });
-      }
-
-      if (files.length > MAX_OCR_IMAGES) {
-        return res.status(400).json({
-          ok: false,
-          error: 'TOO_MANY_IMAGES',
-          message: `Maximum ${MAX_OCR_IMAGES} images autorisées`,
-        });
-      }
-
-      const lang = getPreferredLang(req);
-
-      /* ───── OCR (détaillé) ───── */
-      const texts = [];
-      const allVisionLines = [];
-
-      for (const f of files) {
-        const out = await ocrFromBufferDetailed(f.buffer, { langHint: lang });
-        const txt = String(out?.text || '').trim();
-        if (txt) texts.push(txt);
-
-        // Géométrie -> lignes propres si dispo
-        const geoLines = extractLinesFromVisionAnnotation(out?.fullTextAnnotation);
-        if (Array.isArray(geoLines) && geoLines.length) {
-          allVisionLines.push(...geoLines);
-        }
-      }
-
-      let rawText = texts.filter(Boolean).join('\n\n');
-
-      if (isIphoneRequest(req)) {
-        rawText = cleanIosRawText(rawText);
-      }
-
-      if (!rawText.trim() && !allVisionLines.length) {
-        return res.status(400).json({
-          ok: false,
-          error: 'OCR_EMPTY',
-          message: 'OCR vide : image illisible ou trop floue',
-        });
-      }
-
-      /* ───── FILTRAGE + TRASH ───── */
-      // Si on a des lignes géométriques, on les préfère (meilleur split)
-      const filtered = allVisionLines.length
-        ? smartFilterWithTrashFromLines(allVisionLines, { lang })
-        : smartFilterWithTrashFromText(rawText, { lang });
-
-      const lines = filtered.lines || [];
-      const trash = filtered.trash || [];
-
-      if (debug) {
-        return res.json({
-          ok: true,
-          debug: {
-            filesCount: files.length,
-            maxImages: MAX_OCR_IMAGES,
-            lang,
-            usedGeometryLines: allVisionLines.length > 0,
-            geometryLinesCount: allVisionLines.length,
-            rawTextLength: rawText.length,
-            firstLines: lines.slice(0, 40),
-            trashSample: trash.slice(0, 40),
-          },
-        });
-      }
-
-      if (!lines.length) {
-        return res.status(400).json({
-          ok: false,
-          error: 'ONLY_NOISE',
-          message: 'Le texte détecté est uniquement du bruit',
-        });
-      }
-
-      /* ───── SPLIT ───── */
-      const split = splitIngredientsAndSteps(lines);
-
-      let ingredientLines = split.ingredientLines || [];
-      const stepLines = split.stepLines || [];
-      const notesLines = split.notesLines || [];
-
-      ingredientLines = ingredientLines.filter((l) => !looksLikeStep(l));
-
-      let servings = split.servings || extractServingsFallback(rawText) || 1;
-      if (!Number.isFinite(servings) || servings < 1) servings = 1;
-
-      /* ───── INGREDIENTS ───── */
-      const ingredients = beautifyIngredients(
-        ingredientLines.map((line) => {
-          const parsed = parseOcrIngredient(line) || parseRawLine(line);
-          if (!parsed) {
-            return { name: line, quantity: 0, unit: '' };
-          }
           return {
-            name: parsed.name || line,
-            quantity: parsed.quantity || 0,
+            name: parsed.name || l,
+            quantity: Number(parsed.quantity || 0),
             unit: parsed.unit || '',
           };
         })
-      );
+        .filter((x) => x && x.name && String(x.name).trim().length > 0)
+    );
 
-      /* ───── STEPS ───── */
-      const steps = normalizeStepsFromLines(stepLines);
+    const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
 
-      /* ───── TITLE + NOTES ───── */
-      const title = guessTitleFromLines(lines) || 'Recette importée';
-      const notes = extractNotesFromLines(notesLines, { title });
+    const steps = rawSteps
+      .map((s) => String(s || '').trim())
+      .filter((s) => s && s !== '•' && s !== '.' && s !== '·');
 
-      /* ───── RESPONSE ───── */
+    const notes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean).join('\n');
+
+    const draft = {
+      title,
+      servings,
+      imageUrl: null,
+      notes,
+      ingredients,
+      steps,
+      trash: filtered.trash,
+    };
+
+    if (isDebug) {
       return res.json({
         ok: true,
-        draft: {
+        debug: {
+          imagesCount: req.files.length,
           title,
           servings,
-          imageUrl: null,
-          notes,
-          ingredients,
-          steps,
-          trash,
+          firstLines: lines.slice(0, 60),
+          split: {
+            ingredientLinesCount: (split.ingredientLines || []).length,
+            stepLinesCount: (split.stepLines || []).length,
+            notesLinesCount: (split.notesLines || []).length,
+          },
+          trashSample: (filtered.trash || []).slice(0, 60),
+          draftPreview: {
+            ingredientsPreview: draft.ingredients.slice(0, 12),
+            stepsPreview: draft.steps.slice(0, 12),
+          },
         },
       });
-    } catch (err) {
-      console.error('OCR ERROR:', err);
-      return res.status(500).json({
-        ok: false,
-        error: 'INTERNAL_ERROR',
-      });
     }
+
+    return res.json({ ok: true, draft });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ ok: false, error: 'OCR_FAILED', message: e?.message || 'Erreur OCR' });
   }
-);
+});
 
 module.exports = router;
-
-
-
-
-
 
 
 

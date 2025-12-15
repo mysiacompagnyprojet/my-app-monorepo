@@ -23,12 +23,6 @@ type ImportOcrResponse =
 
 const MAX_FILES = 10
 
-function pickAppLangHeader() {
-  // Si tu as déjà une notion de langue dans ton app (store/user), remplace ici.
-  // Sinon : défaut FR (ce que tu veux).
-  return 'fr'
-}
-
 function OcrPageInner() {
   const router = useRouter()
   const search = useSearchParams()
@@ -69,10 +63,10 @@ function OcrPageInner() {
 
       const data = await apiFetch<ImportOcrResponse>(`/import/ocr${qs}`, {
         method: 'POST',
-        body: form,
         headers: {
-          'Accept-Language': pickAppLangHeader(),
+          'Accept-Language': navigator.language || 'fr-FR',
         },
+        body: form,
       })
 
       if ((data as any)?.ok === false) {
@@ -117,8 +111,8 @@ function OcrPageInner() {
       <h1>Importer par photo (OCR)</h1>
 
       <p style={{ marginTop: 8, marginBottom: 16 }}>
-        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram, Facebook, photo d&apos;un
-        livre, etc.
+        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram,
+        Facebook, photo d&apos;un livre, etc.
       </p>
 
       <ol style={{ marginLeft: 20, marginBottom: 16 }}>
@@ -137,7 +131,8 @@ function OcrPageInner() {
 
       {files.length > 0 && (
         <p style={{ marginBottom: 8 }}>
-          {files.length} image(s) sélectionnée(s) {files.length > MAX_FILES ? `— ❌ max ${MAX_FILES}` : `— max ${MAX_FILES}`}
+          {files.length} image(s) sélectionnée(s){' '}
+          {files.length > MAX_FILES ? `— ❌ max ${MAX_FILES}` : `— max ${MAX_FILES}`}
         </p>
       )}
 
@@ -156,7 +151,15 @@ function OcrPageInner() {
       )}
 
       {debugOut && (
-        <pre style={{ marginTop: 16, padding: 12, border: '1px solid #eee', borderRadius: 8, overflowX: 'auto' }}>
+        <pre
+          style={{
+            marginTop: 16,
+            padding: 12,
+            border: '1px solid #eee',
+            borderRadius: 8,
+            overflowX: 'auto',
+          }}
+        >
           {JSON.stringify(debugOut, null, 2)}
         </pre>
       )}
@@ -171,4 +174,6 @@ export default function Page() {
     </Suspense>
   )
 }
+
+
 
