@@ -6,6 +6,7 @@ const multer = require('multer');
 const { parseRawLine } = require('../utils/ingredients');
 const {
   smartFilterWithTrashFromText,
+  smartFilterWithTrashFromLines,
   splitIngredientsAndSteps,
   parseOcrIngredient,
   beautifyIngredients,
@@ -13,9 +14,10 @@ const {
   looksLikeStep,
   normalizeStepsFromLines,
   extractNotesFromLines,
+  extractLinesFromVisionAnnotation,
 } = require('../utils/ocrText');
 
-const { ocrFromBuffer } = require('../services/vision');
+const { ocrFromBufferDetailed } = require('../services/vision');
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -105,11 +107,22 @@ router.post(
         });
       }
 
-      /* ───── OCR ───── */
+      const lang = getPreferredLang(req);
+
+      /* ───── OCR (détaillé) ───── */
       const texts = [];
+      const allVisionLines = [];
+
       for (const f of files) {
-        const txt = await ocrFromBuffer(f.buffer);
-        texts.push(String(txt || '').trim());
+        const out = await ocrFromBufferDetailed(f.buffer, { langHint: lang });
+        const txt = String(out?.text || '').trim();
+        if (txt) texts.push(txt);
+
+        // Géométrie -> lignes propres si dispo
+        const geoLines = extractLinesFromVisionAnnotation(out?.fullTextAnnotation);
+        if (Array.isArray(geoLines) && geoLines.length) {
+          allVisionLines.push(...geoLines);
+        }
       }
 
       let rawText = texts.filter(Boolean).join('\n\n');
@@ -118,7 +131,7 @@ router.post(
         rawText = cleanIosRawText(rawText);
       }
 
-      if (!rawText.trim()) {
+      if (!rawText.trim() && !allVisionLines.length) {
         return res.status(400).json({
           ok: false,
           error: 'OCR_EMPTY',
@@ -126,10 +139,12 @@ router.post(
         });
       }
 
-      const lang = getPreferredLang(req);
-
       /* ───── FILTRAGE + TRASH ───── */
-      const filtered = smartFilterWithTrashFromText(rawText, { lang });
+      // Si on a des lignes géométriques, on les préfère (meilleur split)
+      const filtered = allVisionLines.length
+        ? smartFilterWithTrashFromLines(allVisionLines, { lang })
+        : smartFilterWithTrashFromText(rawText, { lang });
+
       const lines = filtered.lines || [];
       const trash = filtered.trash || [];
 
@@ -140,6 +155,8 @@ router.post(
             filesCount: files.length,
             maxImages: MAX_OCR_IMAGES,
             lang,
+            usedGeometryLines: allVisionLines.length > 0,
+            geometryLinesCount: allVisionLines.length,
             rawTextLength: rawText.length,
             firstLines: lines.slice(0, 40),
             trashSample: trash.slice(0, 40),
@@ -187,8 +204,6 @@ router.post(
 
       /* ───── TITLE + NOTES ───── */
       const title = guessTitleFromLines(lines) || 'Recette importée';
-
-      // IMPORTANT : on passe title pour enlever le doublon dans Notes (Option B)
       const notes = extractNotesFromLines(notesLines, { title });
 
       /* ───── RESPONSE ───── */
@@ -215,6 +230,8 @@ router.post(
 );
 
 module.exports = router;
+
+
 
 
 

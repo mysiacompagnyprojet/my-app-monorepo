@@ -21,34 +21,54 @@ function getClient() {
   }
 }
 
+function normalizeLangHint(langHint) {
+  const l = String(langHint || '').trim();
+  if (!l) return 'fr';
+  // on garde juste "fr" / "en" si c’est "fr-FR"
+  const base = l.split(',')[0].trim();
+  const tag = base.split('-')[0].trim().toLowerCase();
+  if (tag === 'fr') return 'fr';
+  if (tag === 'en') return 'en';
+  return 'fr';
+}
+
 /**
- * OCR depuis un buffer image (PNG/JPG)
+ * OCR détaillé (texte + fullTextAnnotation pour exploiter la géométrie)
  * Utilise documentTextDetection (meilleur pour pages longues / mobile)
  */
-async function ocrFromBuffer(buffer) {
+async function ocrFromBufferDetailed(buffer, opts = {}) {
   if (!buffer) {
-    throw new Error('ocrFromBuffer: buffer manquant');
+    throw new Error('ocrFromBufferDetailed: buffer manquant');
   }
 
   const c = getClient();
+  const lang = normalizeLangHint(opts.langHint);
 
   const [result] = await c.documentTextDetection({
     image: { content: buffer },
     imageContext: {
-      languageHints: ['fr'], // ⭐ IMPORTANT pour recettes françaises
+      languageHints: [lang],
     },
   });
 
-  // Cas normal (document OCR)
   const text =
     result?.fullTextAnnotation?.text ||
-    // Fallback très rare mais utile
     result?.textAnnotations?.[0]?.description ||
     '';
 
-  return String(text).trim();
+  return {
+    text: String(text).trim(),
+    fullTextAnnotation: result?.fullTextAnnotation || null,
+  };
 }
 
-module.exports = { ocrFromBuffer };
+/**
+ * OCR depuis un buffer image (PNG/JPG)
+ * Compat : renvoie juste le texte (string) comme avant
+ */
+async function ocrFromBuffer(buffer, opts = {}) {
+  const out = await ocrFromBufferDetailed(buffer, opts);
+  return out.text;
+}
 
-
+module.exports = { ocrFromBuffer, ocrFromBufferDetailed };

@@ -89,6 +89,73 @@ function looksLikeUiNoise(line) {
 }
 
 /* ─────────────────────────────────────────────────────────────
+   0b) Extraction lignes depuis Vision (géométrie + detectedBreak)
+   => énorme upgrade contre les "pavés" collés
+───────────────────────────────────────────────────────────── */
+
+function extractLinesFromVisionAnnotation(fullTextAnnotation) {
+  // On reconstruit des lignes "comme l'utilisateur les voit"
+  // en utilisant detectedBreak (SPACE / LINE_BREAK / EOL_SURE_SPACE ...)
+  const doc = fullTextAnnotation
+  if (!doc || !Array.isArray(doc.pages)) return []
+
+  const lines = []
+  let cur = ''
+
+  function flush() {
+    const t = cleanRawTextLine(cur)
+    if (t) lines.push(t)
+    cur = ''
+  }
+
+  for (const page of doc.pages) {
+    if (!page?.blocks) continue
+    for (const block of page.blocks) {
+      if (!block?.paragraphs) continue
+      for (const para of block.paragraphs) {
+        if (!para?.words) continue
+        for (const word of para.words) {
+          if (!word?.symbols) continue
+          for (const sym of word.symbols) {
+            const ch = sym?.text || ''
+            cur += ch
+
+            const br = sym?.property?.detectedBreak?.type || ''
+            // Vision renvoie souvent: SPACE / SURE_SPACE / EOL_SURE_SPACE / LINE_BREAK
+            if (br === 'SPACE' || br === 'SURE_SPACE') cur += ' '
+            if (br === 'EOL_SURE_SPACE') {
+              cur += ' '
+              flush()
+            }
+            if (br === 'LINE_BREAK') {
+              flush()
+            }
+          }
+          // si le mot n’a pas mis d’espace via detectedBreak, on assure un espace minimal
+          if (!/\s$/.test(cur)) cur += ' '
+        }
+        flush()
+      }
+      // séparation douce entre blocks
+      flush()
+    }
+    // séparation douce entre pages
+    flush()
+  }
+
+  // dédoublonne simple
+  const seen = new Set()
+  const out = []
+  for (const l of lines) {
+    const k = l.toLowerCase()
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(l)
+  }
+  return out
+}
+
+/* ─────────────────────────────────────────────────────────────
    1) Filtrage langue (hook Accept-Language)
 ───────────────────────────────────────────────────────────── */
 
@@ -140,14 +207,13 @@ function filterByLanguage(line, lang) {
    2) Filtrage intelligent + corbeille (trash)
 ───────────────────────────────────────────────────────────── */
 
-function smartFilterWithTrashFromText(rawText, opts = {}) {
+function _smartFilterCore(inputLines, opts = {}) {
   const lang = opts.lang || 'fr'
 
-  const lines = splitToLines(rawText)
   const kept = []
   const trash = []
 
-  for (const l of lines) {
+  for (const l of inputLines || []) {
     const line = cleanRawTextLine(l)
     if (!line) continue
 
@@ -174,6 +240,15 @@ function smartFilterWithTrashFromText(rawText, opts = {}) {
   }
 
   return { lines: uniq, trash }
+}
+
+function smartFilterWithTrashFromLines(lines, opts = {}) {
+  return _smartFilterCore(lines, opts)
+}
+
+function smartFilterWithTrashFromText(rawText, opts = {}) {
+  const lines = splitToLines(rawText)
+  return _smartFilterCore(lines, opts)
 }
 
 function smartFilterLinesFromText(rawText) {
@@ -316,8 +391,6 @@ function splitIngredientsAndSteps(filteredLines) {
       const s = String(line || '').trim()
       if (!s) continue
       if (isStoryIntro(s)) {
-        // Option B : intro = plutôt corbeille, mais comme on n'a pas "trash" ici,
-        // on ne la garde pas en notes.
         continue
       }
       if (isDurationOnly(s) || isFireOnlyOrFireLine(s)) {
@@ -356,8 +429,6 @@ function splitIngredientsAndSteps(filteredLines) {
     }
 
     if (section === 'notes') {
-      // Option B : dans notes, on ne garde que les vraies notes (temps/conservation/astuces)
-      // Si ça ressemble à un ingrédient, on le remet dans ingrédients.
       if (
         /(\d|\bg\b|\bkg\b|\bml\b|\bcl\b|\bdl\b|\bl\b|cuill|càs|càc|pincée|tranches?|sachet|poignée|verre|gousse|cm|portions?)/i.test(
           line
@@ -376,7 +447,6 @@ function splitIngredientsAndSteps(filteredLines) {
 
     // hors section : heuristiques
     if (isStoryIntro(line)) {
-      // Option B : on ne met plus l'intro en notes
       continue
     }
 
@@ -575,7 +645,6 @@ function isTitleContinuation(line) {
   if (/(^\d|(\bg\b|\bkg\b|\bml\b|\bcl\b|cuill|càs|càc))/.test(lower)) return false
   if (t.length < 3 || t.length > 80) return false
 
-  // "continuation" = souvent majuscules
   const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length
   const uppers = (t.match(/[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/g) || []).length
   if (letters >= 6 && uppers / Math.max(letters, 1) >= 0.55) return true
@@ -584,7 +653,6 @@ function isTitleContinuation(line) {
 }
 
 function guessTitleFromLines(lines = []) {
-  // on cherche un premier candidat, puis on tente de concaténer 1-2 lignes suivantes
   const max = Math.min(lines.length, 40)
 
   for (let i = 0; i < max; i++) {
@@ -601,7 +669,6 @@ function guessTitleFromLines(lines = []) {
     if (t.length < 5 || t.length > 120) continue
     if (isStoryIntro(t)) continue
 
-    // concat 1-2 lignes suivantes si elles ressemblent à une continuation de titre
     const parts = [t]
     if (i + 1 < max && isTitleContinuation(lines[i + 1])) parts.push(cleanTitleCandidate(lines[i + 1]))
     if (i + 2 < max && parts.length === 2 && isTitleContinuation(lines[i + 2])) parts.push(cleanTitleCandidate(lines[i + 2]))
@@ -616,14 +683,13 @@ function guessTitleFromLines(lines = []) {
 }
 
 function extractNotesFromLines(lines = [], opts = {}) {
-  // Option B: Notes strictes = uniquement temps/cuisson/repos/conservation/astuces (+ durées globales)
   const title = String(opts.title || '').trim()
   const nt = normalizeForCompare(title)
 
   const cleaned = lines
     .map(cleanRawTextLine)
     .filter(Boolean)
-    .filter((l) => !looksLikeUiNoise(l)) // marketing/story => trash plus tôt
+    .filter((l) => !looksLikeUiNoise(l))
     .map(cleanTitleCandidate)
     .filter(Boolean)
 
@@ -633,17 +699,14 @@ function extractNotesFromLines(lines = [], opts = {}) {
   for (const l of cleaned) {
     const low = l.toLowerCase()
 
-    // retire "2 personnes"
     if (/\b(\d+)\s*(personnes|parts|portions?)\b/i.test(l)) continue
 
-    // retire les doublons de titre (ligne = titre ou contient le titre)
     if (nt) {
       const nl = normalizeForCompare(l)
       if (nl === nt) continue
       if (nl.includes(nt) && nt.length >= 10) continue
     }
 
-    // Notes strictes: on garde seulement les vraies notes
     const isAllowed =
       isDurationOnly(l) ||
       /\b(temps|cuisson|préparation|preparation|repos|conservation|astuces?|conseils?)\b/i.test(low)
@@ -666,12 +729,17 @@ function splitStepLineAggressive(line) {
   if (!t) return []
 
   t = t.replace(/^[\s•\-·\u2022]+/g, '')
-  t = t.replace(/\.(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ])/g, '. ')
+
+  // ⚠️ upgrade : on force des coupures sur numérotation "1 -", "2)", "3."
+  t = t.replace(/(\b\d+\s*[\)\.\-]\s+)/g, '\n$1')
+
+  // ⚠️ upgrade : si pavé, on coupe après ponctuation
+  t = t.replace(/([.!?…])\s+(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ])/g, '$1\n')
 
   const parts = t
     .split(/\s*(?:\n|\r|\t)\s*/g)
     .flatMap((x) => x.split(/\s*•\s*/g))
-    .flatMap((x) => x.split(/\s*(?:(?<=\.)\s+|(?<=!)\s+|(?<=\?)\s+|;\s+)/g))
+    .flatMap((x) => x.split(/\s*(?:;\s+)\s*/g))
 
   return parts.map((p) => p.trim()).filter(Boolean)
 }
@@ -750,6 +818,7 @@ function normalizeStepsFromLines(stepLines = []) {
 
 module.exports = {
   smartFilterWithTrashFromText,
+  smartFilterWithTrashFromLines,
   smartFilterLinesFromText,
   splitIngredientsAndSteps,
   parseOcrIngredient,
@@ -758,7 +827,10 @@ module.exports = {
   looksLikeStep,
   normalizeStepsFromLines,
   extractNotesFromLines,
+  extractLinesFromVisionAnnotation,
 }
+
+
 
 
 
