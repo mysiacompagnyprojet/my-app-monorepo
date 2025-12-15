@@ -20,6 +20,8 @@ const { ocrFromBuffer } = require('../services/vision');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
+const MAX_OCR_IMAGES = 10;
+
 /* ───────────────── AUTH ───────────────── */
 function needAuth(req, res, next) {
   if (!req.user?.userId) {
@@ -77,7 +79,7 @@ router.post(
   needAuth,
   upload.fields([
     { name: 'file', maxCount: 1 },
-    { name: 'files', maxCount: 5 },
+    { name: 'files', maxCount: MAX_OCR_IMAGES },
   ]),
   async (req, res) => {
     try {
@@ -95,11 +97,11 @@ router.post(
         });
       }
 
-      if (files.length > 5) {
+      if (files.length > MAX_OCR_IMAGES) {
         return res.status(400).json({
           ok: false,
           error: 'TOO_MANY_IMAGES',
-          message: 'Maximum 5 images autorisées',
+          message: `Maximum ${MAX_OCR_IMAGES} images autorisées`,
         });
       }
 
@@ -136,6 +138,7 @@ router.post(
           ok: true,
           debug: {
             filesCount: files.length,
+            maxImages: MAX_OCR_IMAGES,
             lang,
             rawTextLength: rawText.length,
             firstLines: lines.slice(0, 40),
@@ -212,6 +215,7 @@ router.post(
 );
 
 module.exports = router;
+
 
 
 

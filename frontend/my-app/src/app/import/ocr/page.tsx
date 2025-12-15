@@ -21,6 +21,8 @@ type ImportOcrResponse =
   | { ok: true; debug: any }
   | { ok: false; error: string; message?: string }
 
+const MAX_FILES = 10
+
 function OcrPageInner() {
   const router = useRouter()
   const search = useSearchParams()
@@ -31,7 +33,10 @@ function OcrPageInner() {
   const [isRunning, setIsRunning] = useState(false)
   const [debugOut, setDebugOut] = useState<any>(null)
 
-  const canRun = useMemo(() => files.length >= 1 && files.length <= 5 && !isRunning, [files, isRunning])
+  const canRun = useMemo(
+    () => files.length >= 1 && files.length <= MAX_FILES && !isRunning,
+    [files, isRunning]
+  )
 
   async function run() {
     try {
@@ -43,8 +48,8 @@ function OcrPageInner() {
         return
       }
 
-      if (files.length > 5) {
-        setStatus("❌ Trop d'images : 5 maximum.")
+      if (files.length > MAX_FILES) {
+        setStatus(`❌ Trop d'images : ${MAX_FILES} maximum.`)
         return
       }
 
@@ -81,9 +86,13 @@ function OcrPageInner() {
         servings: Number(d.servings || 1) || 1,
         imageUrl: d.imageUrl ?? null,
         notes: (d.notes || '').toString(),
-        steps: Array.isArray(d.steps) ? d.steps.map((s) => String(s || '').trim()).filter(Boolean) : [],
+        steps: Array.isArray(d.steps)
+          ? d.steps.map((s) => String(s || '').trim()).filter(Boolean)
+          : [],
         ingredients: Array.isArray(d.ingredients) ? d.ingredients.filter(Boolean) : [],
-        trash: Array.isArray(d.trash) ? d.trash.map((s) => String(s || '').trim()).filter(Boolean) : [],
+        trash: Array.isArray(d.trash)
+          ? d.trash.map((s) => String(s || '').trim()).filter(Boolean)
+          : [],
       }
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
@@ -122,7 +131,7 @@ function OcrPageInner() {
 
       {files.length > 0 && (
         <p style={{ marginBottom: 8 }}>
-          {files.length} image(s) sélectionnée(s) {files.length > 5 ? '— ❌ max 5' : ''}
+          {files.length} image(s) sélectionnée(s) {files.length > MAX_FILES ? `— ❌ max ${MAX_FILES}` : `— max ${MAX_FILES}`}
         </p>
       )}
 
@@ -156,3 +165,4 @@ export default function Page() {
     </Suspense>
   )
 }
+
