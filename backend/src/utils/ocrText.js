@@ -15,6 +15,15 @@ function cleanRawTextLine(s) {
   t = t.replace(/[“”]/g, '"')
   t = t.replace(/[’]/g, "'")
 
+  // Fix : "Égouttez - les" => "Égouttez-les"
+  // uniquement si c’est entre deux mots (pas un tiret de liste)
+  t = t.replace(/\b([A-Za-zÀ-ÖØ-öø-ÿ]+)\s*-\s*([A-Za-zÀ-ÖØ-öø-ÿ]+)\b/g, '$1-$2')
+
+  // Nettoyage ponctuation : pas d’espace avant , . ) etc.
+  t = t.replace(/\s+([,.;:!?])/g, '$1')
+  t = t.replace(/([(\[])\s+/g, '$1')
+  t = t.replace(/\s+([)\]])/g, '$1')
+
   t = t.replace(/\s+/g, ' ').trim()
   return t
 }
@@ -79,7 +88,6 @@ function looksLikeUiNoise(line) {
   if (/\b(pinterest|instagram|tiktok|facebook|youtube)\b/i.test(t)) return true
   if (/\b(recette de|par\s+@|by\s+@|créé par|creator|créatrice)\b/i.test(t)) return true
 
-  // Option B: on considère les phrases "marketing/story" comme bruit (=> trash)
   if (looksLikeMarketingStory(t)) return true
 
   if (hasTooManySymbols(t)) return true
@@ -90,12 +98,9 @@ function looksLikeUiNoise(line) {
 
 /* ─────────────────────────────────────────────────────────────
    0b) Extraction lignes depuis Vision (géométrie + detectedBreak)
-   => énorme upgrade contre les "pavés" collés
 ───────────────────────────────────────────────────────────── */
 
 function extractLinesFromVisionAnnotation(fullTextAnnotation) {
-  // On reconstruit des lignes "comme l'utilisateur les voit"
-  // en utilisant detectedBreak (SPACE / LINE_BREAK / EOL_SURE_SPACE ...)
   const doc = fullTextAnnotation
   if (!doc || !Array.isArray(doc.pages)) return []
 
@@ -121,7 +126,6 @@ function extractLinesFromVisionAnnotation(fullTextAnnotation) {
             cur += ch
 
             const br = sym?.property?.detectedBreak?.type || ''
-            // Vision renvoie souvent: SPACE / SURE_SPACE / EOL_SURE_SPACE / LINE_BREAK
             if (br === 'SPACE' || br === 'SURE_SPACE') cur += ' '
             if (br === 'EOL_SURE_SPACE') {
               cur += ' '
@@ -131,19 +135,15 @@ function extractLinesFromVisionAnnotation(fullTextAnnotation) {
               flush()
             }
           }
-          // si le mot n’a pas mis d’espace via detectedBreak, on assure un espace minimal
           if (!/\s$/.test(cur)) cur += ' '
         }
         flush()
       }
-      // séparation douce entre blocks
       flush()
     }
-    // séparation douce entre pages
     flush()
   }
 
-  // dédoublonne simple
   const seen = new Set()
   const out = []
   for (const l of lines) {
@@ -303,7 +303,7 @@ function cleanIngredientLine(line) {
 }
 
 /* ─────────────────────────────────────────────────────────────
-   3b) Détection durées / feu / intros
+   3b) Durées / feu / intros
 ───────────────────────────────────────────────────────────── */
 
 function isDurationOnly(line) {
@@ -342,11 +342,20 @@ function isStoryIntro(line) {
 ───────────────────────────────────────────────────────────── */
 
 function extractServingsFromLines(lines) {
-  for (const l of lines) {
-    const t = String(l || '').toLowerCase()
-    let m = t.match(/\b(\d+)\s*(personnes|parts|portions?)\b/i)
+  // Upgrade : gère "pour 4" sur une ligne et "personnes" sur la suivante
+  for (let i = 0; i < (lines || []).length; i++) {
+    const a = String(lines[i] || '')
+    const b = String(lines[i + 1] || '')
+    const c = String(lines[i + 2] || '')
+    const chunk = `${a} ${b} ${c}`.toLowerCase().replace(/\s+/g, ' ').trim()
+
+    let m = chunk.match(/\b(\d+)\s*(personnes|parts|portions?)\b/i)
     if (m) return parseInt(m[1], 10)
-    m = t.match(/\bpour\s*(\d+)\s*(?:a|à|\-)\s*(\d+)\b/i)
+
+    m = chunk.match(/\bpour\s*(\d+)\s*(?:personnes|parts|portions?)\b/i)
+    if (m) return parseInt(m[1], 10)
+
+    m = chunk.match(/\bpour\s*(\d+)\s*(?:a|à|\-)\s*(\d+)\b/i)
     if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10))
   }
   return null
@@ -372,7 +381,6 @@ function splitIngredientsAndSteps(filteredLines) {
 
     if (isMetaLine(line)) continue
 
-    // headers (avec emoji possible)
     if (/^ingr[ée]dients?\b/.test(headerProbe) || /^ingredients\b/.test(headerProbe)) {
       section = 'ingredients'
       continue
@@ -386,28 +394,19 @@ function splitIngredientsAndSteps(filteredLines) {
       continue
     }
 
-    // dans STEPS : durée seule / feu = continuation → stepLines
     if (section === 'steps') {
       const s = String(line || '').trim()
       if (!s) continue
-      if (isStoryIntro(s)) {
-        continue
-      }
-      if (isDurationOnly(s) || isFireOnlyOrFireLine(s)) {
-        stepLines.push(s)
-        continue
-      }
+      if (isStoryIntro(s)) continue
       stepLines.push(s)
       continue
     }
 
-    // durées / feu hors steps → notes (temps total)
     if (isDurationOnly(line) || isFireOnlyOrFireLine(line)) {
       notesLines.push(line)
       continue
     }
 
-    // notes typiques (conservation/astuces/temps/etc.)
     if (/\b(temps|cuisson|préparation|preparation|repos|conservation|astuces?|conseils?)\b/i.test(lower)) {
       section = 'notes'
       notesLines.push(line)
@@ -420,9 +419,7 @@ function splitIngredientsAndSteps(filteredLines) {
     }
 
     if (section === 'ingredients') {
-      // meta personnes → ignore (servings déjà extrait)
       if (/\b(personnes|parts|portions?)\b/i.test(line)) continue
-
       const ing = cleanIngredientLine(line)
       if (ing) ingredientLines.push(ing)
       continue
@@ -430,7 +427,7 @@ function splitIngredientsAndSteps(filteredLines) {
 
     if (section === 'notes') {
       if (
-        /(\d|\bg\b|\bkg\b|\bml\b|\bcl\b|\bdl\b|\bl\b|cuill|càs|càc|pincée|tranches?|sachet|poignée|verre|gousse|cm|portions?)/i.test(
+        /(\d|\bg\b|\bkg\b|\bml\b|\bcl\b|\bdl\b|\bl\b|cuill|càs|càc|pincée|tranches?|sachet|poignée|verre|gousse|brin|cm|portions?)/i.test(
           line
         ) &&
         !isDurationOnly(line) &&
@@ -439,16 +436,11 @@ function splitIngredientsAndSteps(filteredLines) {
         ingredientLines.push(cleanIngredientLine(line))
       } else if (/\b(temps|cuisson|préparation|preparation|repos|conservation|astuces?|conseils?)\b/i.test(lower) || isDurationOnly(line)) {
         notesLines.push(line)
-      } else {
-        // on jette le reste (intro / blabla)
       }
       continue
     }
 
-    // hors section : heuristiques
-    if (isStoryIntro(line)) {
-      continue
-    }
+    if (isStoryIntro(line)) continue
 
     if (looksLikeStep(line)) {
       stepLines.push(line)
@@ -456,7 +448,7 @@ function splitIngredientsAndSteps(filteredLines) {
     }
 
     if (
-      /(\d|\bg\b|\bkg\b|\bml\b|\bcl\b|\bdl\b|\bl\b|cuill|càs|càc|pincée|tranches?|sachet|poignée|verre|gousse|cm|portions?)/i.test(
+      /(\d|\bg\b|\bkg\b|\bml\b|\bcl\b|\bdl\b|\bl\b|cuill|càs|càc|pincée|tranches?|sachet|poignée|verre|gousse|brin|cm|portions?)/i.test(
         line
       ) &&
       !/\b(personnes|parts)\b/i.test(line) &&
@@ -465,8 +457,6 @@ function splitIngredientsAndSteps(filteredLines) {
       ingredientLines.push(cleanIngredientLine(line))
       continue
     }
-
-    // sinon : on ignore (Option B)
   }
 
   return { servings, ingredientLines, stepLines, notesLines }
@@ -510,10 +500,17 @@ function normalizeUnit(uRaw) {
   if (['dl'].includes(t)) return 'dl'
   if (['l', 'litre', 'litres'].includes(t)) return 'l'
 
-  // On évite l'unité "Unité" qui pollue l'affichage
   if (['unite', 'unites', 'unité', 'unités', 'piece', 'pieces', 'pièce', 'pièces'].includes(t)) return ''
 
-  if (['gousse', 'gousses', 'cm', 'portion', 'portions'].includes(t)) return t
+  if (['gousse', 'gousses'].includes(t)) return 'gousse'
+  if (['brin', 'brins'].includes(t)) return 'brin'
+  if (['tranche', 'tranches'].includes(t)) return 'tranche'
+  if (['sachet', 'sachets'].includes(t)) return 'sachet'
+  if (['pincee', 'pincée', 'pincees', 'pincées'].includes(t)) return 'pincée'
+  if (['poignee', 'poignée', 'poignees', 'poignées'].includes(t)) return 'poignée'
+  if (['verre', 'verres'].includes(t)) return 'verre'
+  if (['cm'].includes(t)) return 'cm'
+  if (['portion', 'portions'].includes(t)) return 'portion'
 
   if (['cas', 'cs', 'c a s', 'càs', 'cuillere a soupe', 'cuillere a soupes'].includes(t)) return 'càs'
   if (['cac', 'cc', 'c a c', 'càc', 'cuillere a cafe', 'cuillere a café'].includes(t)) return 'càc'
@@ -521,23 +518,13 @@ function normalizeUnit(uRaw) {
   return uRaw
 }
 
-function isLikelyIngredientNoun(word) {
-  const t = String(word || '').toLowerCase().trim()
-  return ['oignons', 'tomates', 'carottes', 'citrons', 'citron'].includes(t)
-}
-
-function isAdjectiveOnly(word) {
-  const t = String(word || '').toLowerCase().trim()
-  return ['nouveau', 'nouveaux', 'nouvelle', 'nouvelles', 'frais', 'fraiche', 'fraîche', 'fraîches', 'fraiches'].includes(t)
-}
-
-function normalizeWeirdAdjUnit(name, unit) {
-  const n = String(name || '').trim()
-  const u = String(unit || '').trim()
-  if (!n || !u) return { name: n, unit: u }
-  if (isAdjectiveOnly(n) && isLikelyIngredientNoun(u)) return { name: `${u} ${n}`.trim(), unit: '' }
-  return { name: n, unit: u }
-}
+const ALLOWED_UNITS = new Set([
+  'g','kg','ml','cl','dl','l',
+  'càs','càc',
+  'pincée','tranche','sachet','poignée','verre',
+  'gousse','brin','cm','portion',
+  ''
+])
 
 function parseOcrIngredient(line) {
   const raw = String(line || '').trim()
@@ -571,16 +558,20 @@ function parseOcrIngredient(line) {
     .trim()
 
   const q = parseQuantity(qtyRaw)
-  const unit = normalizeUnit(unitRaw)
+  let unit = normalizeUnit(unitRaw)
   let name = tidyName(nameRaw)
 
-  const fixed = normalizeWeirdAdjUnit(name, unit)
-  name = fixed.name
+  // 🔥 Upgrade “joli” : si l’unité n’est pas une vraie unité, on la remet dans le nom
+  // ex: "4 suprêmes de volaille" => unitRaw="suprêmes" => devient name="suprêmes de volaille", unit=""
+  if (unit && !ALLOWED_UNITS.has(unit)) {
+    name = tidyName(`${unit} ${name}`.trim())
+    unit = ''
+  }
 
   return {
     name: name || tidyName(t0.replace(qtyRaw, '').replace(unitRaw, '').trim()),
     quantity: Number.isFinite(q) ? q : 0,
-    unit: fixed.unit || '',
+    unit: unit || '',
   }
 }
 
@@ -622,7 +613,6 @@ function cleanTitleCandidate(line) {
   t = t.replace(/\s*#[\w-]+/g, '').trim()
   t = t.replace(/[\u{1F300}-\u{1FAFF}]+/gu, '').trim()
 
-  // retire pseudo collé en 1er mot minuscule: "jemangequoicesoir TITRE..."
   const m = t.match(/^([a-z0-9_]{3,})\s+(.+)$/)
   if (m) {
     const first = m[1]
@@ -643,11 +633,15 @@ function isTitleContinuation(line) {
   if (/^(ingr[ée]dients?|ingredients|pr[ée]paration|preparation|instructions?)\b/.test(lower)) return false
   if (looksLikeStep(t)) return false
   if (/(^\d|(\bg\b|\bkg\b|\bml\b|\bcl\b|cuill|càs|càc))/.test(lower)) return false
-  if (t.length < 3 || t.length > 80) return false
+  if (t.length < 2 || t.length > 90) return false
 
+  // ✅ Upgrade : titres souvent en plusieurs lignes qui commencent par "de / aux / et ..."
+  if (/^(de|d'|des|du|aux|au|et)\b/i.test(lower)) return true
+
+  // sinon : heuristique majuscules (ancien comportement)
   const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length
   const uppers = (t.match(/[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ]/g) || []).length
-  if (letters >= 6 && uppers / Math.max(letters, 1) >= 0.55) return true
+  if (letters >= 6 && uppers / Math.max(letters, 1) >= 0.4) return true
 
   return false
 }
@@ -666,7 +660,7 @@ function guessTitleFromLines(lines = []) {
     if (t.length < 5 || t.length > 120) continue
 
     t = cleanTitleCandidate(t)
-    if (t.length < 5 || t.length > 120) continue
+    if (t.length < 5 || t.length > 140) continue
     if (isStoryIntro(t)) continue
 
     const parts = [t]
@@ -674,7 +668,7 @@ function guessTitleFromLines(lines = []) {
     if (i + 2 < max && parts.length === 2 && isTitleContinuation(lines[i + 2])) parts.push(cleanTitleCandidate(lines[i + 2]))
 
     const joined = parts.join(' ').replace(/\s+/g, ' ').trim()
-    if (joined.length >= 5 && joined.length <= 140) return joined
+    if (joined.length >= 5 && joined.length <= 160) return joined
 
     return t
   }
@@ -730,10 +724,10 @@ function splitStepLineAggressive(line) {
 
   t = t.replace(/^[\s•\-·\u2022]+/g, '')
 
-  // ⚠️ upgrade : on force des coupures sur numérotation "1 -", "2)", "3."
+  // force coupure avant numérotation si un pavé contient "2." etc.
   t = t.replace(/(\b\d+\s*[\)\.\-]\s+)/g, '\n$1')
 
-  // ⚠️ upgrade : si pavé, on coupe après ponctuation
+  // coupe après ponctuation (utile pour gros pavés)
   t = t.replace(/([.!?…])\s+(?=[A-ZÀÂÄÉÈÊËÎÏÔÖÙÛÜÇ])/g, '$1\n')
 
   const parts = t
@@ -749,17 +743,16 @@ function isContinuationStep(s) {
   const lower = t.toLowerCase()
   if (!t) return false
 
-  if (/^(à|au|aux|puis|et|afin|pour|avec|sans)\b/i.test(lower)) return true
+  // connecteurs
+  if (/^(à|au|aux|puis|et|afin|pour|avec|sans|en)\b/i.test(lower)) return true
 
-  if (t.length <= 28) {
+  // lignes wrap (Vision coupe en milieu de phrase) : souvent commencent par minuscule
+  if (/^[a-zàâäçéèêëîïôöùûüœ]/.test(t)) return true
+
+  if (t.length <= 40) {
     if (isDurationOnly(t)) return true
     if (isFireOnlyOrFireLine(t)) return true
-    if (/^(à l'aide|a l'aide|à l’|a l’)/i.test(t)) return true
   }
-
-  if (/^[a-zàâäçéèêëîïôöùûüœ]/.test(t)) return true
-  if (isDurationOnly(t)) return true
-  if (isFireOnlyOrFireLine(t)) return true
 
   return false
 }
@@ -829,6 +822,7 @@ module.exports = {
   extractNotesFromLines,
   extractLinesFromVisionAnnotation,
 }
+
 
 
 

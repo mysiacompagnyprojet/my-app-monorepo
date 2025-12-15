@@ -23,6 +23,12 @@ type ImportOcrResponse =
 
 const MAX_FILES = 10
 
+function pickAppLangHeader() {
+  // Si tu as déjà une notion de langue dans ton app (store/user), remplace ici.
+  // Sinon : défaut FR (ce que tu veux).
+  return 'fr'
+}
+
 function OcrPageInner() {
   const router = useRouter()
   const search = useSearchParams()
@@ -61,10 +67,12 @@ function OcrPageInner() {
 
       const qs = isDebug ? '?debug=1' : ''
 
-      // IMPORTANT : apiFetch() renvoie déjà le JSON (pas un Response)
       const data = await apiFetch<ImportOcrResponse>(`/import/ocr${qs}`, {
         method: 'POST',
         body: form,
+        headers: {
+          'Accept-Language': pickAppLangHeader(),
+        },
       })
 
       if ((data as any)?.ok === false) {
@@ -72,7 +80,6 @@ function OcrPageInner() {
         return
       }
 
-      // mode debug : pas de redirection
       if ('debug' in data) {
         setDebugOut((data as any).debug)
         setStatus('✅ Debug reçu (aucune redirection)')
@@ -99,7 +106,6 @@ function OcrPageInner() {
       setStatus(`✅ OCR OK (${files.length} image(s))`)
       router.push('/recipes/new?prefill=1')
     } catch (e: any) {
-      // apiFetch throw déjà des erreurs lisibles (HTTP + message backend)
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
     } finally {
       setIsRunning(false)
