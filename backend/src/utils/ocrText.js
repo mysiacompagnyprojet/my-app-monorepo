@@ -33,8 +33,6 @@ function looksLikeDateNoise(line) {
   const t = normSpaces(line).toLowerCase();
   if (!t) return false;
 
-  // ex: "8 mai", "8 mai ⚫", "8 mai ·", "8 mai 2024"
-  // On accepte aussi les abréviations usuelles.
   const months =
     '(janv\\.?|janvier|fevr\\.?|févr\\.?|février|mars|avr\\.?|avril|mai|juin|juil\\.?|juillet|aout\\.?|août\\.?|sept\\.?|septembre|oct\\.?|octobre|nov\\.?|novembre|dec\\.?|déc\\.?|décembre)';
   const re = new RegExp(`^\\d{1,2}\\s+${months}(?:\\s+\\d{4})?\\b`, 'i');
@@ -133,9 +131,19 @@ function looksLikeSocialNoise(line) {
   return false;
 }
 
+// ✅ helper unités seules (évite que "g" parte à la corbeille)
+function isUnitToken(line) {
+  const t = normSpaces(line);
+  return /^(g|kg|mg|ml|cl|dl|l)$/i.test(t);
+}
+
 function isMostlyNoise(line) {
   const t = normSpaces(line);
   if (!t) return true;
+
+  // ✅ PATCH: ne pas jeter les unités seules ("g", "ml", etc.)
+  if (isUnitToken(t)) return false;
+
   if (t.length <= 1) return true;
 
   const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
@@ -260,13 +268,11 @@ function isPreparationHeader(line) {
    STEP / INGREDIENT HEURISTICS
 ========================= */
 
-// ligne "liste" (souvent ingrédients sur réseaux) : "- 70 g de beurre", "• 2 oignons"
 function looksLikeListBullet(line) {
   const t = normSpaces(line);
   return /^[-•*]\s+/.test(t);
 }
 
-// ligne qui ressemble à une étape "action" (verbes cuisine)
 function looksLikeStepVerbLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
@@ -276,7 +282,6 @@ function looksLikeStepVerbLine(line) {
   );
 }
 
-// ligne étape par numérotation (1., 2), Étape 1, etc.)
 function looksLikeStepNumberedLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
@@ -285,12 +290,11 @@ function looksLikeStepNumberedLine(line) {
   return false;
 }
 
-// IMPORTANT : on NE considère PAS "puce -" comme étape à elle seule (sinon les ingrédients finissent en étapes)
 function looksLikeStepLine(line) {
   return looksLikeStepVerbLine(line) || looksLikeStepNumberedLine(line);
 }
 
-// ✅ B) continuation d’une étape numérotée (ex: "2. ...", puis ligne suivante "le beurre de ...")
+// ✅ B) continuation d’une étape numérotée
 function looksLikeStepContinuation(prevLine, line) {
   const prev = normSpaces(prevLine);
   const cur = normSpaces(line);
@@ -298,7 +302,6 @@ function looksLikeStepContinuation(prevLine, line) {
 
   if (!looksLikeStepNumberedLine(prev)) return false;
 
-  // débuts typiques de continuation
   return /^(le|la|les|l['’]|un|une|des|du|de|d['’]|au|aux|et|puis|ensuite|à|a)\b/i.test(cur);
 }
 
@@ -320,7 +323,6 @@ function joinWrappedLinesForSteps(stepLines) {
     const line = normSpaces(raw);
     if (!line) continue;
 
-    // "Préparation :" => on ne l’ajoute pas
     if (isPreparationHeader(line)) {
       flush();
       continue;
@@ -332,8 +334,6 @@ function joinWrappedLinesForSteps(stepLines) {
     }
 
     const endsStrong = /[.!?…:]$/.test(buffer);
-
-    // si la ligne précédente finit par un connecteur, on colle presque toujours
     const endsConnector = /\b(à|a|au|aux|de|d|d'|d’|des|du|sous|sur|puis|et)\s*$/i.test(buffer);
 
     const nextLooksContinuation =
@@ -411,7 +411,6 @@ function normalizeUnit(u) {
   if (['dl'].includes(t)) return 'dl';
   if (['l', 'litre', 'litres'].includes(t)) return 'l';
 
-  // cuillères
   if (t === 'cas' || t === 'càs' || t === 'cs' || (t.includes('cuill') && t.includes('soupe'))) return 'càs';
   if (t === 'cac' || t === 'càc' || t === 'cc' || (t.includes('cuill') && (t.includes('cafe') || t.includes('café')))) return 'càc';
 
@@ -431,7 +430,6 @@ function normalizeUnit(u) {
 const QTY_USED =
   '([0-9]+(?:[.,][0-9]+)?|[0-9]+\\s+[0-9]+\\/[0-9]+|[0-9]+\\/[0-9]+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
 
-// cuillere / cuillère / cuilleres / cuillères
 const CUILL_RE = 'cuill(?:e|è)re(?:s)?';
 
 function postProcessIngredientName(name) {
@@ -440,20 +438,26 @@ function postProcessIngredientName(name) {
   if (/^huile\s+olive\b/i.test(n)) n = n.replace(/^huile\s+olive\b/i, "huile d'olive");
   n = n.replace(/^de\s+/i, '');
 
-  return n;
+  // ✅ PATCH: retire codes finaux type "2630"
+  n = n.replace(/\s+\d{3,6}\s*$/g, '');
+
+  // ✅ PATCH: retire quelques marques/bruits vus dans tes tests
+  n = n.replace(/\bRecoltos\b/gi, '');
+  n = n.replace(/\bDélico\b/gi, '');
+  n = n.replace(/\bDelico\b/gi, '');
+  n = n.replace(/\bRecettes?\s+Délice\b/gi, '');
+  n = n.replace(/\bRecettes?\s+Delice\b/gi, '');
+  return normSpaces(n);
 }
 
 // micro-fix OCR : parfois "1 l de lait" => "11 de lait"
 function fixCommonOcrQuantityUnitBugs(rawLine) {
   let s = normSpaces(rawLine);
-
-  // "11 de lait" / "11 de eau" / "11 d’eau" -> "1 l de ..."
+  // ✅ PATCH OCR: parfois l'unité passe avant la quantité : "g 100 de ..." => "100 g de ..."
+  // couvre g/kg/mg/ml/cl/dl/l
+  s = s.replace(/^(kg|g|mg|ml|cl|dl|l)\s+(\d+(?:[.,]\d+)?)\s+(de|d['’])\b/i,'$2 $1 $3');
   s = s.replace(/\b11\s+(de|d['’])\s*(lait|eau|crème|creme)\b/i, '1 l $1 $2');
-
-  // "1l" collé
   s = s.replace(/\b1l\b/gi, '1 l');
-
-  // parfois le OCR met "—" ou "·" ou "." en tête
   s = s.replace(/^[·•\.\,\;\:\-–—]+\s*/g, '');
 
   return s;
@@ -473,19 +477,15 @@ function parseOcrIngredient(line) {
   if (looksLikeCountersNoise(raw)) return null;
   if (looksLikeSocialNoise(raw)) return null;
 
-  // priorité : si c’est une vraie étape (verbe / numérotée), ce n’est PAS un ingrédient
   if (looksLikeStepLine(raw)) return null;
 
-  // "un peu de sel"
   let m = raw.match(/^(un peu de|selon goût|au goût)\s+(.+)$/i);
   if (m) {
     return { name: postProcessIngredientName(m[2]), quantity: 0, unit: '' };
   }
 
-  // Puces / tirets (ingrédients réseaux)
   const l = raw.replace(/^[-•*]\s+/, '');
 
-  // "Sel & poivre" => on garde "sel" (et poivre si ligne séparée)
   if (/^sel\s*&\s*poivre$/i.test(l)) {
     return { name: 'sel', quantity: 0, unit: '' };
   }
@@ -493,7 +493,6 @@ function parseOcrIngredient(line) {
     return { name: 'poivre', quantity: 0, unit: '' };
   }
 
-  // "400 g de ..." / "1 l de ..." / "200g flocons ..."
   m = l.match(new RegExp(`^${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\b\\s*(?:de\\s+|d['’]\\s*)?(.+)$`, 'i'));
   if (m) {
     const qty = parseQuantityFR(m[1]);
@@ -502,7 +501,6 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qty ?? 0, unit };
   }
 
-  // CUILLÈRE À/A CAFÉ
   m = l.match(
     new RegExp(
       `^${QTY_USED}\\s+(?:${CUILL_RE}\\s*(?:à|a)\\s*caf(?:e|é)|c\\.?\\s*(?:à|a)\\s*c\\.?|càc|cac|cc)\\s*(?:de|d['’])?\\s*(.+)$`,
@@ -515,7 +513,6 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qty ?? 0, unit: 'càc' };
   }
 
-  // CUILLÈRE À/A SOUPE
   m = l.match(
     new RegExp(
       `^${QTY_USED}\\s+(?:${CUILL_RE}\\s*(?:à|a)\\s*soupe|c\\.?\\s*(?:à|a)\\s*s\\.?|càs|cas|cs)\\s*(?:de|d['’])?\\s*(.+)$`,
@@ -528,7 +525,6 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qty ?? 0, unit: 'càs' };
   }
 
-  // "2 gousses d'ail" / "3 pièces ..."
   m = l.match(/^(\d+)\s+(gousses?|tranches?|sachets?|verres?|tasses?|pièces?|pieces?)\s+(?:de\s+|d['’])?(.+)$/i);
   if (m) {
     const qty = parseQuantityFR(m[1]);
@@ -537,7 +533,6 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qty ?? 0, unit: unit || '' };
   }
 
-  // "1 oignon" => pièce
   m = l.match(/^(\d+)\s+(.+)$/);
   if (m) {
     const qty = parseQuantityFR(m[1]);
@@ -549,10 +544,44 @@ function parseOcrIngredient(line) {
 }
 
 function beautifyIngredients(items) {
+   // ✅ PATCH: si l'OCR colle "grillées concassées" (et/ou "Recettes Délice") au beurre de cacahuète,
+  // on nettoie le beurre et on rattache les qualificatifs aux cacahuètes.
+  const list = Array.isArray(items) ? items.map((x) => ({ ...x })) : [];
+
+  const idxButter = list.findIndex((it) => /\bbeurre\s+de\s+cacahu[eé]te\b/i.test(normSpaces(it?.name)));
+  const idxPeanuts = list.findIndex((it) => /\bcacahu[eé]tes?\b/i.test(normSpaces(it?.name)));
+
+  if (idxButter >= 0) {
+    let bn = normSpaces(list[idxButter].name || '');
+
+    // enlève bruit page
+    bn = bn.replace(/\bRecettes?\s+Délice\b/gi, '').replace(/\bRecettes?\s+Delice\b/gi, '');
+    bn = bn.replace(/\bRecoltos\b/gi, '').replace(/\bDélico\b/gi, '').replace(/\bDelico\b/gi, '');
+    bn = bn.replace(/\s+\d{3,6}\s*$/g, '');
+
+    // capture qualificatifs à déplacer
+    const m = bn.match(/\bbeurre\s+de\s+cacahu[eé]te\b(.*)$/i);
+    const tail = m ? normSpaces(m[1]) : '';
+
+    // nettoie le beurre (garde seulement "beurre de cacahuete")
+    bn = bn.replace(/\bbeurre\s+de\s+cacahu[eé]te\b.*$/i, 'beurre de cacahuete');
+    list[idxButter].name = normSpaces(bn);
+
+    // si on a des qualificatifs (ex: "grillees concassees") et une ligne cacahuètes, on les rattache
+    if (tail && idxPeanuts >= 0) {
+      const pn = normSpaces(list[idxPeanuts].name || '');
+
+      // évite duplication si déjà présent
+      const already = new RegExp(tail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i').test(pn);
+      if (!already) {
+        list[idxPeanuts].name = normSpaces(`${pn} ${tail}`);
+      }
+    }
+  }  
   const out = [];
   const seen = new Set();
 
-  for (const it of items) {
+  for (const it of list) {
     const name = normSpaces(it.name || '');
     const quantity = Number.isFinite(it.quantity) ? it.quantity : 0;
     const unit = it.unit == null ? '' : String(it.unit);
@@ -586,13 +615,18 @@ function sanitizePickedTitle(title) {
   let t = normSpaces(title);
   if (!t) return '';
 
-  // coupe à "Afficher la suite" (Facebook/IG)
   t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
-
-  // enlève les "..." ou "…" restants en fin
   t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
 
   return normSpaces(t);
+}
+
+// ✅ PATCH: ignore les titres "site/page" génériques
+function isGenericSiteTitle(t) {
+  const s = normSpaces(t).toLowerCase();
+  if (s === 'recettes délice' || s === 'recettes delice') return true;
+  if (/^recettes?\b/.test(s) && s.length <= 30) return true;
+  return false;
 }
 
 function fabricateTitleFromIngredients(lines) {
@@ -664,11 +698,6 @@ function fabricateTitleFromIngredients(lines) {
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-/**
- * ✅ Patch 1) : chercher un vrai titre "explicite" dans les premières lignes (pas seulement 16)
- * - ignore bruit / headers / ingrédients / étapes / continuations d’étapes
- * - renvoie le meilleur candidat ou null
- */
 function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   const scan = lines.slice(0, maxScan).map(normSpaces).filter(Boolean);
   const candidates = [];
@@ -680,6 +709,8 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     const t = sanitizePickedTitle(t0);
     if (!t) continue;
 
+    if (isGenericSiteTitle(t)) continue;
+
     if (looksLikeStatusBarNoise(t)) continue;
     if (looksLikeDateNoise(t)) continue;
     if (looksLikeCountersNoise(t)) continue;
@@ -689,7 +720,6 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     if (isPreparationHeader(t)) continue;
     if (extractServingsFromLine(t)) continue;
 
-    // jamais un ingrédient / une étape / une continuation d'étape
     if (parseOcrIngredient(t)) continue;
     if (looksLikeStepLine(t)) continue;
     if (i > 0 && looksLikeStepContinuation(scan[i - 1], t)) continue;
@@ -697,11 +727,9 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) continue;
     if (/^(temps|notes?)\b/i.test(t)) continue;
 
-    // contraintes titre
     if (t.length < 6 || t.length > 80) continue;
     if (/\d/.test(t)) continue;
 
-    // petit bonus : titres ont souvent une majuscule quelque part
     const hasUpper = /[A-ZÀ-ÖØ-Þ]/.test(t);
     candidates.push({ t, score: (hasUpper ? 10 : 0) + (maxScan - i) });
   }
@@ -715,10 +743,6 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
 function guessTitleFromLines(lines) {
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
 
-  /**
-   * ✅ Patch 2) : priorité au vrai titre s’il existe (même s’il est après les 16 premières lignes)
-   * Sinon on garde EXACTEMENT le comportement actuel (fallback ingrédients).
-   */
   const explicit = findExplicitTitleInFirstLines(lines, 60);
   if (explicit) {
     const cleaned = sanitizePickedTitle(explicit);
@@ -740,12 +764,16 @@ function guessTitleFromLines(lines) {
     return fabricateTitleFromIngredients(lines) || 'Recette importée';
   }
 
-  // ✅ B) empêche une continuation d’étape de devenir un titre
   let prev = '';
   for (const l of head) {
     let t = cleanTitleCandidate(l);
     t = sanitizePickedTitle(t);
     if (!t) {
+      prev = l;
+      continue;
+    }
+
+    if (isGenericSiteTitle(t)) {
       prev = l;
       continue;
     }
@@ -779,7 +807,6 @@ function guessTitleFromLines(lines) {
       continue;
     }
 
-    // continuation d'étape numérotée => pas un titre
     if (looksLikeStepContinuation(prev, t)) {
       prev = l;
       continue;
@@ -832,13 +859,11 @@ function isIngredientFragmentLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
 
-  // fragments fréquents OCR sur image ingrédients
-  if (/^\d{1,4}$/.test(t)) return true; // ex: "100"
-  if (/^(de|d['’])\b/i.test(t)) return true; // ex: "de beurre de"
+  if (/^\d{1,4}$/.test(t)) return true;
+  if (/^(de|d['’])\b/i.test(t)) return true;
   if (/^(kg|g|mg|l|dl|cl|ml)\b/i.test(t)) return true;
-  if (/^(grill[eé]es?|concass[eé]es?)\b/i.test(t)) return true; // ex: "grillees", "concassees"
+  if (/^(grill[eé]es?|concass[eé]es?)\b/i.test(t)) return true;
 
-  // ligne courte "nom seul" possible (ex: "cacahuete")
   if (t.length <= 20 && /^[a-zà-öø-ÿ'’ -]+$/i.test(t) && !looksLikeStepLine(t)) return true;
 
   return false;
@@ -863,13 +888,15 @@ function joinWrappedLinesForIngredients(lines) {
       continue;
     }
 
-    // si buffer est un nombre seul, ou finit par "de", ou la prochaine est un fragment "de ..."
     const bufIsNumber = /^\d{1,4}$/.test(buffer);
     const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
     const nextStartsDe = /^(de|d['’])\b/i.test(line);
     const nextIsFragment = isIngredientFragmentLine(line);
 
-    if (bufIsNumber || bufEndsDe || nextStartsDe || nextIsFragment) {
+    // ✅ PATCH: si la prochaine est une unité seule ("g") on colle aussi
+    const nextIsUnit = isUnitToken(line);
+
+    if (bufIsNumber || bufEndsDe || nextStartsDe || nextIsFragment || nextIsUnit) {
       buffer = `${buffer} ${line}`;
     } else {
       flush();
@@ -884,24 +911,24 @@ function joinWrappedLinesForIngredients(lines) {
 function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
   if (!stepLines || stepLines.length < 3) return { ingredientLines, stepLines };
 
-  // On regarde les 25 dernières lignes max
   const start = Math.max(0, stepLines.length - 25);
   const tail = stepLines.slice(start);
 
-  // Cherche un bloc en fin qui contient au moins 2 lignes "ingrédient-like"
-  // et qui apparaît après les étapes (typiquement après "6.")
   let lastIngredientLikeIdx = -1;
   let ingredientLikeCount = 0;
 
   for (let i = 0; i < tail.length; i++) {
     const l = normSpaces(tail[i]);
 
-    // ignore évident bruit social / header / date
     if (looksLikeStatusBarNoise(l) || looksLikeDateNoise(l) || looksLikeCountersNoise(l) || looksLikeSocialNoise(l)) continue;
     if (isIngredientsHeader(l) || isPreparationHeader(l)) continue;
 
     const parsed = parseOcrIngredient(l);
-    const like = !!parsed || isIngredientFragmentLine(l) || /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
+    const like =
+      !!parsed ||
+      isIngredientFragmentLine(l) ||
+      isUnitToken(l) ||
+      /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
 
     if (like) {
       ingredientLikeCount++;
@@ -909,15 +936,17 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
     }
   }
 
-  // Pas assez d’indices => on ne touche à rien
   if (ingredientLikeCount < 2 || lastIngredientLikeIdx < 0) return { ingredientLines, stepLines };
 
-  // On prend le bloc depuis la première ligne "ingrédient-like" du tail jusqu'à la fin
   let firstIdx = -1;
   for (let i = 0; i <= lastIngredientLikeIdx; i++) {
     const l = normSpaces(tail[i]);
     const parsed = parseOcrIngredient(l);
-    const like = !!parsed || isIngredientFragmentLine(l) || /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
+    const like =
+      !!parsed ||
+      isIngredientFragmentLine(l) ||
+      isUnitToken(l) ||
+      /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
     if (like) {
       firstIdx = i;
       break;
@@ -927,8 +956,6 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
   if (firstIdx < 0) return { ingredientLines, stepLines };
 
   const moveBlock = tail.slice(firstIdx).map(normSpaces).filter(Boolean);
-
-  // On recolle les fragments (100 / de beurre de / cacahuete)
   const joinedMoveBlock = joinWrappedLinesForIngredients(moveBlock);
 
   const newStepLines = stepLines.slice(0, start + firstIdx);
@@ -938,13 +965,104 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
 }
 
 /* =========================
+   PATCH: split "double ingredient sur une ligne"
+========================= */
+
+function splitCompoundIngredientLine(line) {
+  const l = normSpaces(line);
+
+  // ex: "100 g de chocolat noir 100 de beurre de cacahuete"
+  const m = l.match(
+    /^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s*(?:de\s+|d['’]\s*)(.+?)\s+(\d{1,4})\s*(?:de\s+|d['’]\s*)(.+)$/i
+  );
+  if (!m) return null;
+
+  const qty1 = m[1];
+  const unit = m[2];
+  const name1 = m[3];
+  const qty2 = m[4];
+  const name2 = m[5];
+
+  // safety: si la 2e partie ressemble à une étape, on ne split pas
+  if (looksLikeStepLine(name2)) return null;
+
+  return [`${qty1} ${unit} de ${name1}`, `${qty2} ${unit} de ${name2}`];
+}
+
+function expandCompoundIngredientLines(lines) {
+  const out = [];
+  for (const line of lines) {
+    const split = splitCompoundIngredientLine(line);
+    if (split) out.push(...split);
+    else out.push(line);
+  }
+  return out;
+}
+
+/* =========================
+   PATCH: récupérer fragments ingrédient perdus dans notes
+_profite de isIngredientFragmentLine + joinWrappedLinesForIngredients
+========================= */
+
+function salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines }) {
+  const keepNotes = [];
+  const frags = [];
+
+  for (const l of notesLines) {
+    const t = normSpaces(l);
+    if (!t) continue;
+
+    if (isUnitToken(t) || isIngredientFragmentLine(t)) frags.push(t);
+    else keepNotes.push(t);
+  }
+
+  if (frags.length === 0) return { ingredientLines, notesLines };
+
+  const joined = joinWrappedLinesForIngredients(frags);
+
+  for (const j0 of joined) {
+    const j = normSpaces(j0);
+
+    // cas: "100 g de beurre de cacahuete ..." + reste "grillees concassees ..."
+    const m = j.match(
+      /^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s+de\s+beurre\s+de\s+cacahu[eé]te\s+(.+)$/i
+    );
+
+    if (m) {
+      const qty = m[1];
+      const unit = m[2];
+      const tail = normSpaces(m[3]);
+
+      ingredientLines.push(`${qty} ${unit} de beurre de cacahuete`);
+
+      // rattache le tail aux cacahuètes si possible
+      const idxPeanuts = ingredientLines.findIndex((x) => /\bcacahu[eé]tes?\b/i.test(normSpaces(x)));
+      if (idxPeanuts >= 0 && tail) {
+        ingredientLines[idxPeanuts] = normSpaces(`${ingredientLines[idxPeanuts]} ${tail}`);
+      } else if (tail) {
+        keepNotes.push(tail);
+      }
+      continue;
+    }
+
+    // sinon si ça ressemble à une vraie ligne ingrédient, on l'ajoute
+    if (parseOcrIngredient(j) || /^\d{1,4}\s*(?:kg|g|mg|l|dl|cl|ml)\b/i.test(j)) {
+      ingredientLines.push(j);
+    } else {
+      keepNotes.push(j);
+    }
+  }
+
+  return { ingredientLines, notesLines: keepNotes };
+}
+
+/* =========================
    SPLIT (ingredients vs steps)
 ========================= */
 
 function splitIngredientsAndSteps(lines) {
   const L = lines.map(normSpaces).filter(Boolean);
 
-  // servings
   let servings = null;
   for (const l of L.slice(0, 50)) {
     const s = extractServingsFromLine(l);
@@ -976,7 +1094,6 @@ function splitIngredientsAndSteps(lines) {
         continue;
       }
 
-      // ✅ B) si on a une étape numérotée, et la ligne suivante est une continuation => on est en steps
       if (!inSteps && (looksLikeStepLine(l) || looksLikeStepContinuation(prev, l))) inSteps = true;
 
       if (inSteps) stepLines.push(l);
@@ -1018,7 +1135,6 @@ function splitIngredientsAndSteps(lines) {
           continue;
         }
 
-        // ✅ B) bascule en steps aussi sur continuation d’étape numérotée
         if (looksLikeStepLine(l) || looksLikeStepVerbLine(l) || looksLikeStepContinuation(prev, l)) {
           inSteps = true;
           stepLines.push(l);
@@ -1046,10 +1162,17 @@ function splitIngredientsAndSteps(lines) {
   ingredientLines = ingredientLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
   notesLines = notesLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
 
-  // ✅ C) retire un bloc ingrédients en fin de steps (cas image ingrédients après étapes)
   const moved = extractTrailingIngredientBlock({ ingredientLines, stepLines });
   ingredientLines = moved.ingredientLines;
   stepLines = moved.stepLines;
+
+  // ✅ PATCH: split des lignes "double ingrédient"
+  ingredientLines = expandCompoundIngredientLines(ingredientLines);
+
+  // ✅ PATCH: récupérer fragments ingrédient perdus dans notes (ex: 100 / g / de beurre de / cacahuete / grillees...)
+  const salvaged = salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines });
+  ingredientLines = salvaged.ingredientLines;
+  notesLines = salvaged.notesLines;
 
   return { ingredientLines, stepLines, notesLines, servings };
 }
