@@ -18,6 +18,23 @@ function stripWeird(s) {
    TRASH / NOISE (iPhone + Social)
 ========================= */
 
+function looksLikeBookRefNoise(line) {
+  const t = normSpaces(line).toLowerCase();
+  return /\bvoir\s+p\.?\s*\d+\b/.test(t);
+}
+
+// Exemple: "Préparation : 45 min ... 304"
+function stripTrailingPageNumber(line) {
+  let t = normSpaces(line);
+
+  // retire un numéro final si le texte contient un marqueur de temps
+  if (/\b(préparation|preparation|cuisson|min)\b/i.test(t)) {
+    t = t.replace(/\s+\d{2,4}\s*$/g, '');
+  }
+
+  return normSpaces(t);
+}
+
 function looksLikeStatusBarNoise(line) {
   const t = normSpaces(line);
 
@@ -180,6 +197,51 @@ function dedupeLines(lines) {
   return out;
 }
 
+/**
+ * PATCH OCR (livres papier)
+ *
+ * Recolle les mots coupés par un retour à la ligne avec tiret,
+ * typiquement présents dans les livres imprimés en colonnes.
+ *
+ * Exemple OCR :
+ *   "pâte feuille-"
+ *   "tée"
+ *
+ * Devient :
+ *   "pâte feuilletée"
+ *
+ * Règle :
+ * - si la ligne précédente se termine par "-"
+ * - et que la ligne suivante commence par une lettre
+ * alors :
+ * - suppression du tiret
+ * - concaténation des deux lignes
+ *
+ * Ce patch est volontairement conservateur :
+ * - ne touche pas aux phrases complètes
+ * - ne recolle pas chiffres ou unités
+ * - s'applique avant toute détection ingrédients / étapes
+ */
+function mergeHyphenWrappedLines(lines) {
+  const out = [];
+  for (const raw of lines) {
+    const line = normSpaces(raw);
+    if (!line) continue;
+
+    const prev = out.length ? out[out.length - 1] : '';
+
+    // Si la ligne précédente finit par "-" et que la suivante commence par une lettre,
+    // on recolle : "feuille-" + "tée" => "feuilletée"
+    if (prev && /-$/.test(prev) && /^[a-zà-öø-ÿ]/i.test(line)) {
+      out[out.length - 1] = normSpaces(prev.replace(/-$/, '') + line);
+      continue;
+    }
+
+    out.push(line);
+  }
+  return out;
+}
+
 /* =========================
    CLEAN + TRASH
 ========================= */
@@ -187,15 +249,17 @@ function dedupeLines(lines) {
 function smartFilterWithTrashFromText(rawText) {
   const cleaned = stripWeird(rawText);
 
-  const rawLines = cleaned
-    .split('\n')
-    .map((s) => normSpaces(s))
-    .filter(Boolean);
+  let rawLines = cleaned.split('\n').map((s) => normSpaces(s)).filter(Boolean);
+
+  // ✅ LIVRE: recolle les mots coupés par "-"
+  rawLines = mergeHyphenWrappedLines(rawLines);
 
   const lines = [];
   const trash = [];
 
-  for (const l of rawLines) {
+  for (let l of rawLines) {
+    l = stripTrailingPageNumber(l);
+
     if (isMostlyNoise(l)) {
       trash.push(l);
       continue;
@@ -206,6 +270,11 @@ function smartFilterWithTrashFromText(rawText) {
     }
     // ✅ A) date => trash
     if (looksLikeDateNoise(l)) {
+      trash.push(l);
+      continue;
+    }
+    // ✅ ref livre "voir p. 112" => trash
+    if (looksLikeBookRefNoise(l)) {
       trash.push(l);
       continue;
     }
@@ -240,6 +309,10 @@ function extractServingsFromLine(line) {
 
   m = t.match(/\bpour\s+(\d+)\s*(personnes|parts|portions)\b/i);
   if (m) return parseInt(m[1], 10);
+
+  // ✅ "Pour 4-6 personnes" / "pour 4 à 6 portions"
+  m = t.match(/\bpour\s+(\d+)\s*(?:-|à|a)\s*(\d+)\s*(personnes|parts|portions)\b/i);
+  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
 
   // "Pour 6 personnes, il vous faut :"
   m = t.match(/\bpour\s+(\d+)\s*personnes?\b.*\bil\b.*\bfaut\b/i);
@@ -278,6 +351,14 @@ function looksLikeStepVerbLine(line) {
   if (!t) return false;
 
   return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer)\b/i.test(
+    t
+  );
+}
+
+function looksLikeActionSentence(line) {
+  const t = normSpaces(line).toLowerCase();
+  // verbes / tournures typiques d'étapes
+  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|détailler|dorer|déposer|fendre|farci[er]|passer)\b/i.test(
     t
   );
 }
@@ -323,13 +404,17 @@ function joinWrappedLinesForSteps(stepLines) {
     const line = normSpaces(raw);
     if (!line) continue;
 
-    if (isPreparationHeader(line)) {
+    // ✅ Livre: certaines lignes commencent par un bout de parenthèse "du commerce)."
+    const cleanedLine = line.replace(/^du commerce\)\.?\s*/i, '');
+    if (!cleanedLine) continue;
+
+    if (isPreparationHeader(cleanedLine)) {
       flush();
       continue;
     }
 
     if (!buffer) {
-      buffer = line;
+      buffer = cleanedLine;
       continue;
     }
 
@@ -337,20 +422,37 @@ function joinWrappedLinesForSteps(stepLines) {
     const endsConnector = /\b(à|a|au|aux|de|d|d'|d’|des|du|sous|sur|puis|et)\s*$/i.test(buffer);
 
     const nextLooksContinuation =
-      /^[a-zà-öø-ÿ’'"(]/.test(line) ||
-      /^\d/.test(line) ||
-      /^l['’]/i.test(line) ||
-      /^(puis|et|ensuite|alors|donc)\b/i.test(line);
+      /^[a-zà-öø-ÿ’'"(]/.test(cleanedLine) ||
+      /^\d/.test(cleanedLine) ||
+      /^l['’]/i.test(cleanedLine) ||
+      /^(puis|et|ensuite|alors|donc)\b/i.test(cleanedLine);
 
     if ((!endsStrong && nextLooksContinuation) || endsConnector) {
-      buffer = `${buffer} ${line}`;
+      buffer = `${buffer} ${cleanedLine}`;
     } else {
       flush();
-      buffer = line;
+      buffer = cleanedLine;
     }
   }
 
   flush();
+  return out;
+}
+
+function splitLongSteps(steps) {
+  const out = [];
+  for (const s of steps) {
+    const t = normSpaces(s);
+    if (t.length < 260) {
+      out.push(t);
+      continue;
+    }
+
+    // split basique sur ". " si on a plusieurs phrases
+    const parts = t.split(/(?<=\.)\s+/).map(normSpaces).filter(Boolean);
+    if (parts.length >= 2) out.push(...parts);
+    else out.push(t);
+  }
   return out;
 }
 
@@ -412,7 +514,8 @@ function normalizeUnit(u) {
   if (['l', 'litre', 'litres'].includes(t)) return 'l';
 
   if (t === 'cas' || t === 'càs' || t === 'cs' || (t.includes('cuill') && t.includes('soupe'))) return 'càs';
-  if (t === 'cac' || t === 'càc' || t === 'cc' || (t.includes('cuill') && (t.includes('cafe') || t.includes('café')))) return 'càc';
+  if (t === 'cac' || t === 'càc' || t === 'cc' || (t.includes('cuill') && (t.includes('cafe') || t.includes('café'))))
+    return 'càc';
 
   if (t.includes('pinc')) return 'pincée';
   if (t.includes('gousse')) return 'gousse';
@@ -447,15 +550,31 @@ function postProcessIngredientName(name) {
   n = n.replace(/\bDelico\b/gi, '');
   n = n.replace(/\bRecettes?\s+Délice\b/gi, '');
   n = n.replace(/\bRecettes?\s+Delice\b/gi, '');
+
   return normSpaces(n);
 }
 
 // micro-fix OCR : parfois "1 l de lait" => "11 de lait"
 function fixCommonOcrQuantityUnitBugs(rawLine) {
   let s = normSpaces(rawLine);
+
+  // ✅ Normalise "c. à soupe" => "càs"
+  s = s.replace(/\bc\.\s*à\s*soupe\b/gi, 'càs');
+  s = s.replace(/\bc\s*à\s*soupe\b/gi, 'càs');
+  s = s.replace(/\bc\.\s*a\s*soupe\b/gi, 'càs'); // OCR sans accent
+
+  // ✅ Normalise "c. à café" => "càc"
+  s = s.replace(/\bc\.\s*à\s*caf[ée]\b/gi, 'càc');
+  s = s.replace(/\bc\s*à\s*caf[ée]\b/gi, 'càc');
+  s = s.replace(/\bc\.\s*a\s*caf[ée]\b/gi, 'càc');
+
+  // ✅ Livre: supprime "(voir p. 112)" et variantes dans une ligne
+  s = s.replace(/\(.*?\bvoir\s+p\.?\s*\d+.*?\)/gi, '');
+  s = s.replace(/\bvoir\s+p\.?\s*\d+\b/gi, '');
+
   // ✅ PATCH OCR: parfois l'unité passe avant la quantité : "g 100 de ..." => "100 g de ..."
   // couvre g/kg/mg/ml/cl/dl/l
-  s = s.replace(/^(kg|g|mg|ml|cl|dl|l)\s+(\d+(?:[.,]\d+)?)\s+(de|d['’])\b/i,'$2 $1 $3');
+  s = s.replace(/^(kg|g|mg|ml|cl|dl|l)\s+(\d+(?:[.,]\d+)?)\s+(de|d['’])\b/i, '$2 $1 $3');
   s = s.replace(/\b11\s+(de|d['’])\s*(lait|eau|crème|creme)\b/i, '1 l $1 $2');
   s = s.replace(/\b1l\b/gi, '1 l');
   s = s.replace(/^[·•\.\,\;\:\-–—]+\s*/g, '');
@@ -533,6 +652,21 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qty ?? 0, unit: unit || '' };
   }
 
+  // ✅ Quantité + nom sans unité : "1/2 blanc de poireau"
+  // Attention : on évite les temps "10 min", "5 minutes"
+  m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));
+  if (m) {
+    const qty = parseQuantityFR(m[1]);
+    let name = postProcessIngredientName(m[2]);
+
+    if (/^(min|mins|minute|minutes)\b/i.test(name)) return null;
+
+    // si le nom ressemble à une étape, on ne le prend pas
+    if (looksLikeActionSentence(name) || looksLikeStepVerbLine(name) || looksLikeStepLine(name)) return null;
+
+    if (name) return { name, quantity: qty ?? 0, unit: 'pièce' };
+  }
+
   m = l.match(/^(\d+)\s+(.+)$/);
   if (m) {
     const qty = parseQuantityFR(m[1]);
@@ -544,7 +678,7 @@ function parseOcrIngredient(line) {
 }
 
 function beautifyIngredients(items) {
-   // ✅ PATCH: si l'OCR colle "grillées concassées" (et/ou "Recettes Délice") au beurre de cacahuète,
+  // ✅ PATCH: si l'OCR colle "grillées concassées" (et/ou "Recettes Délice") au beurre de cacahuète,
   // on nettoie le beurre et on rattache les qualificatifs aux cacahuètes.
   const list = Array.isArray(items) ? items.map((x) => ({ ...x })) : [];
 
@@ -577,7 +711,8 @@ function beautifyIngredients(items) {
         list[idxPeanuts].name = normSpaces(`${pn} ${tail}`);
       }
     }
-  }  
+  }
+
   const out = [];
   const seen = new Set();
 
@@ -608,6 +743,19 @@ function cleanTitleCandidate(t) {
   s = normSpaces(s);
   s = s.replace(/[.!?…]+$/g, '');
   return normSpaces(s);
+}
+
+function isMostlyUppercaseTitle(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+  if (t.length < 6 || t.length > 80) return false;
+  if (/\d/.test(t)) return false;
+
+  const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
+  if (!letters) return false;
+
+  const upp = (t.match(/[A-ZÀ-ÖØ-Þ]/g) || []).length;
+  return upp / letters >= 0.7; // 70% majuscules
 }
 
 // ✅ nettoie un titre détecté (coupe "... Afficher la suite")
@@ -731,7 +879,15 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     if (/\d/.test(t)) continue;
 
     const hasUpper = /[A-ZÀ-ÖØ-Þ]/.test(t);
-    candidates.push({ t, score: (hasUpper ? 10 : 0) + (maxScan - i) });
+    const capsBonus = isMostlyUppercaseTitle(t) ? 80 : 0;
+
+    // évite les titres qui finissent comme une demi-phrase ("... et", "... de", etc.)
+    if (/\b(et|de|d['’]|du|des|à|a)\s*$/i.test(t)) continue;
+
+    candidates.push({
+      t,
+      score: capsBonus + (hasUpper ? 10 : 0) + (maxScan - i),
+    });
   }
 
   if (candidates.length === 0) return null;
@@ -859,6 +1015,9 @@ function isIngredientFragmentLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
 
+  // ✅ Ne pas traiter comme "fragment ingrédient" une phrase d'action (sinon ça colle des étapes aux ingrédients)
+  if (looksLikeActionSentence(t) || looksLikeStepVerbLine(t) || looksLikeStepLine(t)) return false;
+
   if (/^\d{1,4}$/.test(t)) return true;
   if (/^(de|d['’])\b/i.test(t)) return true;
   if (/^(kg|g|mg|l|dl|cl|ml)\b/i.test(t)) return true;
@@ -924,11 +1083,7 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
     if (isIngredientsHeader(l) || isPreparationHeader(l)) continue;
 
     const parsed = parseOcrIngredient(l);
-    const like =
-      !!parsed ||
-      isIngredientFragmentLine(l) ||
-      isUnitToken(l) ||
-      /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
+    const like = !!parsed || isIngredientFragmentLine(l) || isUnitToken(l) || /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
 
     if (like) {
       ingredientLikeCount++;
@@ -942,11 +1097,7 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
   for (let i = 0; i <= lastIngredientLikeIdx; i++) {
     const l = normSpaces(tail[i]);
     const parsed = parseOcrIngredient(l);
-    const like =
-      !!parsed ||
-      isIngredientFragmentLine(l) ||
-      isUnitToken(l) ||
-      /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
+    const like = !!parsed || isIngredientFragmentLine(l) || isUnitToken(l) || /^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(l);
     if (like) {
       firstIdx = i;
       break;
@@ -972,9 +1123,7 @@ function splitCompoundIngredientLine(line) {
   const l = normSpaces(line);
 
   // ex: "100 g de chocolat noir 100 de beurre de cacahuete"
-  const m = l.match(
-    /^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s*(?:de\s+|d['’]\s*)(.+?)\s+(\d{1,4})\s*(?:de\s+|d['’]\s*)(.+)$/i
-  );
+  const m = l.match(/^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s*(?:de\s+|d['’]\s*)(.+?)\s+(\d{1,4})\s*(?:de\s+|d['’]\s*)(.+)$/i);
   if (!m) return null;
 
   const qty1 = m[1];
@@ -991,17 +1140,27 @@ function splitCompoundIngredientLine(line) {
 
 function expandCompoundIngredientLines(lines) {
   const out = [];
+
   for (const line of lines) {
-    const split = splitCompoundIngredientLine(line);
+    const t = normSpaces(line);
+
+    // ✅ "sel, poivre" / "sel et poivre" => deux lignes
+    if (/^sel\s*,\s*poivre$/i.test(t) || /^sel\s+et\s+poivre$/i.test(t)) {
+      out.push('sel');
+      out.push('poivre');
+      continue;
+    }
+
+    const split = splitCompoundIngredientLine(t);
     if (split) out.push(...split);
-    else out.push(line);
+    else out.push(t);
   }
+
   return out;
 }
 
 /* =========================
    PATCH: récupérer fragments ingrédient perdus dans notes
-_profite de isIngredientFragmentLine + joinWrappedLinesForIngredients
 ========================= */
 
 function salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines }) {
@@ -1024,9 +1183,7 @@ function salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines }) {
     const j = normSpaces(j0);
 
     // cas: "100 g de beurre de cacahuete ..." + reste "grillees concassees ..."
-    const m = j.match(
-      /^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s+de\s+beurre\s+de\s+cacahu[eé]te\s+(.+)$/i
-    );
+    const m = j.match(/^(\d{1,4})\s*(kg|g|mg|l|dl|cl|ml)\s+de\s+beurre\s+de\s+cacahu[eé]te\s+(.+)$/i);
 
     if (m) {
       const qty = m[1];
@@ -1054,6 +1211,51 @@ function salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines }) {
   }
 
   return { ingredientLines, notesLines: keepNotes };
+}
+
+/**
+ * PATCH OCR (reclassement final)
+ *
+ * Sur certaines sources (livres, scans), l'OCR mélange des morceaux :
+ * - des phrases d'action (étapes) peuvent finir dans "ingrédients" ou "notes"
+ * - à cause de coupures de ligne, de "d’..." en début de phrase, etc.
+ *
+ * Cette fonction fait un dernier passage "sécurisé" :
+ * - si une ligne ressemble fortement à une étape (verbe / action), on la déplace vers stepLines
+ * - sinon on la laisse dans son bloc d'origine
+ *
+ * Objectif : éviter d'avoir des étapes dans la liste ingrédients / notes, sans casser les imports déjà bons.
+ */
+function rebalanceMisplacedLines({ ingredientLines, stepLines, notesLines }) {
+  const newIng = [];
+  const newSteps = [...stepLines];
+  const newNotes = [];
+
+  function isLikelyStep(line) {
+    const t = normSpaces(line);
+    if (!t) return false;
+    return looksLikeActionSentence(t) || looksLikeStepVerbLine(t) || looksLikeStepLine(t);
+  }
+
+  for (const l of ingredientLines) {
+    const t = normSpaces(l);
+    if (!t) continue;
+
+    // si ça ressemble à une étape, on le sort des ingrédients
+    if (isLikelyStep(t)) newSteps.push(t);
+    else newIng.push(t);
+  }
+
+  for (const l of notesLines) {
+    const t = normSpaces(l);
+    if (!t) continue;
+
+    // si c'est une étape, on la remonte dans steps
+    if (isLikelyStep(t)) newSteps.push(t);
+    else newNotes.push(t);
+  }
+
+  return { ingredientLines: newIng, stepLines: newSteps, notesLines: newNotes };
 }
 
 /* =========================
@@ -1166,13 +1368,22 @@ function splitIngredientsAndSteps(lines) {
   ingredientLines = moved.ingredientLines;
   stepLines = moved.stepLines;
 
-  // ✅ PATCH: split des lignes "double ingrédient"
+  // ✅ PATCH: split des lignes "double ingrédient" + "sel/poivre"
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
 
-  // ✅ PATCH: récupérer fragments ingrédient perdus dans notes (ex: 100 / g / de beurre de / cacahuete / grillees...)
+  // ✅ PATCH: récupérer fragments ingrédient perdus dans notes
   const salvaged = salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines });
   ingredientLines = salvaged.ingredientLines;
   notesLines = salvaged.notesLines;
+
+  // ✅ POST: déplace les phrases d'action mal classées vers "steps"
+  const rebalanced = rebalanceMisplacedLines({ ingredientLines, stepLines, notesLines });
+  ingredientLines = rebalanced.ingredientLines;
+  stepLines = rebalanced.stepLines;
+  notesLines = rebalanced.notesLines;
+
+  // ✅ POST: découpe les étapes trop longues (meilleure UX + évite "une étape géante")
+  stepLines = splitLongSteps(stepLines);
 
   return { ingredientLines, stepLines, notesLines, servings };
 }
