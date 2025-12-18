@@ -309,6 +309,10 @@ function extractServingsFromLine(line) {
   m = t.match(/\bpour\s+(\d+)\s*personnes?\b.*\bil\b.*\bfaut\b/i);
   if (m) return parseInt(m[1], 10);
 
+  // ✅ Facebook: "Portions : Environ 16 mini croques"
+  m = t.match(/\bportions?\s*[:\-–—]?\s*(?:environ\s*)?(\d+)\b/i);
+  if (m) return parseInt(m[1], 10);
+
   return null;
 }
 
@@ -331,17 +335,16 @@ function looksLikeTimeInfoLine(line) {
 
   // Exemples acceptés :
   // "Préparation : 45 min" / "preparation 45 min"
-  // "Cuisson : 20 min" / "cuisson 1 h 10"
-  // "Temps de préparation 15 min"
+  // "Cuisson : 20 minutes"
+  // "Temps de préparation 15 minutes"
   const hasKeyword = /\b(préparation|preparation|cuisson|temps\s+de\s+préparation|temps\s+de\s+cuisson)\b/i.test(t);
   if (!hasKeyword) return false;
 
-  // un nombre + (min|mn|h|heure|heures)
-  const hasDuration = /\b\d+\s*(min|mn|h|heure|heures)\b/i.test(t);
+  // ✅ PATCH: accepte "minute(s)" en plus de "min"
+  const hasDuration = /\b\d+\s*(min|mn|mns|minute|minutes|h|heure|heures)\b/i.test(t);
 
   return hasDuration;
 }
-
 
 /* =========================
    STEP / INGREDIENT HEURISTICS
@@ -356,7 +359,7 @@ function looksLikeStepVerbLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
 
-  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser)\b/i.test(
+  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez)\b/i.test(
     t
   );
 }
@@ -388,7 +391,13 @@ function looksLikeStepContinuation(prevLine, line) {
 
   if (!looksLikeStepNumberedLine(prev)) return false;
 
-  return /^(le|la|les|l['’]|un|une|des|du|de|d['’]|au|aux|et|puis|ensuite|à|a)\b/i.test(cur);
+  // ✅ continuation classique
+  if (/^(le|la|les|l['’]|un|une|des|du|de|d['’]|au|aux|et|puis|ensuite|à|a)\b/i.test(cur)) return true;
+
+  // ✅ Facebook: "recouverte..." / "immédiatement." après une étape numérotée
+  if (/^[a-zà-öø-ÿ]/.test(cur)) return true;
+
+  return false;
 }
 
 /* =========================
@@ -626,6 +635,9 @@ function fixCommonOcrQuantityUnitBugs(rawLine) {
 function parseOcrIngredient(line) {
   const raw0 = normSpaces(line);
   if (!raw0) return null;
+
+  // ✅ bruit OCR fréquent : "Og" / "0g" isolé
+  if (/^o[gq]$/i.test(raw0) || /^0\s*g$/i.test(raw0)) return null;
 
   const raw = fixCommonOcrQuantityUnitBugs(raw0);
 
@@ -1328,6 +1340,27 @@ function rebalanceMisplacedLines({ ingredientLines, stepLines, notesLines }) {
   return { ingredientLines: newIng, stepLines: newSteps, notesLines: newNotes };
 }
 
+/* =========================
+   ✅ NEW: Variantes => Notes
+========================= */
+
+function moveVariantsBlockToNotes({ stepLines, notesLines }) {
+  const steps = Array.isArray(stepLines) ? stepLines : [];
+  const notes = Array.isArray(notesLines) ? notesLines : [];
+
+  const idx = steps.findIndex((l) => /^variantes?\s*:/i.test(normSpaces(l)));
+  if (idx < 0) return { stepLines: steps, notesLines: notes };
+
+  const moved = steps.slice(idx);
+  const kept = steps.slice(0, idx);
+
+  return { stepLines: kept, notesLines: [...notes, ...moved] };
+}
+
+/* =========================
+   SPLIT INGREDIENTS / STEPS / NOTES
+========================= */
+
 function splitIngredientsAndSteps(lines) {
   const L = lines.map(normSpaces).filter(Boolean);
 
@@ -1351,14 +1384,34 @@ function splitIngredientsAndSteps(lines) {
     ingredientLines = L.slice(idxIng + 1, idxPrep);
     stepLines = L.slice(idxPrep, L.length);
   } else if (idxIng >= 0) {
+    // ✅ Tout ce qui est AVANT "Ingrédients" => meta (notes + servings potentiels)
+    const head = L.slice(0, idxIng).map(normSpaces).filter(Boolean);
+    for (const h of head) {
+      const s = extractServingsFromLine(h);
+      if (s && !servings) servings = s;
+
+      if (looksLikeTimeInfoLine(h)) {
+        notesLines.push(h);
+        continue;
+      }
+
+      // garde d'autres lignes utiles (ex: "Variantes :" parfois)
+      if (/^variantes?\b/i.test(h)) {
+        notesLines.push(h);
+        continue;
+      }
+    }
+
     const tail = L.slice(idxIng + 1);
     let inSteps = false;
     let prev = '';
 
     for (const l of tail) {
       if (!l) continue;
-      
+
       if (isIngredientsHeader(l) || extractServingsFromLine(l)) {
+        const s = extractServingsFromLine(l);
+        if (s && !servings) servings = s;
         prev = l;
         continue;
       }
@@ -1379,12 +1432,14 @@ function splitIngredientsAndSteps(lines) {
     for (const l0 of L) {
       const l = normSpaces(l0);
       if (!l) continue;
+
       // ✅ Temps préparation/cuisson => Notes (pas ingrédients, pas étapes)
       if (looksLikeTimeInfoLine(l)) {
-      notesLines.push(l);
-      prev = l;
-      continue;
+        notesLines.push(l);
+        prev = l;
+        continue;
       }
+
       if (isIngredientsHeader(l)) {
         afterServingsHeader = true;
         inIngredientBullets = true;
@@ -1455,6 +1510,11 @@ function splitIngredientsAndSteps(lines) {
   stepLines = rebalanced.stepLines;
   notesLines = rebalanced.notesLines;
 
+  // ✅ NEW: si "Variantes :" est dans les steps => on bascule le bloc dans notes
+  const movedVar = moveVariantsBlockToNotes({ stepLines, notesLines });
+  stepLines = movedVar.stepLines;
+  notesLines = movedVar.notesLines;
+
   stepLines = joinWrappedLinesForSteps(stepLines);
   stepLines = splitLongSteps(stepLines);
 
@@ -1476,3 +1536,6 @@ module.exports = {
   extractServingsFromLine,
   miniReflow,
 };
+
+
+

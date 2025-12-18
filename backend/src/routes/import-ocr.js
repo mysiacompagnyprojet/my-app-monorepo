@@ -23,27 +23,34 @@ try {
 }
 
 function stripBulletPrefix(s) {
-  return String(s || '').trim().replace(/^[•·⚫●○◦\-\*]+\s*/g, '').trim();
+  return String(s || '')
+    .trim()
+    .replace(/^[•·⚫●○◦\-\*]+\s*/g, '')
+    .trim();
 }
 
-// Split ligne "épices" si:
-// - pas de quantité au début
-// - contient des virgules
-// - et ressemble à une liste (épices/condiments)
+/**
+ * Split ligne "épices" si:
+ * - pas de quantité au début
+ * - contient des virgules
+ * - et ressemble à une liste
+ *
+ * ✅ Retourne des objets { text, noQtyList } pour savoir si on doit FORCER quantity=0
+ */
 function splitCommaSeparatedNoQty(line) {
   const raw = stripBulletPrefix(line);
-  if (!raw) return [line];
+  if (!raw) return [{ text: line, noQtyList: false }];
 
   // si ça commence par une quantité => on ne split pas
   if (/^\s*(\d+([.,]\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)\b/.test(raw)) {
-    return [line];
+    return [{ text: line, noQtyList: false }];
   }
 
   // doit contenir une virgule
-  if (!raw.includes(',')) return [line];
+  if (!raw.includes(',')) return [{ text: line, noQtyList: false }];
 
   // évite de splitter des phrases longues (trop risqué)
-  if (raw.length > 70) return [line];
+  if (raw.length > 70) return [{ text: line, noQtyList: false }];
 
   // Split par virgule + " et " + "&"
   const parts = raw
@@ -60,16 +67,17 @@ function splitCommaSeparatedNoQty(line) {
     .filter(Boolean);
 
   // si on obtient au moins 2 items, on split
-  if (parts.length >= 2) return parts;
+  if (parts.length >= 2) return parts.map((p) => ({ text: p, noQtyList: true }));
 
-  return [line];
+  return [{ text: line, noQtyList: false }];
 }
 
 function looksLikeStepTitle(t) {
   const s = String(t || '').trim();
   if (!s) return false;
-  // commence par un verbe d'action fréquent (ou un tiret)
-  return /^[-•*]?\s*(égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver)\b/i.test(s);
+  return /^[-•*]?\s*(égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger)\b/i.test(
+    s
+  );
 }
 
 function inferTitleFromContent(ingredientsRows, stepsArr) {
@@ -88,7 +96,6 @@ function inferTitleFromContent(ingredientsRows, stepsArr) {
 
   return null;
 }
-
 
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
@@ -115,7 +122,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     let lines = filtered.lines;
 
     const split = splitIngredientsAndSteps(lines);
-
     lines = miniReflow(split);
 
     let title = guessTitleFromLines(lines) || 'Recette importée';
@@ -123,10 +129,26 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     let servings = split.servings || 1;
     if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
+    // ---------- INGREDIENTS ----------
     const ingredients = beautifyIngredients(
       (split.ingredientLines || [])
-          .flatMap((l) => splitCommaSeparatedNoQty(l))
-          .map((l) => {
+        .flatMap((l) => splitCommaSeparatedNoQty(l))
+        .map((obj) => {
+          const l = String(obj?.text || '').trim();
+          if (!l) return null;
+
+          // ✅ si ça vient d'une liste "sans quantité" (épices, condiments), on force quantity=0
+          if (obj.noQtyList) {
+            const name = stripBulletPrefix(l);
+            if (!name) return null;
+
+            // sel/poivre => 0
+            if (/^sel$/i.test(name)) return { name: 'sel', quantity: 0, unit: '' };
+            if (/^poivre$/i.test(name)) return { name: 'poivre', quantity: 0, unit: '' };
+
+            return { name, quantity: 0, unit: '' };
+          }
+
           const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
 
           if (!parsed) return { name: l, quantity: 0, unit: '' };
@@ -144,16 +166,23 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
           return row;
         })
-        .filter((x) => x && x.name && String(x.name).trim().length > 0)
+        .filter(Boolean)
     );
 
+    // ---------- STEPS ----------
     const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
-
     const steps = rawSteps
       .map((s) => String(s || '').trim())
       .filter((s) => s && s !== '•' && s !== '.' && s !== '·');
 
+    // ---------- NOTES ----------
     const notes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean).join('\n');
+
+    // ✅ Override titre si c'est clairement une étape (à faire AVANT draft)
+    if (looksLikeStepTitle(title)) {
+      const inferred = inferTitleFromContent(ingredients, steps);
+      if (inferred) title = inferred;
+    }
 
     const draft = {
       title,
@@ -164,11 +193,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       steps,
       trash: filtered.trash,
     };
-    // ✅ Override titre si c'est clairement une étape
-    if (looksLikeStepTitle(title)) {
-    const inferred = inferTitleFromContent(ingredients, steps);
-    if (inferred) title = inferred;
-    }
 
     if (isDebug) {
       return res.json({
@@ -200,4 +224,3 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 });
 
 module.exports = router;
-
