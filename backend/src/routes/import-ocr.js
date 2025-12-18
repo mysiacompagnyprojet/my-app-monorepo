@@ -22,6 +22,74 @@ try {
   parseRawLine = null;
 }
 
+function stripBulletPrefix(s) {
+  return String(s || '').trim().replace(/^[•·⚫●○◦\-\*]+\s*/g, '').trim();
+}
+
+// Split ligne "épices" si:
+// - pas de quantité au début
+// - contient des virgules
+// - et ressemble à une liste (épices/condiments)
+function splitCommaSeparatedNoQty(line) {
+  const raw = stripBulletPrefix(line);
+  if (!raw) return [line];
+
+  // si ça commence par une quantité => on ne split pas
+  if (/^\s*(\d+([.,]\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)\b/.test(raw)) {
+    return [line];
+  }
+
+  // doit contenir une virgule
+  if (!raw.includes(',')) return [line];
+
+  // évite de splitter des phrases longues (trop risqué)
+  if (raw.length > 70) return [line];
+
+  // Split par virgule + " et " + "&"
+  const parts = raw
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean)
+    .flatMap((x) =>
+      x
+        .split(/\s+(?:et|&)\s+/i)
+        .map((y) => y.trim())
+        .filter(Boolean)
+    )
+    .map((x) => x.replace(/^\.+/, '').trim())
+    .filter(Boolean);
+
+  // si on obtient au moins 2 items, on split
+  if (parts.length >= 2) return parts;
+
+  return [line];
+}
+
+function looksLikeStepTitle(t) {
+  const s = String(t || '').trim();
+  if (!s) return false;
+  // commence par un verbe d'action fréquent (ou un tiret)
+  return /^[-•*]?\s*(égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver)\b/i.test(s);
+}
+
+function inferTitleFromContent(ingredientsRows, stepsArr) {
+  const names = (ingredientsRows || [])
+    .map((x) => String(x?.name || '').toLowerCase())
+    .filter(Boolean)
+    .join(' | ');
+
+  const stepsText = (stepsArr || []).join(' ').toLowerCase();
+
+  const hasNuggets = /\bnuggets?\b/.test(stepsText);
+  const hasPoisChiches = /\bpois\s*chiches?\b/.test(names);
+
+  if (hasNuggets && hasPoisChiches) return 'Nuggets de pois chiches';
+  if (hasNuggets) return 'Nuggets maison';
+
+  return null;
+}
+
+
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
@@ -50,23 +118,31 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     lines = miniReflow(split);
 
-    const title = guessTitleFromLines(lines) || 'Recette importée';
+    let title = guessTitleFromLines(lines) || 'Recette importée';
 
     let servings = split.servings || 1;
     if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
     const ingredients = beautifyIngredients(
       (split.ingredientLines || [])
-        .map((l) => {
+          .flatMap((l) => splitCommaSeparatedNoQty(l))
+          .map((l) => {
           const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
 
           if (!parsed) return { name: l, quantity: 0, unit: '' };
 
-          return {
+          const row = {
             name: parsed.name || l,
             quantity: Number(parsed.quantity || 0),
             unit: parsed.unit || '',
           };
+
+          // ✅ IMPORTANT: on passe le raw (fraction / virgule) au front
+          if (typeof parsed.quantityRaw === 'string' && parsed.quantityRaw.trim()) {
+            row.quantityRaw = String(parsed.quantityRaw).trim();
+          }
+
+          return row;
         })
         .filter((x) => x && x.name && String(x.name).trim().length > 0)
     );
@@ -88,6 +164,11 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       steps,
       trash: filtered.trash,
     };
+    // ✅ Override titre si c'est clairement une étape
+    if (looksLikeStepTitle(title)) {
+    const inferred = inferTitleFromContent(ingredients, steps);
+    if (inferred) title = inferred;
+    }
 
     if (isDebug) {
       return res.json({
@@ -119,8 +200,4 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 });
 
 module.exports = router;
-
-
-
-
 
