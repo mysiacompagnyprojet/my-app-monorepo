@@ -145,6 +145,63 @@ function looksLikeSocialNoise(line) {
   return false;
 }
 
+function stripSocialHeaderPrefix(line) {
+  let t = normSpaces(line);
+
+  // "Publication de ..."
+  t = t.replace(/^publication\s+de\s+/i, '').trim();
+
+  // ✅ NEW: retire page name courant si collé devant le titre
+  // ex "Recettes et Délices Mini Croque-Monsieur Apéritif"
+  t = t.replace(/^recettes?\s*(?:et|&)\s*d[ée]lices?\b/i, '').trim();
+
+  // ✅ NEW: nettoyage emojis/pictos au bord
+  t = stripEdgeEmojisAndPunct(t);
+
+  return normSpaces(t);
+}
+
+// ✅ Facebook: "Publication de <Page>" parfois collé au titre
+//function stripSocialHeaderPrefix(line) {
+//  let t = normSpaces(line);
+
+  // Ex: "Publication de Recettes et Délices Mini Croque-Monsieur Apéritif"
+  // Ex: "Publication de Recettes et Délices" (seul) -> on n'en fera rien
+ // t = t.replace(/^publication\s+de\s+/i, '').trim();
+
+  // Si ça commence encore par un nom de page "Recettes et Délices" + le titre derrière,
+  // on ne peut pas connaître exactement où couper. On garde tout pour analyse,
+  // mais on filtrera ensuite avec "looksLikePlausibleTitleLine".
+ // return normSpaces(t);
+//}
+
+function looksLikePlausibleTitleLine(line) {
+  const t = cleanTitleCandidate(line);
+  if (!t) return false;
+
+  // pas un header/temps/servings
+  if (isIngredientsHeader(t)) return false;
+  if (isPreparationHeader(t)) return false;
+  if (extractServingsFromLine(t)) return false;
+  if (looksLikeTimeInfoLine(t)) return false;
+
+  // pas une étape / pas un ingrédient
+  if (looksLikeStepLine(t)) return false;
+  if (parseOcrIngredient(t)) return false;
+
+  // longueur réaliste, pas de digits
+  if (t.length < 6 || t.length > 90) return false;
+  if (/\d/.test(t)) return false;
+
+  // évite titres génériques
+  if (isGenericSiteTitle(t)) return false;
+
+  // doit contenir au moins une lettre
+  if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return false;
+
+  return true;
+}
+
 // ✅ helper unités seules (évite que "g" parte à la corbeille)
 function isUnitToken(line) {
   const t = normSpaces(line);
@@ -263,7 +320,21 @@ function smartFilterWithTrashFromText(rawText) {
       trash.push(l);
       continue;
     }
+
     if (looksLikeSocialNoise(l)) {
+      // ✅ tente de récupérer un titre collé à un header social (Facebook)
+      // Exemple: "Publication de <Page> Mini Croque-Monsieur Apéritif"
+    if (/^publication\s+de\s+/i.test(l)) {
+        const salvaged = stripSocialHeaderPrefix(l);
+
+        // Si après suppression du préfixe on obtient quelque chose de plausible,
+        // on garde au moins cette version "salvaged" dans les lignes.
+    if (looksLikePlausibleTitleLine(salvaged)) {
+          lines.push(salvaged);
+          continue;
+        }
+      }
+
       trash.push(l);
       continue;
     }
@@ -359,7 +430,7 @@ function looksLikeStepVerbLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
 
-  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez)\b/i.test(
+  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez|assaisonner|assaisonnez|étaler|étalez)\b/i.test(
     t
   );
 }
@@ -367,7 +438,7 @@ function looksLikeStepVerbLine(line) {
 // ✅ phrases d'action “sans numérotation”
 function looksLikeActionSentence(line) {
   const t = normSpaces(line).toLowerCase();
-  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser)\b/i.test(
+  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser|assaisonner)\b/i.test(
     t
   );
 }
@@ -449,6 +520,42 @@ function joinWrappedLinesForSteps(stepLines) {
   }
 
   flush();
+  return out;
+}
+
+// ✅ Split "phrases" dans une étape quand elle contient plusieurs phrases.
+// Objectif: éviter les lignes énormes type Facebook ("Étalez... Sur... Ajoutez... Recouvrez...").
+// On ne split que si:
+// - au moins 2 phrases (donc au moins 1 point suivi d'un espace)
+// - ET la ligne est assez longue (sinon on laisse tranquille)
+function splitStepsBySentences(steps) {
+  const out = [];
+
+  for (const s of steps || []) {
+    const t = normSpaces(s);
+    if (!t) continue;
+
+    // trop court => on ne touche pas
+    if (t.length < 140) {
+      out.push(t);
+      continue;
+    }
+
+    // On split sur ". " (point + espaces) en gardant le point.
+    const parts = t
+      .split(/(?<=\.)\s+/)
+      .map(normSpaces)
+      .filter(Boolean);
+
+    // si ça ne produit pas au moins 2 morceaux, on garde tel quel
+    if (parts.length < 2) {
+      out.push(t);
+      continue;
+    }
+
+    out.push(...parts);
+  }
+
   return out;
 }
 
@@ -796,14 +903,39 @@ function beautifyIngredients(items) {
    TITLE (avec fallback sur ingrédients)
 ========================= */
 
-// (le reste de ton fichier title + split etc. est inchangé)
+function stripEdgeEmojisAndPunct(s) {
+  let t = normSpaces(s);
+
+  // retire emojis/pictos au début/fin (sans toucher au texte au centre)
+  // (range large emojis + symboles fréquemment OCR)
+  t = t
+    .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
+    .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '')
+    .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
+
+  return normSpaces(t);
+}
+
 function cleanTitleCandidate(t) {
   let s = normSpaces(t);
-  s = s.replace(/^[·•\-\–—\*\.\,\;\:\s]+/g, '');
-  s = normSpaces(s);
+
+  // ✅ NEW: enlève emojis/pictos en bordure
+  s = stripEdgeEmojisAndPunct(s);
+
   s = s.replace(/[.!?…]+$/g, '');
+  s = stripEdgeEmojisAndPunct(s);
+
   return normSpaces(s);
 }
+// (le reste de ton fichier title + split etc. est inchangé)
+//function cleanTitleCandidate(t) {
+ // let s = normSpaces(t);
+ // s = s.replace(/^[·•\-\–—\*\.\,\;\:\s]+/g, '');
+ // s = normSpaces(s);
+ // s = s.replace(/[.!?…]+$/g, '');
+ // return normSpaces(s);
+//}
 
 function isMostlyUppercaseTitle(line) {
   const t = normSpaces(line);
@@ -1516,7 +1648,12 @@ function splitIngredientsAndSteps(lines) {
   notesLines = movedVar.notesLines;
 
   stepLines = joinWrappedLinesForSteps(stepLines);
+
+  // ✅ NEW: découpe en phrases si une ligne est longue et contient plusieurs phrases
+  stepLines = splitStepsBySentences(stepLines);
+
   stepLines = splitLongSteps(stepLines);
+
 
   return { ingredientLines, stepLines, notesLines, servings };
 }
