@@ -1,4 +1,5 @@
 'use client'
+
 import { useState } from 'react'
 import { apiFetch } from 'src/lib/api'
 import { useRouter } from 'next/navigation'
@@ -12,6 +13,7 @@ type RecipeDraft = {
   notes: string
   steps: string[]
   ingredients: Line[]
+  trash?: string[]
 }
 
 type ImportUrlResponse = { draft: RecipeDraft }
@@ -24,17 +26,22 @@ export default function ImportRecipePage() {
   const router = useRouter()
 
   async function importUrl() {
+    const cleanedUrl = url.trim()
+    if (!cleanedUrl) return
+
     setStatus('Import en cours...')
     try {
       const res = await apiFetch<ImportUrlResponse>('/import/url', {
         method: 'POST',
-        body: JSON.stringify({ url })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: cleanedUrl }),
       })
-      localStorage.setItem('recipe:draft', JSON.stringify(res.draft))
+
+      sessionStorage.setItem('recipeDraft', JSON.stringify(res.draft))
       setStatus('✅ Import OK')
-      router.push('/recipes/new')
+      router.push('/recipes/new?prefill=1')
     } catch (e: any) {
-      setStatus('❌ ' + e.message)
+      setStatus('❌ ' + (e?.message || 'Erreur'))
     }
   }
 
@@ -42,28 +49,35 @@ export default function ImportRecipePage() {
     if (!file) return
     setStatus('OCR en cours...')
 
-    const base = process.env.NEXT_PUBLIC_BACKEND_URL!
-    const token = localStorage.getItem('sb:token') || sessionStorage.getItem('sb:token') || ''
+    try {
+      const base = process.env.NEXT_PUBLIC_BACKEND_URL!
+      const token =
+        localStorage.getItem('sb:token') ||
+        sessionStorage.getItem('sb:token') ||
+        ''
 
-    const form = new FormData()
-    // Même pour 1 image : on envoie via "files" (format unique)
-    form.append('files', file)
+      const form = new FormData()
+      form.append('files', file)
 
-    const res = await fetch(`${base}/import/ocr`, {
-      method: 'POST',
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      body: form,
-    })
+      const res = await fetch(`${base}/import/ocr`, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        body: form,
+      })
 
-    if (!res.ok) {
-      setStatus('❌ ' + (await res.text()))
-      return
+      if (!res.ok) {
+        setStatus('❌ ' + (await res.text()))
+        return
+      }
+
+      const data: ImportOcrResponse = await res.json()
+
+      sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
+      setStatus('✅ OCR OK')
+      router.push('/recipes/new?prefill=1')
+    } catch (e: any) {
+      setStatus('❌ ' + (e?.message || 'Erreur'))
     }
-
-    const data: ImportOcrResponse = await res.json()
-    localStorage.setItem('recipe:draft', JSON.stringify(data.draft))
-    setStatus('✅ OCR OK')
-    router.push('/recipes/new')
   }
 
   return (
@@ -71,15 +85,31 @@ export default function ImportRecipePage() {
       <h1>Importer une recette</h1>
 
       <h3>Par URL</h3>
-      <input placeholder="https://..." value={url} onChange={e => setUrl(e.target.value)} />
-      <button onClick={importUrl}>Importer</button>
+      <input
+        placeholder="https://..."
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        style={{ width: '100%', padding: 8 }}
+      />
+      <div style={{ marginTop: 8 }}>
+        <button onClick={importUrl} disabled={!url.trim()}>
+          Importer
+        </button>
+      </div>
 
-      <h3>Par photo (OCR)</h3>
-      <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] || null)} />
-      <button onClick={importOcr} disabled={!file}>OCR</button>
+      <h3 style={{ marginTop: 18 }}>Par photo (OCR)</h3>
+      <input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setFile(e.target.files?.[0] || null)}
+      />
+      <div style={{ marginTop: 8 }}>
+        <button onClick={importOcr} disabled={!file}>
+          OCR
+        </button>
+      </div>
 
-      <p>{status}</p>
+      <p style={{ marginTop: 12 }}>{status}</p>
     </div>
   )
 }
-

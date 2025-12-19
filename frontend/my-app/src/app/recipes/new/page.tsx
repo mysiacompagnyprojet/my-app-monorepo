@@ -4,7 +4,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 
-type Line = { name: string; quantity: number; unit: string }
+type Line = { name: string; quantity: number; unit: string; quantityRaw?: string }
 
 type Draft = {
   title?: string
@@ -18,6 +18,9 @@ type Draft = {
 
 /* ──────────────────────────────────────────────────────────────
    Helpers quantité : accepte 1/4, 1 1/2, 1,2
+   IMPORTANT: on ne "jolifie" PAS 0.5 -> 1/2
+   - Si on a quantityRaw (ex: "1/2" ou "0,5"), on l’affiche.
+   - Sinon on affiche le nombre tel quel ("0.5", "0.75", etc.)
 ────────────────────────────────────────────────────────────── */
 
 function parseQtyInput(raw: string): number {
@@ -46,7 +49,10 @@ function parseQtyInput(raw: string): number {
   return Number.isFinite(n) ? n : 0
 }
 
-function formatQtyForInput(n: number): string {
+function formatQtyForInput(n: number, quantityRaw?: string): string {
+  // ✅ priorité à l’affichage exact OCR si fourni
+  if (typeof quantityRaw === 'string' && quantityRaw.trim()) return quantityRaw.trim()
+
   if (!Number.isFinite(n)) return ''
   if (n === 0) return ''
   return String(n)
@@ -87,23 +93,25 @@ function NewRecipeInner() {
 
       const ing = Array.isArray(d.ingredients) ? d.ingredients : []
       const normalized = ing
-  .map((row: any): Line | null => {
-    if (!row) return null
-    if (typeof row === 'string') return { name: row, quantity: 0, unit: '' }
-    if (row.raw) return { name: String(row.raw), quantity: 0, unit: '' }
+        .map((row: any): Line | null => {
+          if (!row) return null
+          if (typeof row === 'string') return { name: row, quantity: 0, unit: '' }
+          if (row.raw) return { name: String(row.raw), quantity: 0, unit: '' }
 
-    return {
-      name: String(row.name || '').trim(),
-      quantity: Number(row.quantity || 0) || 0,
-      unit: String(row.unit || ''),
-    }
-  })
-  .filter((x): x is Line => x !== null)
-
+          return {
+            name: String(row.name || '').trim(),
+            quantity: Number(row.quantity || 0) || 0,
+            unit: String(row.unit || ''),
+            quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+          }
+        })
+        .filter((x): x is Line => x !== null)
 
       const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '' }]
       setIngredients(finalIngredients)
-      setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity)))
+
+      // ✅ IMPORTANT: on affiche quantityRaw si présent, sinon le number tel quel
+      setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
       const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
       setTrash(tr.join('\n'))
@@ -121,12 +129,16 @@ function NewRecipeInner() {
   }
 
   function setQtyInput(idx: number, raw: string) {
+    // ✅ on garde exactement ce que l'utilisateur tape dans l'input
     setQtyInputs((prev) => {
       const copy = [...prev]
       copy[idx] = raw
       return copy
     })
-    setIngredient(idx, { quantity: parseQtyInput(raw) })
+
+    // ✅ et on met à jour le number pour les calculs
+    // ✅ et on efface quantityRaw (car désormais c'est l'utilisateur qui choisit l'affichage)
+    setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined })
   }
 
   async function save() {
@@ -223,7 +235,6 @@ function NewRecipeInner() {
               style={{ padding: 8 }}
             />
 
-            {/* INPUT TEXTE : accepte 1/4 et 1,2 */}
             <input
               placeholder="Quantité"
               value={qtyInputs[idx] ?? ''}
@@ -289,4 +300,7 @@ export default function Page() {
     </Suspense>
   )
 }
+
+
+
 
