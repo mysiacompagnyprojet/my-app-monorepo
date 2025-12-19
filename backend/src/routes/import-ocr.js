@@ -4,7 +4,7 @@
 const express = require('express');
 const multer = require('multer');
 
-const { ocrFromBuffer } = require('../services/vision');
+const { ocrFromBuffer, ocrFromBufferWithDebug } = require('../services/vision');
 const {
   smartFilterWithTrashFromText,
   splitIngredientsAndSteps,
@@ -111,20 +111,40 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     }
 
     const texts = [];
-    for (const f of req.files) {
-      const t = await ocrFromBuffer(f.buffer);
-      if (t) texts.push(t);
+    let visionDebug = null;
+
+    for (let i = 0; i < req.files.length; i++) {
+      const f = req.files[i];
+
+      // ✅ En debug, on inspecte la 1ère image seulement
+      if (isDebug && i === 0) {
+        const out = await ocrFromBufferWithDebug(f.buffer, { lang: 'fr' });
+        if (out?.text) texts.push(out.text);
+        visionDebug = out?.debug || null;
+      } else {
+        const t = await ocrFromBuffer(f.buffer, { lang: 'fr' });
+        if (t) texts.push(t);
+      }
     }
 
     const rawText = texts.join('\n\n');
 
     const filtered = smartFilterWithTrashFromText(rawText);
+
+    // ✅ IMPORTANT: on choisit le titre AVANT le split (sinon on perd le bloc "avant Ingrédients")
+    // ✅ Priorité à Vision si dispo
+    let title =
+      (visionDebug && typeof visionDebug.pickedTitle === 'string' && visionDebug.pickedTitle.trim()
+        ? visionDebug.pickedTitle.trim()
+        : null) ||
+      guessTitleFromLines(filtered.lines) ||
+      'Recette importée';
+
+    // On garde lines pour debug
     let lines = filtered.lines;
 
     const split = splitIngredientsAndSteps(lines);
     lines = miniReflow(split);
-
-    let title = guessTitleFromLines(lines) || 'Recette importée';
 
     let servings = split.servings || 1;
     if (!Number.isFinite(servings) || servings < 1) servings = 1;
@@ -142,7 +162,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             const name = stripBulletPrefix(l);
             if (!name) return null;
 
-            // sel/poivre => 0
             if (/^sel$/i.test(name)) return { name: 'sel', quantity: 0, unit: '' };
             if (/^poivre$/i.test(name)) return { name: 'poivre', quantity: 0, unit: '' };
 
@@ -159,7 +178,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             unit: parsed.unit || '',
           };
 
-          // ✅ IMPORTANT: on passe le raw (fraction / virgule) au front
           if (typeof parsed.quantityRaw === 'string' && parsed.quantityRaw.trim()) {
             row.quantityRaw = String(parsed.quantityRaw).trim();
           }
@@ -178,7 +196,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     // ---------- NOTES ----------
     const notes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean).join('\n');
 
-    // ✅ Override titre si c'est clairement une étape (à faire AVANT draft)
+    // ✅ Si jamais le titre ressemble à une étape, on peut override (mais Vision est prioritaire et ne devrait pas tomber ici)
     if (looksLikeStepTitle(title)) {
       const inferred = inferTitleFromContent(ingredients, steps);
       if (inferred) title = inferred;
@@ -201,7 +219,13 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           imagesCount: req.files.length,
           title,
           servings,
-          firstLines: lines.slice(0, 60),
+
+          // ✅ debug Vision (1ère image)
+          vision: visionDebug,
+
+          // ✅ on expose aussi les premières lignes "avant split" pour vérifier le titre y est
+          firstLines: filtered.lines.slice(0, 60),
+
           split: {
             ingredientLinesCount: (split.ingredientLines || []).length,
             stepLinesCount: (split.stepLines || []).length,
@@ -224,3 +248,4 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 });
 
 module.exports = router;
+

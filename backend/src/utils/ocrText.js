@@ -430,15 +430,19 @@ function looksLikeStepVerbLine(line) {
   const t = normSpaces(line);
   if (!t) return false;
 
-  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez|assaisonner|assaisonnez|étaler|étalez)\b/i.test(
-    t
-  );
+  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|assaisonnez|assaisonner|étalez|etalez|étaler|etaler|tartinez|tartiner|recouvrez|recouvrir|garnissez|garnir|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préchauffez|prechauffez|préparez|preparez|préparer|preparer|montez|monter|disposer|disposez)\b/i.test(
+  t
+);
 }
+  //return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez|assaisonner|assaisonnez|étaler|étalez)\b/i.test(
+  //  t
+  //);
+//}
 
 // ✅ phrases d'action “sans numérotation”
 function looksLikeActionSentence(line) {
   const t = normSpaces(line).toLowerCase();
-  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser|assaisonner)\b/i.test(
+  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|étalez|etalez|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser|assaisonner)\b/i.test(
     t
   );
 }
@@ -1085,6 +1089,26 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   return candidates[0].t;
 }
 
+function extractTitleFromStepHeader(lines) {
+  const scan = (lines || []).slice(0, 80).map(normSpaces).filter(Boolean);
+
+  for (const l of scan) {
+    // ex: "4 Montez les mini Croque-Monsieur : Coupez ..."
+    const m = l.match(/\b(montez|monter|préparez|preparez|préparer|preparer|réalisez|realisez|assemblez|assembler)\b\s+(?:le|la|les|l['’])\s+(.+?)\s*[:\-–—]/i);
+    if (!m) continue;
+
+    let candidate = cleanTitleCandidate(m[2]);
+    candidate = sanitizePickedTitle(candidate);
+
+    // évite trop long
+    if (candidate && candidate.length >= 6 && candidate.length <= 80 && !/\d/.test(candidate)) {
+      // capitalise juste la première lettre, sans tout casser
+      return candidate.charAt(0).toUpperCase() + candidate.slice(1);
+    }
+  }
+  return null;
+}
+
 function guessTitleFromLines(lines) {
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
 
@@ -1093,6 +1117,9 @@ function guessTitleFromLines(lines) {
     const cleaned = sanitizePickedTitle(explicit);
     if (cleaned) return cleaned;
   }
+
+  const fromStepHeader = extractTitleFromStepHeader(lines);
+  if (fromStepHeader) return fromStepHeader;
 
   if (head.some((l) => extractServingsFromLine(l) || isIngredientsHeader(l))) {
     return fabricateTitleFromIngredients(lines) || 'Recette importée';
