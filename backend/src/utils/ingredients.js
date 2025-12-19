@@ -114,6 +114,9 @@ function parseAny(raw) {
 
   // Chaîne "300 g spaghetti" / "2 tomates"
   const txt = String(raw).replace(/\s+/g, ' ').trim();
+  // ✅ bruit OCR fréquent : "Og" / "0g" isolé (ex: Facebook)
+  if (/^o[gq]$/i.test(txt) || /^0\s*g$/i.test(txt)) return null;
+
   const m = txt.match(
     /^(\d+([.,]\d+)?)\s*(g|kg|mg|ml|l|dl|cl|pi[eè]ce|pieces?|pce|pc|cs|cc|botte|unite|unité)?\s*(.*)$/i
   );

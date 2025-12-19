@@ -56,6 +56,13 @@ function isUiNoise(l) {
   // Facebook header
   if (/^publication\s+de\b/i.test(t)) return true;
 
+    // ✅ Instagram / réseaux sociaux : faux "titres" UI
+  if (/^toutes?\s+les\s+publications?$/i.test(t)) return true;
+  if (/^enregistr[ée]$/i.test(t)) return true;
+  if (/^recettes?\s+d[ée]lice$/i.test(t)) return true;
+  if (/^recettes?\s+et\s+d[ée]lices?$/i.test(t)) return true;
+  if (/^publication\s+de\b/i.test(t)) return true; // (déjà présent chez toi, ok de le laisser)
+
   return false;
 }
 
@@ -286,3 +293,5 @@ module.exports = {
   ocrFromBuffer,
   ocrFromBufferWithDebug,
 };
+
+
