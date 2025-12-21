@@ -4,6 +4,8 @@
 const vision = require('@google-cloud/vision');
 const sharp = require('sharp');
 
+const { isValidRecipeTitleCandidate, cleanTitleCandidate } = require('../utils/ocrTitle');
+
 // Client singleton
 let client;
 function getClient() {
@@ -23,14 +25,11 @@ function stripEdgeEmojisAndPunct(s) {
   let t = normSpaces(s);
 
   t = t
-    // ponctuation/bullets au bord
     .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
     .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '')
-    // emojis (range large)
     .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
     .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '');
 
-  // re-nettoie
   t = t
     .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
     .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
@@ -40,7 +39,6 @@ function stripEdgeEmojisAndPunct(s) {
 
 function cleanTitleLine(s) {
   let t = stripEdgeEmojisAndPunct(s);
-  // évite titres finissant par "." etc
   t = t.replace(/[.!?…]+$/g, '');
   return stripEdgeEmojisAndPunct(t);
 }
@@ -49,6 +47,7 @@ function isUiNoise(l) {
   const t = normSpaces(l);
   if (!t) return true;
 
+  if (/^\s*cuisineactuelle\b/i.test(t)) return true;
   if (/^\d{1,2}:\d{2}$/.test(t)) return true;
   if (/\b(4g|5g|lte|wifi|wi-fi)\b/i.test(t) && /\b\d{1,3}\b/.test(t)) return true;
   if (/^\d{1,3}%$/.test(t)) return true;
@@ -56,12 +55,11 @@ function isUiNoise(l) {
   // Facebook header
   if (/^publication\s+de\b/i.test(t)) return true;
 
-    // ✅ Instagram / réseaux sociaux : faux "titres" UI
+  // Instagram / réseaux sociaux : faux "titres" UI
   if (/^toutes?\s+les\s+publications?$/i.test(t)) return true;
   if (/^enregistr[ée]$/i.test(t)) return true;
   if (/^recettes?\s+d[ée]lice$/i.test(t)) return true;
   if (/^recettes?\s+et\s+d[ée]lices?$/i.test(t)) return true;
-  if (/^publication\s+de\b/i.test(t)) return true; // (déjà présent chez toi, ok de le laisser)
 
   return false;
 }
@@ -70,11 +68,9 @@ function looksLikeIngredientLine(l) {
   const t = normSpaces(l).toLowerCase();
   if (!t) return false;
 
-  // commence par quantité/unité
   if (/^\s*(\d+([.,]\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)\b/.test(t)) return true;
   if (/\b\d+\s*(g|kg|mg|ml|cl|dl|l)\b/i.test(t)) return true;
 
-  // headers
   if (/^ingr[ée]dients?\b/i.test(t)) return true;
   if (/^temps\s+de\s+(préparation|cuisson)\b/i.test(t)) return true;
   if (/^portions?\b/i.test(t)) return true;
@@ -90,76 +86,212 @@ function looksLikeStepAction(l) {
   );
 }
 
+function tryMergeTwoLineTitle(lines) {
+ const L = (lines || []).map((s) => cleanTitleLine(s)).filter(Boolean);
+
+ for (let i = 0; i < L.length - 1; i++) {
+ const a = cleanTitleLine(L[i]);
+ const b = cleanTitleLine(L[i + 1]);
+ if (!a || !b) continue;
+
+ // si la 1ère ligne finit par un connecteur => très souvent titre coupé
+ if (!/\b(de|d['’]|du|des|à|a|au|aux)\s*$/i.test(a)) continue;
+
+ const merged = cleanTitleLine(`${a} ${b}`);
+
+ // garde-fous : on refuse si c’est du bruit ou si ça ressemble à une étape/ingrédient
+ if (merged.length < 6 || merged.length > 90) continue;
+ if (isUiNoise(merged)) continue;
+ if (looksLikeStepAction(merged)) continue;
+ if (looksLikeIngredientLine(merged)) continue;
+ if (/\d/.test(merged)) continue;
+
+ // On exige au moins 3 mots (ex: "gratin de chou-fleur")
+ const w = merged.split(/\s+/).filter(Boolean);
+ if (w.length < 3) continue;
+
+ return merged;
+ }
+
+ return null;
+}
+
+
 function pickLikelyTitleFromText(text) {
-  const lines = String(text || '')
-    .split('\n')
-    .map((s) => cleanTitleLine(s))
-    .filter(Boolean);
+const normalizeTitleOut = (s) =>
+normSpaces(String(s || '').replace(/\s*\n+\s*/g, ' ')).trim();
+const rawLines = String(text || '')
+.split('\n')
+.map((s) => cleanTitleLine(s))
+.filter(Boolean);
 
-  // 0) si une ligne "Nouvelle recette: X"
-  for (const l of lines) {
-    const m = l.match(/(?:\[\s*)?nouvelle\s+recette(?:\s*\])?\s*[:\-–—]?\s*(.+)$/i);
-    if (m && m[1]) {
-      const cand = cleanTitleLine(m[1]);
-      if (
-        cand.length >= 4 &&
-        cand.length <= 90 &&
-        !isUiNoise(cand) &&
-        !looksLikeStepAction(cand) &&
-        !looksLikeIngredientLine(cand)
-      ) {
-        return cand;
-      }
-    }
-  }
+// ✅ PATCH: titre sur 2 lignes (ex: "gratin de" + "chou-fleur au fromage")
+const merged2 = tryMergeTwoLineTitle(rawLines);
+if (merged2) return merged2;
 
-  // 1) scoring : meilleure ligne “titre-like”
-  let best = null;
-  let bestScore = -1;
+// Helpers
+const isMarketing = (s) => {
+const t = normSpaces(s).toLowerCase();
+return (
+t.includes('on raffole') ||
+t.includes('vous devez absolument') ||
+t.includes('absolument la tester') ||
+t.includes('testez') ||
+t.includes('recette de ') && (t.includes('on raffole') || t.includes('vous devez'))
+);
+};
 
-  for (const raw of lines) {
-    const l = cleanTitleLine(raw);
-    if (!l) continue;
-    if (isUiNoise(l)) continue;
+const isShortContinuation = (s) => {
+const t = normSpaces(s);
+if (!t) return false;
+if (t.length > 22) return false;
+if (/\d/.test(t)) return false;
+// 1 à 3 mots max, souvent “chiches”, “au fromage”, etc.
+const words = t.split(/\s+/).filter(Boolean);
+return words.length >= 1 && words.length <= 6;
+};
 
-    // garde-fous
-    if (l.length < 4 || l.length > 90) continue;
-    if (/[.!?…]$/.test(l)) continue;
-    if (looksLikeStepAction(l)) continue;
-    if (looksLikeIngredientLine(l)) continue;
-    if (/\d/.test(l)) continue;
+// 0) Pattern “Nouvelle recette : X” (et recolle si la ligne suivante est une continuation)
+for (let i = 0; i < rawLines.length; i++) {
+const l = rawLines[i];
+const m = l.match(/(?:\[\s*)?nouvelle\s+recette(?:\s*\])?\s*[:\-–—]?\s*(.+)$/i);
+if (m && m[1]) {
+let cand = cleanTitleLine(m[1]);
 
-    // au moins 2 mots
-    const words = l.split(/\s+/).filter(Boolean);
-    if (words.length < 2) continue;
+// recolle si le titre est coupé sur la ligne suivante (ex: “Nuggets de pois” + “chiches”)
+const nxt = rawLines[i + 1] || '';
+if (nxt && isShortContinuation(nxt) && cand.length + 1 + nxt.length <= 90) {
+cand = `${cand} ${nxt}`.trim();
+}
 
-    // score
-    let score = 0;
+if (
+cand.length >= 4 &&
+cand.length <= 90 &&
+!isUiNoise(cand) &&
+!looksLikeStepAction(cand) &&
+!looksLikeIngredientLine(cand) &&
+!isMarketing(cand)
+) {
+return normalizeTitleOut(cand);
+}
+}
+}
 
-    // bonus si contient un mot “plat”
-    if (/\b(croque|monsieur|ap[ée]ritif|nuggets?|galettes?|cookies?|g[âa]teau|gateau|salade|poulet|tarte|quiche)\b/i.test(l))
-      score += 8;
+// 1) Pattern “... recette de <X>” : on récupère uniquement <X>, et on recolle si besoin
+for (let i = 0; i < rawLines.length; i++) {
+const l = rawLines[i];
+const low = normSpaces(l).toLowerCase();
+const idx = low.lastIndexOf('recette de ');
+if (idx >= 0) {
+let after = normSpaces(l.slice(idx + 'recette de '.length));
 
-    // bonus si majuscules en début (souvent titre)
-    if (/^[A-ZÀ-ÖØ-Þ]/.test(l)) score += 2;
+const nxt = rawLines[i + 1] || '';
+if (nxt && isShortContinuation(nxt) && after.length + 1 + nxt.length <= 90) {
+after = `${after} ${nxt}`.trim();
+}
 
-    // bonus si contient "de" (souvent titre FR)
-    if (/\bde\b/i.test(l)) score += 1;
+after = cleanTitleLine(after);
 
-    // bonus si longueur raisonnable (pas trop long)
-    score += Math.max(0, 90 - l.length) / 15;
+// ✅ NEW: filtre marketing ici aussi
+if (isMarketing(l) || isMarketing(after)) continue;
 
-    if (score > bestScore) {
-      bestScore = score;
-      best = l;
-    }
-  }
+// ✅ NEW: filtre source/média si pollue
+if (/\bcuisineactuelle\b/i.test(l) || /\bcuisineactuelle\b/i.test(after)) continue;
 
-  return best;
+if (
+after.length >= 6 &&
+after.length <= 90 &&
+!isUiNoise(after) &&
+!looksLikeStepAction(after) &&
+!looksLikeIngredientLine(after)
+) {
+return normalizeTitleOut(after);
+}
+}
+}
+
+// 1bis) Heuristique "avant ingrédients" : si on voit "Pour X personnes" / "Ingrédients",
+// on remonte chercher un vrai titre juste au-dessus.
+const markerIdx = rawLines.findIndex((x) => {
+const t = normSpaces(x).toLowerCase();
+return (
+/^pour\s+\d+\s+personnes?/.test(t) ||
+/^ingr[ée]dients?\b/.test(t) ||
+/^in[ée]gr[ée]dients?\b/.test(t) // au cas où OCR bizarre
+);
+});
+
+if (markerIdx > 0) {
+// on remonte 1 à 6 lignes au-dessus du marqueur
+for (let j = markerIdx - 1; j >= 0 && j >= markerIdx - 6; j--) {
+const cand = cleanTitleLine(rawLines[j]);
+if (!cand) continue;
+
+if (
+cand.length >= 6 &&
+cand.length <= 90 &&
+!isUiNoise(cand) &&
+!isMarketing(cand) &&
+!looksLikeStepAction(cand) &&
+!looksLikeIngredientLine(cand)
+) {
+return normalizeTitleOut(cand);
+}
+}
+}
+
+// 2) Scoring : on teste aussi “ligne + ligne suivante” pour les titres coupés
+let best = null;
+let bestScore = -1;
+
+for (let i = 0; i < rawLines.length; i++) {
+const base = rawLines[i];
+if (!base) continue;
+if (isUiNoise(base)) continue;
+if (isMarketing(base)) continue;
+
+const candidates = [base];
+
+const nxt = rawLines[i + 1] || '';
+if (nxt && isShortContinuation(nxt) && base.length + 1 + nxt.length <= 90) {
+candidates.push(`${base} ${nxt}`.trim());
+}
+
+for (const raw of candidates) {
+const l = cleanTitleLine(raw);
+if (!l) continue;
+
+if (l.length < 4 || l.length > 90) continue;
+if (/[.!?…]$/.test(l)) continue;
+if (looksLikeStepAction(l)) continue;
+if (looksLikeIngredientLine(l)) continue;
+if (/\d/.test(l)) continue;
+
+const words = l.split(/\s+/).filter(Boolean);
+if (words.length < 2) continue;
+
+let score = 0;
+
+if (/\b(croque|monsieur|ap[ée]ritif|nuggets?|galettes?|cookies?|g[âa]teau|gateau|salade|poulet|tarte|quiche|gratin)\b/i.test(l))
+score += 8;
+
+if (/^[A-ZÀ-ÖØ-Þ]/.test(l)) score += 2;
+if (/\bde\b/i.test(l)) score += 1;
+
+score += Math.max(0, 90 - l.length) / 15;
+
+if (score > bestScore) {
+bestScore = score;
+best = l;
+}
+}
+}
+
+return normalizeTitleOut(best);
 }
 
 async function cropTop(buf, ratio = 0.32) {
-  const img = sharp(buf).rotate(); // respecte EXIF orientation
+  const img = sharp(buf).rotate();
   const meta = await img.metadata();
   const w = meta.width || 0;
   const h = meta.height || 0;
@@ -169,7 +301,6 @@ async function cropTop(buf, ratio = 0.32) {
   return await img.extract({ left: 0, top: 0, width: w, height: topH }).toBuffer();
 }
 
-// Bande (zone au milieu), très utile sur Facebook où le titre est sous la photo
 async function cropBand(buf, topRatio = 0.30, heightRatio = 0.45) {
   const img = sharp(buf).rotate();
   const meta = await img.metadata();
@@ -179,8 +310,6 @@ async function cropBand(buf, topRatio = 0.30, heightRatio = 0.45) {
 
   const top = Math.max(0, Math.round(h * topRatio));
   const height = Math.max(1, Math.round(h * heightRatio));
-
-  // sécurité: ne pas dépasser
   const safeHeight = Math.min(height, Math.max(1, h - top));
 
   return await img.extract({ left: 0, top, width: w, height: safeHeight }).toBuffer();
@@ -207,47 +336,16 @@ async function visionDetectTextFromBuffer(buf, lang = 'fr') {
 
 /**
  * OCR Google Vision sur un buffer image -> string (texte brut)
- * - On OCR aussi une zone TOP + une BANDE CENTRALE pour capter les titres Facebook/IG.
+ * (version “simple”)
  */
 async function ocrFromBuffer(buf, opts = {}) {
   const lang = (opts.lang || 'fr').toLowerCase();
-
-  // 1) OCR complet (source de vérité)
-  const fullText = await visionDetectTextFromBuffer(buf, lang);
-
-  // 2) OCR TOP
-  let topText = '';
-  try {
-    const topBuf = await cropTop(buf, 0.32);
-    topText = await visionDetectTextFromBuffer(topBuf, lang);
-  } catch (e) {
-    topText = '';
-  }
-
-  // 3) OCR bande centrale (où se trouve souvent le titre sur FB)
-  let bandText = '';
-  try {
-    const bandBuf = await cropBand(buf, 0.30, 0.45);
-    bandText = await visionDetectTextFromBuffer(bandBuf, lang);
-  } catch (e) {
-    bandText = '';
-  }
-
-  // 4) Pick title depuis (TOP + BAND)
-  const title = pickLikelyTitleFromText(`${topText}\n${bandText}`);
-
-  // 5) Prépend si trouvé
-  let out = fullText;
-  if (title) {
-    const already = out.toLowerCase().includes(String(title).toLowerCase());
-    if (!already) out = `${title}\n${out}`;
-  }
-
-  return out;
+  return await visionDetectTextFromBuffer(buf, lang);
 }
 
 /**
- * Variante debug (ne casse rien) : renvoie texte + extraits top/band + titre choisi
+ * Variante debug : renvoie texte + top/band + titre choisi
+ * ✅ IMPORTANT: debug.pickedTitle = TITRE VALIDÉ (finalPicked)
  */
 async function ocrFromBufferWithDebug(buf, opts = {}) {
   const lang = (opts.lang || 'fr').toLowerCase();
@@ -270,18 +368,21 @@ async function ocrFromBufferWithDebug(buf, opts = {}) {
     bandText = '';
   }
 
-  const pickedTitle = pickLikelyTitleFromText(`${topText}\n${bandText}`);
+  const pickedTitleRaw = pickLikelyTitleFromText(`${topText}\n${bandText}`);
+  const safePicked = pickedTitleRaw ? cleanTitleCandidate(pickedTitleRaw) : null;
+  const finalPicked = safePicked && isValidRecipeTitleCandidate(safePicked) ? safePicked : null;
 
+  // ✅ On préfixe le texte OCR avec le titre VALIDÉ (si pas déjà présent)
   let combined = fullText;
-  if (pickedTitle) {
-    const already = combined.toLowerCase().includes(String(pickedTitle).toLowerCase());
-    if (!already) combined = `${pickedTitle}\n${combined}`;
+  if (finalPicked) {
+    const already = combined.toLowerCase().includes(String(finalPicked).toLowerCase());
+    if (!already) combined = `${finalPicked}\n${combined}`;
   }
 
   return {
     text: combined,
     debug: {
-      pickedTitle: pickedTitle || null,
+      pickedTitle: finalPicked || null,
       topTextSample: topText ? String(topText).slice(0, 500) : null,
       bandTextSample: bandText ? String(bandText).slice(0, 500) : null,
       fullTextSample: fullText ? String(fullText).slice(0, 300) : null,
@@ -293,5 +394,6 @@ module.exports = {
   ocrFromBuffer,
   ocrFromBufferWithDebug,
 };
+
 
 

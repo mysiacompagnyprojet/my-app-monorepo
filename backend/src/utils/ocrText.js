@@ -1111,6 +1111,7 @@ function extractTitleFromStepHeader(lines) {
 
 function guessTitleFromLines(lines) {
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
+  
 
   const explicit = findExplicitTitleInFirstLines(lines, 60);
   if (explicit) {
