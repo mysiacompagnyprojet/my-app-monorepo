@@ -282,85 +282,96 @@ function mergeHyphenWrappedLines(lines) {
 /* =========================
    CLEAN + TRASH
 ========================= */
-
+//
 function smartFilterWithTrashFromText(rawText) {
-  const cleaned = stripWeird(rawText);
+const cleaned = stripWeird(rawText);
 
-  let rawLines = cleaned
-    .split('\n')
-    .map((s) => normSpaces(s))
-    .filter(Boolean);
+// ✅ rawLines DOIT être déclaré ici
+let rawLines = cleaned
+.split('\n')
+.map((s) => normSpaces(s))
+.filter(Boolean);
 
-  rawLines = mergeHyphenWrappedLines(rawLines);
+rawLines = mergeHyphenWrappedLines(rawLines);
 
-  const lines = [];
-  const trash = [];
+const lines = [];
+const trash = [];
 
-  for (let l of rawLines) {
-    l = stripTrailingPageNumber(l);
+for (let i = 0; i < rawLines.length; i++) {
+let l = rawLines[i];
+l = stripTrailingPageNumber(l);
 
-    if (looksLikePageNumberOnly(l)) {
-      trash.push(l);
-      continue;
-    }
+// ✅ PATCH: ne pas jeter une quantité seule si elle touche une unité
+if (looksLikePageNumberOnly(l)) {
+const prev = i > 0 ? rawLines[i - 1] : '';
+const next = i + 1 < rawLines.length ? rawLines[i + 1] : '';
 
-    if (isMostlyNoise(l)) {
-      trash.push(l);
-      continue;
-    }
-    if (looksLikeStatusBarNoise(l)) {
-      trash.push(l);
-      continue;
-    }
-    if (looksLikeDateNoise(l)) {
-      trash.push(l);
-      continue;
-    }
-    if (looksLikeCountersNoise(l)) {
-      trash.push(l);
-      continue;
-    }
+const prevIsUnit = isUnitToken(prev);
+const nextIsUnit = isUnitToken(next);
 
-    if (looksLikeSocialNoise(l)) {
-      // ✅ tente de récupérer un titre collé à un header social (Facebook)
-      // Exemple: "Publication de <Page> Mini Croque-Monsieur Apéritif"
-    if (/^publication\s+de\s+/i.test(l)) {
-        const salvaged = stripSocialHeaderPrefix(l);
-
-        // Si après suppression du préfixe on obtient quelque chose de plausible,
-        // on garde au moins cette version "salvaged" dans les lignes.
-    if (looksLikePlausibleTitleLine(salvaged)) {
-          lines.push(salvaged);
-          continue;
-        }
-      }
-
-      trash.push(l);
-      continue;
-    }
-
-    if (looksLikeBookRefNoise(l)) {
-      const m = l.match(/(\(.*?\bvoir\s+p\.?\s*\d+.*?\))|\bvoir\s+p\.?\s*\d+\b/i);
-      if (m && m[0]) trash.push(normSpaces(m[0]));
-      const cleanedLine = normSpaces(
-        l
-          .replace(/\(.*?\bvoir\s+p\.?\s*\d+.*?\)/gi, '')
-          .replace(/\bvoir\s+p\.?\s*\d+\b/gi, '')
-      );
-      if (cleanedLine && !isMostlyNoise(cleanedLine)) lines.push(cleanedLine);
-      continue;
-    }
-
-    lines.push(l);
-  }
-
-  return {
-    rawText: cleaned,
-    lines: dedupeLines(lines),
-    trash: dedupeLines(trash),
-  };
+if (prevIsUnit || nextIsUnit) {
+lines.push(l);
+continue;
 }
 
+trash.push(l);
+continue;
+}
+
+if (isMostlyNoise(l)) {
+trash.push(l);
+continue;
+}
+
+if (looksLikeStatusBarNoise(l)) {
+trash.push(l);
+continue;
+}
+
+if (looksLikeDateNoise(l)) {
+trash.push(l);
+continue;
+}
+
+if (looksLikeCountersNoise(l)) {
+trash.push(l);
+continue;
+}
+
+if (looksLikeSocialNoise(l)) {
+if (/^publication\s+de\s+/i.test(l)) {
+const salvaged = stripSocialHeaderPrefix(l);
+if (looksLikePlausibleTitleLine(salvaged)) {
+lines.push(salvaged);
+continue;
+}
+}
+trash.push(l);
+continue;
+}
+
+if (looksLikeBookRefNoise(l)) {
+const m = l.match(/(\(.*?\bvoir\s+p\.?\s*\d+.*?\))|\bvoir\s+p\.?\s*\d+\b/i);
+if (m && m[0]) trash.push(normSpaces(m[0]));
+const cleanedLine = normSpaces(
+l
+.replace(/\(.*?\bvoir\s+p\.?\s*\d+.*?\)/gi, '')
+.replace(/\bvoir\s+p\.?\s*\d+\b/gi, '')
+);
+if (cleanedLine && !isMostlyNoise(cleanedLine)) lines.push(cleanedLine);
+continue;
+}
+
+lines.push(l);
+}
+
+return {
+rawText: cleaned,
+lines: dedupeLines(lines),
+trash: dedupeLines(trash),
+};
+}
+//
 /* =========================
    SERVINGS / HEADERS
 ========================= */
