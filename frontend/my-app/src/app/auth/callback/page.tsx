@@ -22,16 +22,14 @@ type SyncResponse = {
   subscriptionStatus?: string | null;
 };
 
-// ✅ Toute ta logique est déplacée dans ce composant interne
 function SupabaseCallbackInner() {
-  const [msg, setMsg] = useState('Connexion en cours...');
+  const [msg, setMsg] = useState('Connexion en cours…');
   const searchParams = useSearchParams();
   const router = useRouter();
 
   useEffect(() => {
     (async () => {
       try {
-        // 0) Supabase a renvoyé une erreur dans le hash ?
         if (
           typeof window !== 'undefined' &&
           window.location.hash.includes('error=')
@@ -46,39 +44,28 @@ function SupabaseCallbackInner() {
           );
         }
 
-        // 1) Échange code -> session
         const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
         const code = searchParams.get('code');
         if (code) {
-          const { data, error } = await supabase.auth.exchangeCodeForSession(
-            code
-          );
+          const { data, error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) throw error;
           if (data.session?.access_token) {
             localStorage.setItem('sb:token', data.session.access_token);
           }
         }
 
-        // 2) Récup session active
         const {
           data: { session },
           error: sessionError,
         } = await supabase.auth.getSession();
         if (sessionError) throw sessionError;
         if (!session?.access_token) {
-          throw new Error(
-            'Aucune session active. Le lien a peut-être expiré.'
-          );
+          throw new Error('Aucune session active. Le lien a peut-être expiré.');
         }
         const token = session.access_token;
 
-        // 3) Appel backend /auth/sync (si API configurée)
         let subscriptionStatus: string | null = null;
-        if (!API_BASE) {
-          console.warn(
-            'NEXT_PUBLIC_BACKEND_URL est vide; saut de la synchronisation backend.'
-          );
-        } else {
+        if (API_BASE) {
           const url = `${API_BASE.replace(/\/+$/, '')}/auth/sync`;
           const r = await fetch(url, {
             method: 'POST',
@@ -101,7 +88,6 @@ function SupabaseCallbackInner() {
           }
 
           const out = (await r.json()) as SyncResponse;
-
           if (!out?.userId) {
             throw new Error('Réponse /auth/sync invalide: userId manquant');
           }
@@ -113,42 +99,60 @@ function SupabaseCallbackInner() {
             typeof window !== 'undefined' &&
             window.location.protocol === 'https:';
           const secureAttr = isHttps ? '; Secure' : '';
-          const domainAttr = '';
 
-          document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
-          document.cookie = `subscription_status=${subscriptionStatus}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}${domainAttr}`;
+          document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}`;
+          document.cookie = `subscription_status=${subscriptionStatus}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}`;
         }
 
-        // 4) Redirection selon l’abonnement
         const dest =
           subscriptionStatus &&
           !['active', 'trialing'].includes(subscriptionStatus)
             ? '/premium'
             : '/';
-        setMsg('Connexion réussie ✅ redirection...');
+
+        setMsg('Connexion réussie ✅ Redirection…');
         router.replace(dest);
       } catch (e: any) {
         console.error(e);
-        setMsg(`Erreur: ${e?.message ?? String(e)}`);
+        setMsg(`Erreur : ${e?.message ?? String(e)}`);
       }
     })();
   }, [searchParams, router]);
 
-  return <main style={{ padding: 24 }}>{msg}</main>;
+  return (
+    <main className="app-container" style={{ margin: '60px auto' }}>
+      <section className="app-card p-6 text-center">
+        <h1 className="text-xl font-extrabold app-title">
+          Connexion
+        </h1>
+
+        <p className="mt-4 text-base">
+          {msg}
+        </p>
+
+        <p className="mt-3 app-muted text-sm">
+          Cette opération peut prendre quelques secondes.
+        </p>
+      </section>
+    </main>
+  );
 }
 
-// ⚠️ Empêche le pré-rendu statique trop agressif
 export const dynamic = 'force-dynamic';
 
-// ✅ Page exportée : juste un wrapper Suspense autour de la logique
 export default function SupabaseCallbackPage() {
   return (
     <Suspense
       fallback={
-        <main style={{ padding: 24 }}>Connexion en cours...</main>
+        <main className="app-container" style={{ margin: '60px auto' }}>
+          <section className="app-card p-6 text-center">
+            <p>Connexion en cours…</p>
+          </section>
+        </main>
       }
     >
       <SupabaseCallbackInner />
     </Suspense>
   );
 }
+

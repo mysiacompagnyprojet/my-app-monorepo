@@ -37,15 +37,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [magicStatus, setMagicStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle');
+  const [magicStatus, setMagicStatus] =
+    useState<'idle' | 'loading' | 'sent' | 'error'>('idle');
 
-  // ✅ Crée le client Supabase UNIQUEMENT si les variables existent
+  // ✅ Client Supabase seulement si config OK
   const supabase = useMemo(() => {
     if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null;
     return createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   }, []);
 
-  // === 1) Connexion classique backend ===
+  // === 1) Connexion backend classique ===
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -64,9 +65,7 @@ export default function LoginPage() {
         throw new Error(message);
       }
 
-      // ⚠️ Démo : stockage local. En prod: cookie httpOnly côté API.
       localStorage.setItem('token', json.token);
-
       router.push('/health-check');
     } catch (err: unknown) {
       setError(
@@ -88,7 +87,6 @@ export default function LoginPage() {
         );
       }
 
-      // 👇 IMPORTANT : on force l'origine en prod sur le domaine Vercel
       const origin =
         typeof window !== 'undefined' && window.location.origin.includes('localhost')
           ? window.location.origin
@@ -109,72 +107,113 @@ export default function LoginPage() {
     }
   }
 
-  // 🛡️ Si la config Supabase manque, on affiche un message clair au lieu d’un crash
   const supabaseConfigMissing = !SUPABASE_URL || !SUPABASE_ANON_KEY;
 
   return (
-    <main style={{ padding: 24, maxWidth: 420 }}>
-      <h1>Connexion</h1>
-      <p style={{ color: '#666' }}>API: {API_URL || '(non définie)'}</p>
+    <main className="app-container" style={{ margin: '40px auto' }}>
+      <section className="app-card p-6">
+        <h1 className="text-2xl font-extrabold app-title">Connexion</h1>
 
-      {/* --- Formulaire login classique --- */}
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, marginTop: 16 }}>
-        <label style={{ display: 'grid', gap: 6 }}>
-          Email
-          <input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
-        </label>
-
-        <label style={{ display: 'grid', gap: 6 }}>
-          Mot de passe
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={{ width: '100%', padding: 8 }}
-          />
-        </label>
-
-        <button disabled={busy} type="submit" style={{ padding: 10 }}>
-          {busy ? 'Connexion…' : 'Se connecter (API backend)'}
-        </button>
-      </form>
-
-      {error && <p style={{ color: 'crimson', marginTop: 8 }}>{error}</p>}
-
-      <hr style={{ margin: '24px 0' }} />
-
-      {/* --- Bouton magic link --- */}
-      <button
-        onClick={handleMagicLink}
-        disabled={magicStatus === 'loading' || !email || supabaseConfigMissing}
-        style={{ padding: 10, width: '100%' }}
-        title={
-          supabaseConfigMissing
-            ? 'Variables Supabase manquantes (voir .env.local)'
-            : undefined
-        }
-      >
-        {magicStatus === 'loading'
-          ? 'Envoi du lien...'
-          : magicStatus === 'sent'
-          ? 'Lien envoyé ✅'
-          : 'Se connecter par Magic Link'}
-      </button>
-
-      {supabaseConfigMissing && (
-        <p style={{ marginTop: 12, color: '#b00020' }}>
-          NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY est vide. Vérifie le
-          fichier <code>.env.local</code> dans <code>frontend/my-app</code> puis redémarre{' '}
-          <code>npm run dev</code>.
+        <p className="mt-1 app-muted text-sm">
+          Accès sécurisé à ton espace personnel
         </p>
-      )}
+
+        <p className="mt-2 text-xs app-muted">
+          API : {API_URL || '(non définie)'}
+        </p>
+
+        {/* --- Login classique --- */}
+        <form onSubmit={onSubmit} className="mt-5 grid gap-4">
+          <label className="grid gap-1 text-sm font-semibold">
+            Email
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: 10,
+              }}
+            />
+          </label>
+
+          <label className="grid gap-1 text-sm font-semibold">
+            Mot de passe
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 10,
+                padding: 10,
+              }}
+            />
+          </label>
+
+          <button
+            disabled={busy}
+            type="submit"
+            className="app-btn-primary mt-2"
+          >
+            {busy ? 'Connexion…' : 'Se connecter'}
+          </button>
+        </form>
+
+        {error && (
+          <div
+            className="mt-4 app-card p-3 text-sm"
+            style={{
+              boxShadow: 'none',
+              borderColor: 'rgba(176,0,32,0.25)',
+              background: 'rgba(176,0,32,0.06)',
+            }}
+          >
+            <strong style={{ color: '#b00020' }}>Erreur :</strong> {error}
+          </div>
+        )}
+
+        <hr style={{ margin: '28px 0', borderColor: 'var(--border)' }} />
+
+        {/* --- Magic link --- */}
+        <button
+          onClick={handleMagicLink}
+          disabled={magicStatus === 'loading' || !email || supabaseConfigMissing}
+          className="app-btn-secondary w-full"
+          title={
+            supabaseConfigMissing
+              ? 'Variables Supabase manquantes (voir .env.local)'
+              : undefined
+          }
+        >
+          {magicStatus === 'loading'
+            ? 'Envoi du lien…'
+            : magicStatus === 'sent'
+            ? 'Lien envoyé ✅'
+            : 'Se connecter par lien magique'}
+        </button>
+
+        {supabaseConfigMissing && (
+          <div
+            className="mt-4 app-card p-3 text-sm"
+            style={{
+              boxShadow: 'none',
+              borderColor: 'rgba(176,0,32,0.25)',
+              background: 'rgba(176,0,32,0.06)',
+            }}
+          >
+            <strong style={{ color: '#b00020' }}>Configuration manquante :</strong>
+            <br />
+            Vérifie <code>.env.local</code> puis redémarre <code>npm run dev</code>.
+          </div>
+        )}
+      </section>
     </main>
   );
 }
+

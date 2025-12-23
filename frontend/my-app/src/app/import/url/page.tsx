@@ -39,25 +39,85 @@ export default function Page() {
     }
   }
 
+  const statusKind =
+    status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : 'info'
+
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Importer par URL</h1>
+    <main className="app-container" style={{ margin: '20px auto 40px' }}>
+      <section className="app-card p-5">
+        <h1 className="text-2xl font-extrabold app-title">Importer par URL</h1>
 
-      <input
-        placeholder="https://..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        style={{ width: '100%', maxWidth: 640, padding: 8 }}
-      />
+        <p className="mt-2 app-muted">
+          Colle le lien d’une recette (blog, site, etc.). Nous allons la convertir en une fiche
+          modifiable.
+        </p>
 
-      <div style={{ marginTop: 10 }}>
-        <button onClick={run} disabled={!url.trim()}>
-          Importer
-        </button>
-      </div>
+        <div className="mt-5">
+          <label className="text-sm font-semibold" htmlFor="importUrl">
+            URL de la recette
+          </label>
 
-      <p>{status}</p>
+          <input
+            id="importUrl"
+            placeholder="https://..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="mt-2 w-full"
+            style={{
+              background: 'white',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 12,
+              maxWidth: 720,
+            }}
+          />
+
+          <div className="mt-4 flex items-center gap-3">
+            <button onClick={run} disabled={!url.trim()} className="app-btn-primary">
+              Importer
+            </button>
+
+            <a className="app-btn-secondary" href="/import/ocr">
+              Import par photo (OCR)
+            </a>
+          </div>
+
+          {status && (
+            <div
+              className="mt-4 app-card p-3 text-sm"
+              style={{
+                boxShadow: 'none',
+                borderColor:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.7)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.25)'
+                    : 'var(--border)',
+                background:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.15)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.06)'
+                    : 'rgba(255,255,255,0.7)',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  color:
+                    statusKind === 'success'
+                      ? 'rgba(43,43,43,0.95)'
+                      : statusKind === 'error'
+                      ? '#b00020'
+                      : 'rgba(43,43,43,0.9)',
+                }}
+              >
+                {status}
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
     </main>
   )
 }
-

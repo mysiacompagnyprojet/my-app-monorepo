@@ -50,9 +50,7 @@ function parseQtyInput(raw: string): number {
 }
 
 function formatQtyForInput(n: number, quantityRaw?: string): string {
-  // ✅ priorité à l’affichage exact OCR si fourni
   if (typeof quantityRaw === 'string' && quantityRaw.trim()) return quantityRaw.trim()
-
   if (!Number.isFinite(n)) return ''
   if (n === 0) return ''
   return String(n)
@@ -110,7 +108,6 @@ function NewRecipeInner() {
       const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '' }]
       setIngredients(finalIngredients)
 
-      // ✅ IMPORTANT: on affiche quantityRaw si présent, sinon le number tel quel
       setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
       const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
@@ -129,15 +126,12 @@ function NewRecipeInner() {
   }
 
   function setQtyInput(idx: number, raw: string) {
-    // ✅ on garde exactement ce que l'utilisateur tape dans l'input
     setQtyInputs((prev) => {
       const copy = [...prev]
       copy[idx] = raw
       return copy
     })
 
-    // ✅ et on met à jour le number pour les calculs
-    // ✅ et on efface quantityRaw (car désormais c'est l'utilisateur qui choisit l'affichage)
     setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined })
   }
 
@@ -182,125 +176,283 @@ function NewRecipeInner() {
     }
   }
 
-  return (
-    <main style={{ padding: 24, maxWidth: 820, margin: '2rem auto' }}>
-      <h1>Nouvelle recette</h1>
+  const statusKind =
+    status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
 
+  return (
+    <main className="app-container" style={{ margin: '40px auto' }}>
+      {/* Header */}
+      <section className="app-card p-6">
+        <h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
+        <p className="mt-2 app-muted">
+          Remplis l’essentiel. Tu peux toujours ajuster plus tard.
+        </p>
+      </section>
+
+      {/* Corbeille */}
       {trash.trim() && (
-        <details style={{ margin: '12px 0', padding: 12, border: '1px solid #eee', borderRadius: 10 }}>
-          <summary style={{ cursor: 'pointer' }}>🗑️ Corbeille (texte non-recette détecté)</summary>
-          <p style={{ fontSize: 13, opacity: 0.85 }}>
-            Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
-          </p>
-          <textarea value={trash} onChange={(e) => setTrash(e.target.value)} rows={6} style={{ width: '100%', padding: 10 }} />
-        </details>
+        <section className="app-card p-5" style={{ marginTop: 16 }}>
+          <details>
+            <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
+              🗑️ Corbeille (texte non-recette détecté)
+            </summary>
+            <p className="mt-2 text-sm app-muted">
+              Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+            </p>
+            <textarea
+              value={trash}
+              onChange={(e) => setTrash(e.target.value)}
+              rows={6}
+              className="mt-3 w-full"
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 12,
+              }}
+            />
+          </details>
+        </section>
       )}
 
-      <div style={{ display: 'grid', gap: 10 }}>
-        <label>
-          Titre
-          <input value={title} onChange={(e) => setTitle(e.target.value)} style={{ width: '100%', padding: 8 }} />
-        </label>
+      {/* Infos recette */}
+      <section className="app-card p-6" style={{ marginTop: 16 }}>
+        <h2 className="text-lg font-extrabold app-title">Informations</h2>
 
-        <label>
-          Portions
-          <input
-            type="number"
-            min={1}
-            value={servings}
-            onChange={(e) => setServings(Number(e.target.value || 1))}
-            style={{ width: 120, padding: 8 }}
-          />
-        </label>
-
-        <label>
-          Image URL
-          <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={{ width: '100%', padding: 8 }} />
-        </label>
-
-        <label>
-          Notes
-          <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={5} style={{ width: '100%', padding: 8 }} />
-        </label>
-      </div>
-
-      <h2 style={{ marginTop: 18 }}>Ingrédients</h2>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {ingredients.map((ing, idx) => (
-          <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 140px 120px', gap: 8 }}>
+        <div className="mt-4 grid gap-4">
+          <label className="grid gap-1 text-sm font-semibold">
+            Titre
             <input
-              placeholder="Ingrédient"
-              value={ing.name}
-              onChange={(e) => setIngredient(idx, { name: e.target.value })}
-              style={{ padding: 8 }}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 12,
+              }}
             />
+          </label>
 
-            <input
-              placeholder="Quantité"
-              value={qtyInputs[idx] ?? ''}
-              onChange={(e) => setQtyInput(idx, e.target.value)}
-              style={{ padding: 8 }}
-            />
+          <div className="flex flex-wrap items-end gap-4">
+            <label className="grid gap-1 text-sm font-semibold">
+              Portions
+              <input
+                type="number"
+                min={1}
+                value={servings}
+                onChange={(e) => setServings(Number(e.target.value || 1))}
+                style={{
+                  width: 140,
+                  background: 'white',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: 12,
+                }}
+              />
+            </label>
 
-            <input
-              placeholder="Unité"
-              value={ing.unit}
-              onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-              style={{ padding: 8 }}
-            />
+            <span className="app-badge">Lisible en un coup d’œil</span>
           </div>
-        ))}
 
-        <button
-          onClick={() => {
-            setIngredients((p) => [...p, { name: '', quantity: 0, unit: '' }])
-            setQtyInputs((p) => [...p, ''])
-          }}
-          style={{ width: 220 }}
-        >
-          + Ajouter un ingrédient
-        </button>
-      </div>
+          <label className="grid gap-1 text-sm font-semibold">
+            Image URL
+            <input
+              value={imageUrl}
+              onChange={(e) => setImageUrl(e.target.value)}
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 12,
+              }}
+            />
+          </label>
 
-      <h2 style={{ marginTop: 18 }}>Étapes</h2>
-      <div style={{ display: 'grid', gap: 10 }}>
-        {steps.map((s, idx) => (
-          <textarea
-            key={idx}
-            value={s}
-            onChange={(e) =>
-              setSteps((prev) => {
-                const copy = [...prev]
-                copy[idx] = e.target.value
-                return copy
-              })
-            }
-            rows={2}
-            style={{ width: '100%', padding: 8 }}
-          />
-        ))}
+          <label className="grid gap-1 text-sm font-semibold">
+            Notes
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={5}
+              style={{
+                background: 'white',
+                border: '1px solid var(--border)',
+                borderRadius: 12,
+                padding: 12,
+              }}
+            />
+          </label>
+        </div>
+      </section>
 
-        <button onClick={() => setSteps((p) => [...p, ''])} style={{ width: 180 }}>
-          + Ajouter une étape
-        </button>
-      </div>
+      {/* Ingrédients */}
+      <section className="app-card p-6" style={{ marginTop: 16 }}>
+        <h2 className="text-lg font-extrabold app-title">Ingrédients</h2>
+        <p className="mt-2 text-sm app-muted">
+          Un ingrédient par ligne : nom, quantité, unité.
+        </p>
 
-      <div style={{ marginTop: 18, display: 'flex', gap: 10, alignItems: 'center' }}>
-        <button onClick={save}>Enregistrer</button>
-        {status && <span>{status}</span>}
-      </div>
+        <div className="mt-4 grid gap-3">
+          {ingredients.map((ing, idx) => (
+            <div
+              key={idx}
+              className="app-card p-3"
+              style={{
+                boxShadow: 'none',
+                background: 'rgba(255,255,255,0.7)',
+                borderColor: 'var(--border)',
+              }}
+            >
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 140px 120px',
+                  gap: 10,
+                }}
+              >
+                <input
+                  placeholder="Ingrédient"
+                  value={ing.name}
+                  onChange={(e) => setIngredient(idx, { name: e.target.value })}
+                  style={{
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: 10,
+                  }}
+                />
+
+                <input
+                  placeholder="Quantité"
+                  value={qtyInputs[idx] ?? ''}
+                  onChange={(e) => setQtyInput(idx, e.target.value)}
+                  style={{
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: 10,
+                  }}
+                />
+
+                <input
+                  placeholder="Unité"
+                  value={ing.unit}
+                  onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+                  style={{
+                    background: 'white',
+                    border: '1px solid var(--border)',
+                    borderRadius: 12,
+                    padding: 10,
+                  }}
+                />
+              </div>
+            </div>
+          ))}
+
+          <button
+            onClick={() => {
+              setIngredients((p) => [...p, { name: '', quantity: 0, unit: '' }])
+              setQtyInputs((p) => [...p, ''])
+            }}
+            className="app-btn-secondary"
+            style={{ width: 260 }}
+          >
+            + Ajouter un ingrédient
+          </button>
+        </div>
+      </section>
+
+      {/* Étapes */}
+      <section className="app-card p-6" style={{ marginTop: 16 }}>
+        <h2 className="text-lg font-extrabold app-title">Étapes</h2>
+        <p className="mt-2 text-sm app-muted">
+          1 étape = 1 bloc. Garde les phrases courtes.
+        </p>
+
+        <div className="mt-4 grid gap-3">
+          {steps.map((s, idx) => (
+            <div
+              key={idx}
+              className="app-card p-3"
+              style={{
+                boxShadow: 'none',
+                background: 'rgba(255,255,255,0.7)',
+                borderColor: 'var(--border)',
+              }}
+            >
+              <div className="flex items-center gap-2 mb-2">
+                <span className="app-badge">Étape {idx + 1}</span>
+              </div>
+
+              <textarea
+                value={s}
+                onChange={(e) =>
+                  setSteps((prev) => {
+                    const copy = [...prev]
+                    copy[idx] = e.target.value
+                    return copy
+                  })
+                }
+                rows={2}
+                style={{
+                  width: '100%',
+                  background: 'white',
+                  border: '1px solid var(--border)',
+                  borderRadius: 12,
+                  padding: 12,
+                }}
+              />
+            </div>
+          ))}
+
+          <button onClick={() => setSteps((p) => [...p, ''])} className="app-btn-secondary" style={{ width: 220 }}>
+            + Ajouter une étape
+          </button>
+        </div>
+      </section>
+
+      {/* Actions */}
+      <section className="app-card p-6" style={{ marginTop: 16 }}>
+        <div className="flex flex-wrap gap-3 items-center">
+          <button onClick={save} className="app-btn-primary">
+            Enregistrer
+          </button>
+
+          {status && (
+            <span
+              className="app-card px-3 py-2 text-sm"
+              style={{
+                boxShadow: 'none',
+                borderColor:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.7)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.25)'
+                    : 'var(--border)',
+                background:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.15)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.06)'
+                    : 'rgba(255,255,255,0.7)',
+                color: statusKind === 'error' ? '#b00020' : 'rgba(43,43,43,0.95)',
+                fontWeight: 800,
+              }}
+            >
+              {status}
+            </span>
+          )}
+        </div>
+      </section>
     </main>
   )
 }
 
 export default function Page() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>Chargement…</div>}>
+    <Suspense fallback={<div className="app-container" style={{ padding: 24 }}>Chargement…</div>}>
       <NewRecipeInner />
     </Suspense>
   )
 }
-
-
-
-

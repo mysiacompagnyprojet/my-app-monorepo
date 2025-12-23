@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react';
 
-// On définit le type de réponse possible
 type HealthOk = { status: 'ok' };
 type HealthErr = { error: string };
 type HealthResponse = HealthOk | HealthErr;
@@ -28,15 +27,36 @@ export default function Page() {
     checkHealth();
   }, []);
 
-  if (loading) return <main style={{ padding: 24 }}>⏳ Vérification...</main>;
+  if (loading) {
+    return (
+      <main className="app-container" style={{ margin: '60px auto' }}>
+        <section className="app-card p-6 text-center">
+          <p>⏳ Vérification du backend…</p>
+        </section>
+      </main>
+    );
+  }
 
   return (
-    <main style={{ padding: 24, fontFamily: 'sans-serif' }}>
-      {data && 'status' in data && data.status === 'ok' ? (
-        <div>✅ Backend OK</div>
-      ) : (
-        <div style={{ color: 'red' }}>❌ Backend KO : {(data as HealthErr)?.error}</div>
-      )}
+    <main className="app-container" style={{ margin: '60px auto' }}>
+      <section className="app-card p-6 text-center">
+        {data && 'status' in data && data.status === 'ok' ? (
+          <>
+            <h1 className="text-xl font-extrabold app-title">État du système</h1>
+            <p className="mt-3">✅ Backend opérationnel</p>
+          </>
+        ) : (
+          <>
+            <h1 className="text-xl font-extrabold app-title">État du système</h1>
+            <p className="mt-3" style={{ color: '#b00020', fontWeight: 700 }}>
+              ❌ Backend indisponible
+            </p>
+            <p className="mt-2 app-muted text-sm">
+              {(data as HealthErr)?.error}
+            </p>
+          </>
+        )}
+      </section>
     </main>
   );
 }

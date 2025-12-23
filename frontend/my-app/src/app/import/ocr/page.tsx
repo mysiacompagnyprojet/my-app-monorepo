@@ -106,62 +106,145 @@ function OcrPageInner() {
     }
   }
 
+  const statusKind =
+    status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : 'info'
+
   return (
-    <main style={{ padding: 24, maxWidth: 720, margin: '2rem auto' }}>
-      <h1>Importer par photo (OCR)</h1>
+    <main className="app-container" style={{ margin: '20px auto 40px' }}>
+      {/* En-tête */}
+      <section className="app-card p-5">
+        <h1 className="text-2xl font-extrabold app-title">Importer par photo (OCR)</h1>
 
-      <p style={{ marginTop: 8, marginBottom: 16 }}>
-        Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram,
-        Facebook, photo d&apos;un livre, etc.
-      </p>
-
-      <ol style={{ marginLeft: 20, marginBottom: 16 }}>
-        <li>Fais une ou plusieurs captures d&apos;écran de la recette.</li>
-        <li>Sélectionne toutes les images en même temps ci-dessous.</li>
-        <li>Nous lisons le texte sur toutes les images et fusionnons le tout en une seule fiche.</li>
-      </ol>
-
-      <input
-        type="file"
-        accept="image/*"
-        multiple
-        onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-        style={{ marginBottom: 12 }}
-      />
-
-      {files.length > 0 && (
-        <p style={{ marginBottom: 8 }}>
-          {files.length} image(s) sélectionnée(s){' '}
-          {files.length > MAX_FILES ? `— ❌ max ${MAX_FILES}` : `— max ${MAX_FILES}`}
+        <p className="mt-2 app-muted">
+          Utilise cette page quand la recette est surtout une <b>image</b> : Pinterest, Instagram,
+          Facebook, photo d&apos;un livre, etc.
         </p>
-      )}
 
-      <div style={{ marginTop: 8 }}>
-        <button onClick={run} disabled={!canRun}>
-          {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
-        </button>
-      </div>
-
-      {status && <p style={{ marginTop: 12 }}>{status}</p>}
-
-      {isDebug && (
-        <p style={{ marginTop: 8, fontSize: 13, opacity: 0.8 }}>
-          Mode debug actif : l’API renvoie un objet debug, sans redirection.
-        </p>
-      )}
-
-      {debugOut && (
-        <pre
+        {/* Instructions sous forme de carte interne */}
+        <div
+          className="mt-4 app-card p-4"
           style={{
-            marginTop: 16,
-            padding: 12,
-            border: '1px solid #eee',
-            borderRadius: 8,
-            overflowX: 'auto',
+            borderColor: 'var(--border)',
+            boxShadow: 'none',
+            background: 'rgba(255,255,255,0.7)',
           }}
         >
-          {JSON.stringify(debugOut, null, 2)}
-        </pre>
+          <div className="text-sm font-bold" style={{ color: 'var(--primary)' }}>
+            Comment faire
+          </div>
+          <ol className="mt-2 list-decimal" style={{ marginLeft: 18, lineHeight: 1.7 }}>
+            <li>Fais une ou plusieurs captures d&apos;écran de la recette.</li>
+            <li>Sélectionne toutes les images en même temps ci-dessous.</li>
+            <li>On lit le texte sur toutes les images et on fusionne en une seule fiche.</li>
+          </ol>
+        </div>
+
+        {/* Zone sélection fichiers */}
+        <div className="mt-5">
+          <label className="text-sm font-semibold" htmlFor="ocrFiles">
+            Images de la recette
+          </label>
+
+          <input
+            id="ocrFiles"
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+            className="mt-2 w-full"
+            style={{
+              background: 'white',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 12,
+            }}
+          />
+
+          {files.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="app-badge">
+                {files.length} image(s) sélectionnée(s)
+              </span>
+              <span className="text-sm app-muted">
+                max {MAX_FILES}
+                {files.length > MAX_FILES ? ' — ❌ trop d’images' : ''}
+              </span>
+            </div>
+          )}
+
+          {/* CTA */}
+          <div className="mt-4 flex items-center gap-3">
+            <button onClick={run} disabled={!canRun} className="app-btn-primary">
+              {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
+            </button>
+
+            {isDebug && (
+              <span className="app-badge" style={{ background: 'rgba(168,184,161,0.35)' }}>
+                Debug actif
+              </span>
+            )}
+          </div>
+
+          {/* Status message */}
+          {status && (
+            <div
+              className="mt-4 app-card p-3 text-sm"
+              style={{
+                boxShadow: 'none',
+                borderColor:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.7)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.25)'
+                    : 'var(--border)',
+                background:
+                  statusKind === 'success'
+                    ? 'rgba(168,184,161,0.15)'
+                    : statusKind === 'error'
+                    ? 'rgba(176,0,32,0.06)'
+                    : 'rgba(255,255,255,0.7)',
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  color:
+                    statusKind === 'success'
+                      ? 'rgba(43,43,43,0.95)'
+                      : statusKind === 'error'
+                      ? '#b00020'
+                      : 'rgba(43,43,43,0.9)',
+                }}
+              >
+                {status}
+              </span>
+            </div>
+          )}
+
+          {isDebug && (
+            <p className="mt-3 text-sm app-muted">
+              Mode debug actif : l’API renvoie un objet debug, sans redirection.
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Debug output */}
+      {debugOut && (
+        <section className="app-card p-5" style={{ marginTop: 16 }}>
+          <h2 className="text-lg font-extrabold app-title">Debug</h2>
+          <pre
+            className="mt-3 app-card p-3 text-sm overflow-auto"
+            style={{
+              borderColor: 'var(--border)',
+              boxShadow: 'none',
+              background: 'rgba(255,255,255,0.7)',
+              maxHeight: 420,
+            }}
+          >
+            {JSON.stringify(debugOut, null, 2)}
+          </pre>
+        </section>
       )}
     </main>
   )
@@ -169,11 +252,8 @@ function OcrPageInner() {
 
 export default function Page() {
   return (
-    <Suspense fallback={<div style={{ padding: 24 }}>Chargement…</div>}>
+    <Suspense fallback={<div className="app-container" style={{ padding: 24 }}>Chargement…</div>}>
       <OcrPageInner />
     </Suspense>
   )
 }
-
-
-

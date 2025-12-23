@@ -80,36 +80,109 @@ export default function ImportRecipePage() {
     }
   }
 
+  const statusKind =
+    status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : 'info'
+
   return (
-    <div style={{ maxWidth: 640, margin: '2rem auto' }}>
-      <h1>Importer une recette</h1>
+    <main className="app-container" style={{ margin: '40px auto' }}>
+      <section className="app-card p-6">
+        <h1 className="text-2xl font-extrabold app-title">Importer une recette</h1>
+        <p className="mt-2 app-muted">
+          Choisis la méthode la plus simple pour toi : URL (site/blog) ou photo (OCR).
+        </p>
 
-      <h3>Par URL</h3>
-      <input
-        placeholder="https://..."
-        value={url}
-        onChange={(e) => setUrl(e.target.value)}
-        style={{ width: '100%', padding: 8 }}
-      />
-      <div style={{ marginTop: 8 }}>
-        <button onClick={importUrl} disabled={!url.trim()}>
-          Importer
-        </button>
-      </div>
+        {/* Par URL */}
+        <div className="mt-6 app-card p-5" style={{ boxShadow: 'none', background: 'rgba(255,255,255,0.7)' }}>
+          <h2 className="text-lg font-extrabold app-title">Par URL</h2>
 
-      <h3 style={{ marginTop: 18 }}>Par photo (OCR)</h3>
-      <input
-        type="file"
-        accept="image/*"
-        onChange={(e) => setFile(e.target.files?.[0] || null)}
-      />
-      <div style={{ marginTop: 8 }}>
-        <button onClick={importOcr} disabled={!file}>
-          OCR
-        </button>
-      </div>
+          <label className="mt-3 block text-sm font-semibold" htmlFor="importUrl">
+            URL de la recette
+          </label>
+          <input
+            id="importUrl"
+            placeholder="https://..."
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="mt-2 w-full"
+            style={{
+              background: 'white',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 12,
+              maxWidth: 720,
+            }}
+          />
 
-      <p style={{ marginTop: 12 }}>{status}</p>
-    </div>
+          <div className="mt-4">
+            <button onClick={importUrl} disabled={!url.trim()} className="app-btn-primary">
+              Importer par URL
+            </button>
+          </div>
+        </div>
+
+        {/* Par OCR */}
+        <div className="mt-4 app-card p-5" style={{ boxShadow: 'none', background: 'rgba(255,255,255,0.7)' }}>
+          <h2 className="text-lg font-extrabold app-title">Par photo (OCR)</h2>
+
+          <label className="mt-3 block text-sm font-semibold" htmlFor="importOcr">
+            Image de la recette
+          </label>
+          <input
+            id="importOcr"
+            type="file"
+            accept="image/*"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            className="mt-2 w-full"
+            style={{
+              background: 'white',
+              border: '1px solid var(--border)',
+              borderRadius: 12,
+              padding: 12,
+              maxWidth: 720,
+            }}
+          />
+
+          <div className="mt-4">
+            <button onClick={importOcr} disabled={!file} className="app-btn-primary">
+              Lancer l’OCR
+            </button>
+          </div>
+        </div>
+
+        {/* Status */}
+        {status && (
+          <div
+            className="mt-5 app-card p-3 text-sm"
+            style={{
+              boxShadow: 'none',
+              borderColor:
+                statusKind === 'success'
+                  ? 'rgba(168,184,161,0.7)'
+                  : statusKind === 'error'
+                  ? 'rgba(176,0,32,0.25)'
+                  : 'var(--border)',
+              background:
+                statusKind === 'success'
+                  ? 'rgba(168,184,161,0.15)'
+                  : statusKind === 'error'
+                  ? 'rgba(176,0,32,0.06)'
+                  : 'rgba(255,255,255,0.7)',
+            }}
+          >
+            <span
+              style={{
+                fontWeight: 700,
+                color:
+                  statusKind === 'error'
+                    ? '#b00020'
+                    : 'rgba(43,43,43,0.9)',
+              }}
+            >
+              {status}
+            </span>
+          </div>
+        )}
+      </section>
+    </main>
   )
 }
