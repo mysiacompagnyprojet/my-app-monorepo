@@ -18,29 +18,6 @@ function stripWeird(s) {
    TRASH / NOISE (iPhone + Social)
 ========================= */
 
-function looksLikeEditorialNoise(line) {
-  const t = normSpaces(line).toLowerCase();
-  if (!t) return true;
-
-  // phrases marketing / éditoriales
-  if (
-    /\b(tiktok|instagram|facebook|bonne maman|marmiton|yumrecette)\b/i.test(t) ||
-    /\b(léger|riche|irrésistible|délicieux|savoureux)\b/i.test(t) &&
-    !looksLikeStepLine(t) &&
-    !parseOcrIngredient(t)
-  ) {
-    return true;
-  }
-
-  // mentions légales / sources
-  if (
-    /\b(source|droits d'auteur|copyright|©|tous droits réservés)\b/i.test(t)
-  ) {
-    return true;
-  }
-
-  return false;
-}
 
 function looksLikeBookRefNoise(line) {
   const t = normSpaces(line).toLowerCase();
@@ -106,6 +83,10 @@ function looksLikeSocialNoise(line) {
 
   if (/\b\d{1,9}\s*(likes?|j’aime|j'aime|comments?|commentaires?)\b/i.test(t)) return true;
 
+  // ✅ UI TikTok / Instagram : "NomDuCompte → Suivre"
+  if (/→\s*suivre\b/i.test(t)) return true;
+  if (/^[a-z0-9._'’ -]{2,40}\s*→\s*suivre\b/i.test(t)) return true;
+
   const patterns = [
     'toutes les publications',
     'voir plus',
@@ -149,6 +130,12 @@ function looksLikeSocialNoise(line) {
     'activer les notifications',
     'fermer',
     'retour',
+    'suivre',
+    'recommandations',
+    'explorer',
+    'ajoutez un commentaire',
+    'ajouter un commentaire',
+    'gif',
   ];
 
   if (patterns.some((p) => t.includes(p))) return true;
@@ -165,6 +152,44 @@ function looksLikeSocialNoise(line) {
   ) {
     return true;
   }
+
+  return false;
+}
+
+function looksLikeEditorialNoise(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return true;
+
+  // phrases marketing / éditoriales
+  if (
+    /\b(tiktok|instagram|facebook|bonne maman|marmiton|yumrecette)\b/i.test(t) ||
+    /\b(léger|riche|irrésistible|délicieux|savoureux)\b/i.test(t) &&
+    !looksLikeStepLine(t) &&
+    !parseOcrIngredient(t)
+  ) {
+    return true;
+  }
+
+  // mentions légales / sources
+  if (
+    /\b(source|droits d'auteur|copyright|©|tous droits réservés)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+    // Blocs "à suivre" / recos qui polluent beaucoup
+  if (/^\s*(à\s+suivre|a\s+suivre)\b/i.test(t)) return true;
+  if (/^\s*<\s*recommandations?\b/i.test(t)) return true;
+
+  // Petits tokens UI isolés
+  if (/^\s*(recommandations?|explorer|suivre)\s*$/i.test(t)) return true;
+  if (/^\s*→\s*suivre\s*$/i.test(t)) return true;
+
+  // Pseudos / noms courts bizarres ("iman.")
+  if (/^[a-z0-9._-]{2,}\.$/i.test(t) && t.length <= 12) return true;
+
+  // Compteurs type "40 61" (pas toujours captés par looksLikeCountersNoise)
+  if (/^\d{1,3}\s+\d{1,3}$/.test(t)) return true;
 
   return false;
 }
@@ -1149,21 +1174,71 @@ function extractTitleFromStepHeader(lines) {
   return null;
 }
 
+// ---------------- BAD TITLE (Cat-03) ----------------
+
+const BAD_TITLE_WORDS = [
+  'ingredients',
+  'directions',
+  'preparation',
+  'préparation',
+  'cuisson',
+  'portions',
+  'temps',
+  'calories',
+  'source',
+  'recette',
+  'yumrecette',
+  'primeal',
+  'vinegar',
+];
+
+const EMOTIONAL_TITLE_PATTERNS = [
+  /ahah/i,
+  /personne/i,
+  /vous allez/i,
+  /incroyable/i,
+  /comment vous dire/i,
+  /ce plat m'?a/i,
+  /remonté[e]? le moral/i,
+];
+
+function isBadTitleCandidate(s) {
+  if (!s) return true;
+  const t = String(s).trim().toLowerCase();
+  if (!t) return true;
+
+  // domaine / site
+  if (t.includes('.com') || t.includes('.fr')) return true;
+
+  // mots exacts bloqués (UI / sections)
+  if (BAD_TITLE_WORDS.includes(t)) return true;
+
+  // commence par un chiffre
+  if (/^\d/.test(t)) return true;
+
+  // contient une unité -> souvent un ingrédient / bruit
+  if (/\b(g|gr|kg|ml|cl)\b/i.test(t)) return true;
+
+  // accroches émotionnelles
+  return EMOTIONAL_TITLE_PATTERNS.some((r) => r.test(t));
+}
+const DEFAULT_TITLE = 'Recette importée';
+
+
 function guessTitleFromLines(lines) {
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
-  
 
   const explicit = findExplicitTitleInFirstLines(lines, 60);
   if (explicit) {
     const cleaned = sanitizePickedTitle(explicit);
-    if (cleaned) return cleaned;
+    if (cleaned && !isBadTitleCandidate(cleaned)) return cleaned;
   }
 
   const fromStepHeader = extractTitleFromStepHeader(lines);
-  if (fromStepHeader) return fromStepHeader;
+  if (fromStepHeader && !isBadTitleCandidate(fromStepHeader)) return fromStepHeader;
 
   if (head.some((l) => extractServingsFromLine(l) || isIngredientsHeader(l))) {
-    return fabricateTitleFromIngredients(lines) || 'Recette importée';
+    return DEFAULT_TITLE;
   }
 
   const ingredientLikeCount = head.filter((l) => {
@@ -1174,95 +1249,42 @@ function guessTitleFromLines(lines) {
   }).length;
 
   if (ingredientLikeCount >= 3) {
-    return fabricateTitleFromIngredients(lines) || 'Recette importée';
+    return DEFAULT_TITLE;
   }
 
   let prev = '';
   for (const l of head) {
     let t = cleanTitleCandidate(l);
     t = sanitizePickedTitle(t);
-    if (!t) {
-      prev = l;
-      continue;
-    }
+    if (!t) { prev = l; continue; }
 
-    if (isGenericSiteTitle(t)) {
-      prev = l;
-      continue;
-    }
-
-    if (looksLikeStatusBarNoise(t)) {
-      prev = l;
-      continue;
-    }
-    if (looksLikeDateNoise(t)) {
-      prev = l;
-      continue;
-    }
-    if (looksLikeCountersNoise(t)) {
-      prev = l;
-      continue;
-    }
-    if (looksLikeSocialNoise(t)) {
-      prev = l;
-      continue;
-    }
-    if (isIngredientsHeader(t)) {
-      prev = l;
-      continue;
-    }
-    if (isPreparationHeader(t)) {
-      prev = l;
-      continue;
-    }
-    if (extractServingsFromLine(t)) {
-      prev = l;
-      continue;
-    }
-
-    if (looksLikeStepContinuation(prev, t)) {
-      prev = l;
-      continue;
-    }
-
-    if (/^[-•*·]\s+/.test(l)) {
-      prev = l;
-      continue;
-    }
-    if (/^(un peu de|selon goût|au goût)\b/i.test(t)) {
-      prev = l;
-      continue;
-    }
-    if (parseOcrIngredient(t)) {
-      prev = l;
-      continue;
-    }
-
-    if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) {
-      prev = l;
-      continue;
-    }
-
-    if (looksLikeStepLine(t)) {
-      prev = l;
-      continue;
-    }
-
-    if (/^(temps|notes?)\b/i.test(t)) {
-      prev = l;
-      continue;
-    }
+    if (isGenericSiteTitle(t)) { prev = l; continue; }
+    if (looksLikeStatusBarNoise(t)) { prev = l; continue; }
+    if (looksLikeDateNoise(t)) { prev = l; continue; }
+    if (looksLikeCountersNoise(t)) { prev = l; continue; }
+    if (looksLikeSocialNoise(t)) { prev = l; continue; }
+    if (isIngredientsHeader(t)) { prev = l; continue; }
+    if (isPreparationHeader(t)) { prev = l; continue; }
+    if (extractServingsFromLine(t)) { prev = l; continue; }
+    if (looksLikeStepContinuation(prev, t)) { prev = l; continue; }
+    if (/^[-•*·]\s+/.test(l)) { prev = l; continue; }
+    if (/^(un peu de|selon goût|au goût)\b/i.test(t)) { prev = l; continue; }
+    if (parseOcrIngredient(t)) { prev = l; continue; }
+    if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) { prev = l; continue; }
+    if (looksLikeStepLine(t)) { prev = l; continue; }
+    if (/^(temps|notes?)\b/i.test(t)) { prev = l; continue; }
 
     if (t.length >= 6 && t.length <= 80 && !/\d/.test(t)) {
       const cleaned = sanitizePickedTitle(t);
-      if (cleaned) return cleaned;
+      if (cleaned && !isBadTitleCandidate(cleaned)) return cleaned;
     }
 
     prev = l;
   }
 
-  return fabricateTitleFromIngredients(lines) || 'Recette importée';
+  return DEFAULT_TITLE;
 }
+
 
 /* =========================
    (tout le reste splitIngredientsAndSteps / miniReflow est identique à ton fichier)
@@ -1715,9 +1737,14 @@ function splitIngredientsAndSteps(lines) {
   ingredientLines = ingredientLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
   notesLines = notesLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
 
+  // ✅ CAT-02: si on a un header "Ingrédients", on ne doit pas déplacer la fin des steps vers ingrédients.
+  // Ce filet de sécurité sert surtout quand le document n'a pas de structure claire.
+  if (idxIng < 0) {
   const moved = extractTrailingIngredientBlock({ ingredientLines, stepLines });
   ingredientLines = moved.ingredientLines;
   stepLines = moved.stepLines;
+ }
+
 
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
 
