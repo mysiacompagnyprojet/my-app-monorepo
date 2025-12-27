@@ -18,6 +18,30 @@ function stripWeird(s) {
    TRASH / NOISE (iPhone + Social)
 ========================= */
 
+function looksLikeEditorialNoise(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return true;
+
+  // phrases marketing / éditoriales
+  if (
+    /\b(tiktok|instagram|facebook|bonne maman|marmiton|yumrecette)\b/i.test(t) ||
+    /\b(léger|riche|irrésistible|délicieux|savoureux)\b/i.test(t) &&
+    !looksLikeStepLine(t) &&
+    !parseOcrIngredient(t)
+  ) {
+    return true;
+  }
+
+  // mentions légales / sources
+  if (
+    /\b(source|droits d'auteur|copyright|©|tous droits réservés)\b/i.test(t)
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
 function looksLikeBookRefNoise(line) {
   const t = normSpaces(line).toLowerCase();
   return /\bvoir\s+p\.?\s*\d+\b/.test(t);
@@ -360,6 +384,11 @@ l
 );
 if (cleanedLine && !isMostlyNoise(cleanedLine)) lines.push(cleanedLine);
 continue;
+}
+
+if (looksLikeEditorialNoise(l)) {
+  trash.push(l);
+  continue;
 }
 
 lines.push(l);
@@ -1528,6 +1557,20 @@ function moveVariantsBlockToNotes({ stepLines, notesLines }) {
   return { stepLines: kept, notesLines: [...notes, ...moved] };
 }
 
+  function looksLikeSpoonMeasureIngredient(line) {
+  const s = String(line || '').replace(/\u00A0/g, ' ').trim();
+
+  // 3 c.a.s. de ...
+  // 3 càs de ...
+  // 3 cas de ...
+  // 3 c.à.s. de ...
+  if (/^\d+\s*(c\s*\.?\s*a\s*\.?\s*s\s*\.?|c\s*\.?\s*à\s*\.?\s*s\s*\.?|càs|cas)\b/i.test(s)) {
+  // souvent un ingrédient contient "de" ou "d'"
+  if (/\b(d['’]?|de)\b/i.test(s)) return true;
+  }
+  return false;
+  }
+
 /* =========================
    SPLIT INGREDIENTS / STEPS / NOTES
 ========================= */
@@ -1586,6 +1629,12 @@ function splitIngredientsAndSteps(lines) {
         prev = l;
         continue;
       }
+      if (looksLikeSpoonMeasureIngredient(l)) {
+      ingredientLines.push(l);
+      prev = l;
+      continue;
+      }
+
 
       if (!inSteps && (looksLikeStepLine(l) || looksLikeStepContinuation(prev, l))) inSteps = true;
 
@@ -1633,6 +1682,10 @@ function splitIngredientsAndSteps(lines) {
           ingredientLines.push(l);
           prev = l;
           continue;
+        }
+        if (looksLikeSpoonMeasureIngredient(l)) {
+        ingredientLines.push(l);
+        continue;
         }
 
         if (looksLikeStepLine(l) || looksLikeStepVerbLine(l) || looksLikeStepContinuation(prev, l)) {

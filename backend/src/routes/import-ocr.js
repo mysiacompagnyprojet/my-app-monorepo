@@ -441,7 +441,6 @@ function rescuePeanutIngredientsFromAllLines({ filteredLines, ingredientLines, n
   return { ingredientLines: ing, notesLines: cleanedNotes };
 }
 
-
 // ---------------- Router ----------------
 
 const router = express.Router();
@@ -702,6 +701,10 @@ return { ingredientLines: ing, notesLines: keepNotes };
           // normalisation "cuillère à soupe" (aide parseOcrIngredient)
           l = l.replace(/cuill[eè]res?\s+à\s+soupe/gi, 'càs');
 
+          // normalise c.a.s / càs / c.à.s => càs
+          l = l.replace(/\b(c\s*\.?\s*a\s*\.?\s*s\s*\.?|c\s*\.?\s*à\s*\.?\s*s\s*\.?|cas)\b/gi, 'càs');
+  
+
           // ✅ supprime le bruit OCR "Og / 0g"
           if (isOcrZeroGramNoise(l)) return null;
 
@@ -744,18 +747,93 @@ return { ingredientLines: ing, notesLines: keepNotes };
     );
 
     // ---------- STEPS ----------
-    const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
+const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
 
-    const steps = rawSteps
-      .flatMap((s) =>
-        String(s || '')
-          .split(/\.(?=\s+[A-ZÀ-ÖØ-Þ])/g) // split au "." suivi d'une majuscule
-          .map((x) => x.trim())
-      )
-      .filter((s) => s && s !== '•' && s !== '.' && s !== '·');
+// ✅ helper: retire numéros / puces au début ("1.", "2)", "3 -", "•", etc.)
+function cleanStepPrefix(s) {
+  return String(s || '')
+    .replace(/^[\s•·\u2022\-*]+/g, '')          // puces
+    .replace(/^\d{1,3}\s*$/g, '')               // "1" seul
+    .replace(/^\d{1,3}\s+(?=[A-ZÀ-ÖØ-Þ])/g, '') // ✅ "1 Préparez" / "2 Ajoutez" / "3 Préchauffez"
+    .replace(/^\d{1,3}\s*[.)\-:]\s*/g, '')      // "1." / "2)" / "3 -"
+    .trim();
+}
+
+// ✅ helper: split "1 phrase = 1 ligne" mais seulement quand c'est utile
+function splitStepsSmart(arr) {
+  const out = [];
+  for (const s0 of (arr || [])) {
+    let s = String(s0 || '').replace(/\s+/g, ' ').trim();
+    if (!s) continue;
+
+    // Supprime les tokens purement numériques (vu dans tes tests)
+    if (/^\d{1,3}$/.test(s)) continue;
+
+    // Nettoyage prefix AVANT split
+    s = cleanStepPrefix(s);
+    if (!s) continue;
+
+    // Split par ". " (phrases) si c'est long ou si on a clairement plusieurs phrases
+    const parts = s
+      .split(/(?<=\.)\s+/g) // garde le point dans la phrase précédente
+      .map((x) => cleanStepPrefix(x))
+      .filter(Boolean);
+
+    if (parts.length >= 2 && (s.length >= 90 || parts.length >= 3)) {
+      out.push(...parts);
+    } else {
+      out.push(s);
+    }
+  }
+  return out;
+}
+
+const steps = splitStepsSmart(rawSteps)
+  .map((s) => s.trim())
+  .filter(Boolean)
+  // vire les parasites très courts
+  .filter((s) => s !== '•' && s !== '.' && s !== '·')
+  // retire (encore) les "1" restants si jamais
+  .filter((s) => !/^\d{1,3}$/.test(s));
+
+
+    // ✅ NOTES fallback : si "Remarques:" est détecté mais que split n'a rien mis en notes,
+// on repêche certaines phrases tombées dans steps (ex: "Si vous préférez...")
+const hasRemarksHeader =
+  (split.ingredientLines || []).some((l) => /^remarques?\s*:?\s*$/i.test(String(l || '').trim())) ||
+  (filtered.lines || []).some((l) => /^remarques?\s*:?\s*$/i.test(String(l || '').trim()));
+
+let extractedNotes = [];
+let stepsFinal = steps;
+
+// Si aucune note n'a été détectée mais qu'on a un header "Remarques"
+if (hasRemarksHeader && (!split.notesLines || split.notesLines.length === 0)) {
+  const isNoteLike = (s) => {
+    const t = String(s || '').trim();
+
+    // Remarques / conseils / astuces typiques
+    if (/^(si vous pr[eé]f[eé]rez|astuce|conseil|remarques?\b|note\b)/i.test(t)) return true;
+
+    // variantes fréquentes
+    if (/^vous pouvez\b/i.test(t) && t.length <= 140) return true; // "Vous pouvez ..."
+
+    return false;
+  };
+
+  extractedNotes = steps.filter(isNoteLike);
+
+  // retire ces lignes des steps
+  stepsFinal = steps.filter((s) => !isNoteLike(s));
+}  
 
     // ---------- NOTES ----------
-    const notes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean).join('\n');
+    const baseNotes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean);
+    const notes = baseNotes
+    .concat(extractedNotes || [])
+    .map((s) => String(s || '').trim())
+    .filter(Boolean)
+    .join('\n');
+
 
     // ✅ TITRE FINAL : Vision > OCR lines > fallback ingrédients principal
     let title =
@@ -779,7 +857,7 @@ return { ingredientLines: ing, notesLines: keepNotes };
       imageUrl: null,
       notes,
       ingredients,
-      steps,
+      steps: stepsFinal,
       trash: filtered.trash,
     };
 
