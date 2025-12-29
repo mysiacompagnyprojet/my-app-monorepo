@@ -1,10 +1,20 @@
+//frontend/my-app/src/app/recipes/new/page.tsx
 'use client'
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 
-type Line = { name: string; quantity: number; unit: string; quantityRaw?: string }
+type Line = { 
+  name: string; 
+  quantity: number; 
+  unit: string; 
+  quantityRaw?: string;
+  price?: { eurPer: number; perUnit: string } | null;
+  costEur?: number | null;
+  priceMatched?: boolean;
+  airtableId?: string | null;
+}
 
 type Draft = {
   title?: string
@@ -14,6 +24,7 @@ type Draft = {
   steps?: string[]
   ingredients?: Array<Line | { raw: string } | string>
   trash?: string[]
+  totalCostEur?: number
 }
 
 /* ──────────────────────────────────────────────────────────────

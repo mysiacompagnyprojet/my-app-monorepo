@@ -1,20 +1,10 @@
+//frontend/my-app/src/app/import/ocr/page.tsx
 'use client'
 
 import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
-
-type OcrIngredient = { name: string; quantity: number; unit: string }
-
-type OcrDraft = {
-  title: string
-  servings: number
-  imageUrl: string | null
-  notes: string
-  steps: string[]
-  ingredients: OcrIngredient[]
-  trash?: string[]
-}
+import type { OcrDraft } from 'src/types/recipe'
 
 type ImportOcrResponse =
   | { ok: true; draft: OcrDraft }
@@ -33,6 +23,7 @@ function OcrPageInner() {
   const [isRunning, setIsRunning] = useState(false)
   const [debugOut, setDebugOut] = useState<any>(null)
 
+  const [draft, setDraft] = useState<OcrDraft | null>(null)
   const canRun = useMemo(
     () => files.length >= 1 && files.length <= MAX_FILES && !isRunning,
     [files, isRunning]
@@ -69,6 +60,9 @@ function OcrPageInner() {
         body: form,
       })
 
+      if ('draft' in data) {
+        setDraft(data.draft)
+      }
       if ((data as any)?.ok === false) {
         setStatus('❌ ' + ((data as any)?.message || (data as any)?.error || 'Erreur OCR'))
         return
@@ -177,7 +171,50 @@ function OcrPageInner() {
             <button onClick={run} disabled={!canRun} className="app-btn-primary">
               {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
             </button>
+            return (
+            <div style={{ padding: 16 }}>
+            {/* ... ton UI existant (upload, bouton run, status) ... */}
 
+              {draft && (
+              <div style={{ marginTop: 16 }}>
+              <h3>Ingrédients</h3>
+
+              {draft?.ingredients?.map((ing, idx) => (
+              <div key={idx} style={{ padding: '8px 0', borderBottom: '1px solid #222' }}>
+               <div>
+                <strong>{ing.name}</strong>{' '}
+                 <span style={{ opacity: 0.8 }}>
+                 {ing.quantity ? `${ing.quantity}` : ''} {ing.unit || ''}
+                  </span>
+                  </div>
+
+                  <div style={{ fontSize: 13, opacity: 0.85 }}>
+                  {ing.priceMatched ? (
+                 <>
+                 <span>
+                      Prix unitaire: {ing.price?.eurPer ?? '—'} € / {ing.price?.perUnit ?? '—'}
+                  </span>
+                  {' · '}
+                   <span>
+                    Coût: {typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '—'}
+                   </span>
+                    </>
+                    ) : (
+                    <span style={{ color: '#ffb020' }}>Prix non trouvé dans Airtable</span>
+                   )}
+                    </div>
+                    </div>
+                    ))}
+
+                   {/* ✅ Total */}
+                   <div style={{ marginTop: 12, fontWeight: 700 }}>
+                       Total recette :{' '}
+                        {typeof draft.totalCostEur === 'number' ? `${draft.totalCostEur.toFixed(2)} €` : '—'}
+                       </div>
+                       </div>
+                       )}
+                       </div>
+                      );
             {isDebug && (
               <span className="app-badge" style={{ background: 'rgba(168,184,161,0.35)' }}>
                 Debug actif

@@ -6,6 +6,9 @@ const multer = require('multer');
 
 const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle } = require('../utils/ocrTitle');
 
+// ✅ Airtable service
+const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
+
 const { ocrFromBufferWithDebug } = require('../services/vision');
 const {
   smartFilterWithTrashFromText,
@@ -26,6 +29,117 @@ try {
 
 // ---------------- Helpers ----------------
 
+function roundMoney(n) {
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function spoonToMl(unit) {
+  const u = String(unit || '').toLowerCase().trim();
+  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
+  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
+  return null;
+}
+
+/**
+ * ing: { name, quantity, unit }
+ * priceRow: { unit: 'g'|'ml'|'piece', pricePerUnit: number, airtableId, ... }
+ */
+function computeIngredientCostEur(ing, priceRow) {
+  if (!priceRow || !Number.isFinite(priceRow.pricePerUnit)) {
+    return { price: null, costEur: null, matched: false };
+  }
+
+  const qty = Number(ing?.quantity || 0);
+
+  // ex: sel/poivre "au goût" => coût non calculé (mais on marque matched si on a trouvé le prix)
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: 0,
+      matched: true,
+    };
+  }
+
+  // unit OCR
+  const unitRaw = String(ing?.unit || '').trim();
+
+  // ✅ cuillères -> ml (uniquement si Airtable est en "ml")
+  const mlPerSpoon = spoonToMl(unitRaw);
+  if (mlPerSpoon) {
+    if (priceRow.unit !== 'ml') {
+      return {
+        price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+        costEur: null,
+        matched: true,
+      };
+    }
+    const totalMl = qty * mlPerSpoon;
+    const cost = totalMl * Number(priceRow.pricePerUnit || 0);
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
+      matched: true,
+    };
+  }
+
+  // ✅ unités standard -> base (g/ml/piece)
+  const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
+  const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon);
+
+  // On ne calcule que si la base correspond à l’unité du prix unitaire Airtable
+  if (baseUnit !== priceRow.unit) {
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: null,
+      matched: true,
+    };
+  }
+
+  const cost = baseQty * Number(priceRow.pricePerUnit || 0);
+  return {
+    price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+    costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
+    matched: true,
+  };
+}
+
+async function priceIngredients(ingredients) {
+  let totalCostEur = 0;
+
+  const pricedIngredients = await Promise.all(
+    (ingredients || []).map(async (ing) => {
+      try {
+        const priceRow = await getIngredientPriceByName(ing.name);
+        const { price, costEur, matched } = computeIngredientCostEur(ing, priceRow);
+
+        if (typeof costEur === 'number' && Number.isFinite(costEur)) {
+          totalCostEur += costEur;
+        }
+
+        return {
+          ...ing,
+          price,                          // { eurPer, perUnit } | null
+          costEur,                        // number | null
+          priceMatched: matched,          // boolean
+          airtableId: priceRow?.airtableId || null,
+        };
+      } catch (e) {
+        // si Airtable plante, on ne bloque pas l’OCR
+        return {
+          ...ing,
+          price: null,
+          costEur: null,
+          priceMatched: false,
+          airtableId: null,
+        };
+      }
+    })
+  );
+
+  return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
+}
+
 function stripBulletPrefix(s) {
   return String(s || '')
     .trim()
@@ -40,23 +154,100 @@ function normalizeTitleCandidate(s) {
     .trim();
 }
 
+// ---------------- CAT-03.1.2 Helpers (local) ----------------
+
+function normSpaces(s) {
+  return String(s || '')
+    .replace(/\u00A0/g, ' ')
+    .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+function looksTruncatedTitle(t) {
+  const s = normSpaces(String(t || ''));
+  if (!s) return false;
+  return /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(s);
+}
+
+function normalizeTitleJoinPiece(s) {
+  let t = normSpaces(s);
+  t = t.replace(/\s*\+\s*/g, ' ');
+  t = t.replace(/[⭑★☆✦✧✨]+$/g, '');
+  t = t.replace(/[.!?…]+$/g, '').trim();
+  return normSpaces(t);
+}
+
+function isBadTitleCandidateLocal(s) {
+  const t = normSpaces(s).toLowerCase();
+  if (!t) return true;
+  if (t.includes('.com') || t.includes('.fr')) return true;
+  if (/^\d/.test(t)) return true;
+  if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
+
+  if (isBlacklistedUiTitle(t)) return true;
+  if (looksLikeEmotionalHookTitle(t)) return true;
+  if (looksLikeStepTitle(t)) return true;
+
+  return false;
+}
+
+function canJoinTitleLines(prev, next) {
+  const a = normSpaces(prev);
+  const b = normSpaces(next);
+  if (!a || !b) return false;
+
+  if (/^ingr[ée]dients?\b/i.test(b)) return false;
+  if (/^(préparation|preparation|instructions?)\b/i.test(b)) return false;
+  if (/\b(temps|cuisson|portions?|calories?)\b/i.test(b)) return false;
+
+  if (parseOcrIngredient(b)) return false;
+  if (looksLikeStepTitle(b)) return false;
+
+  const aEndsOpen = /[,/&+–—-]\s*$/.test(a) || /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(a);
+  const bLooksContinuation = /^[A-ZÀ-ÖØ-Þa-zà-öø-ÿ]/.test(b) && !/^\d/.test(b) && b.length <= 60;
+
+  if (aEndsOpen) return true;
+  if (a.length <= 40 && bLooksContinuation) return true;
+
+  return false;
+}
+
+function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
+  let out = normalizeTitleJoinPiece(scan[startIdx]);
+  if (!out) return null;
+
+  let used = 1;
+
+  for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
+    const next = normalizeTitleJoinPiece(scan[k]);
+    if (!next) break;
+
+    if (!canJoinTitleLines(out, next)) break;
+
+    out = normSpaces(`${out} ${next}`);
+    used++;
+  }
+
+  if (out.length < 6 || out.length > 90) return null;
+  if (/\d/.test(out)) return null;
+  if (isBadTitleCandidateLocal(out)) return null;
+
+  return out;
+}
+
 function isBlacklistedUiTitle(s) {
   const t = normalizeTitleCandidate(s).toLowerCase();
   if (!t) return true;
 
-  // ✅ TikTok / IG : "Nom → Suivre"
   if (/→\s*suivre$/i.test(t)) return true;
   if (/\bsuivre$/i.test(t) && t.includes('→')) return true;
 
-  // ✅ Instagram / FB / UI générique
   if (t === 'toutes les publications' || t === 'toute les publications') return true;
   if (t === 'enregistré' || t === 'enregistree' || t === 'enregistrée') return true;
 
-  // pages / noms de comptes souvent pris comme titre à tort
   if (t === 'recettes délice' || t === 'recettes delice') return true;
   if (t === 'recettes et délices' || t === 'recettes et delices') return true;
 
-  // Facebook header
   if (t.startsWith('publication de')) return true;
 
   return false;
@@ -74,7 +265,6 @@ function looksLikeEmotionalHookTitle(raw) {
 
   const s = stripDiacritics(s0).toLowerCase();
 
-  // ✅ phrase longue sans mot-clé recette => jamais un titre
   if (
     s.length > 60 &&
     !/\b(recette|gateau|gâteau|soupe|salade|pates?|pâtes?|riz|poulet|boeuf|bœuf|porc|poisson)\b/.test(s)
@@ -82,15 +272,12 @@ function looksLikeEmotionalHookTitle(raw) {
     return true;
   }
 
-  // signes typiques d’accroche (beaucoup de posts)
-  if (/[!?]{2,}/.test(s)) return true; // "??", "!!", "?!"
+  if (/[!?]{2,}/.test(s)) return true;
   if (/\bahah\b/.test(s)) return true;
   if (/\bpersonne\b/.test(s)) return true;
 
-  // 1ère personne / storytelling
   if (/\b(j['’]ai|j[’']?|je|m['’]a|mon|ma|mes|moi)\b/.test(s)) return true;
 
-  // phrases “marketing”
   const hooks = [
     'comment vous dire',
     'vous allez adorer',
@@ -109,7 +296,6 @@ function looksLikeEmotionalHookTitle(raw) {
 
   if (hooks.some((h) => s.includes(h))) return true;
 
-  // ligne qui ressemble à une phrase, pas à un titre recette (trop longue + verbes)
   if (s.length > 45 && /\b(dit|mangeait|voici|ajoute|ajoutee|comment|dire|remonte)\b/.test(s)) return true;
 
   return false;
@@ -147,7 +333,6 @@ function inferTitleFromContent(ingredientsRows, stepsArr) {
   return null;
 }
 
-// ✅ Retire les headers FB qui parasitent les titres
 function removeSocialHeaderLines(lines) {
   return (lines || []).filter((l) => !/^publication\s+de\b/i.test(String(l || '').trim()));
 }
@@ -158,26 +343,16 @@ function isOcrZeroGramNoise(line) {
     .replace(/\s+/g, ' ')
     .trim();
 
-  // "Og", "0g", parfois "O g", ou "0 g"
   if (/^o\s*[gq]$/i.test(s)) return true;
   if (/^0\s*g$/i.test(s)) return true;
 
   return false;
 }
 
-/**
- * Split ligne "épices" si:
- * - pas de quantité au début
- * - contient des virgules
- * - et ressemble à une liste
- *
- * ✅ Retourne des objets { text, noQtyList } pour savoir si on doit FORCER quantity=0
- */
 function splitCommaSeparatedNoQty(line) {
   const raw = stripBulletPrefix(line);
   if (!raw) return [{ text: line, noQtyList: false }];
 
-  // si ça commence par une quantité => on ne split pas
   if (/^\s*(\d+([.,]\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)\b/.test(raw)) {
     return [{ text: line, noQtyList: false }];
   }
@@ -207,7 +382,6 @@ function fabricateTitleFromIngredientsRows(ingredientsRows) {
 
   const rows = Array.isArray(ingredientsRows) ? ingredientsRows : [];
 
-  // prend l’ingrédient avec la plus grosse quantité (si dispo), sinon le 1er “utile”
   let best = null;
 
   for (const r of rows) {
@@ -225,13 +399,11 @@ function fabricateTitleFromIngredientsRows(ingredientsRows) {
 
   if (!best) return null;
 
-  // mini "style" pour tes cas fréquents
   const hasCoco = rows.some((r) => String(r?.name || '').toLowerCase().includes('lait de coco'));
   const hasCrevettes = rows.some((r) => String(r?.name || '').toLowerCase().includes('crevette'));
 
   if (hasCrevettes && hasCoco) return 'Crevettes au lait de coco';
 
-  // sinon juste capitaliser le principal
   const t = best.name.toLowerCase();
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
@@ -241,7 +413,6 @@ function isUnitOnlyLine(s) {
   return l === 'g' || l === 'kg' || l === 'ml' || l === 'cl' || l === 'l';
 }
 
-// Recolle les ingrédients Instagram cassés en lignes du type: ["100", "g", "de beurre de", "cacahuete"]
 function joinWrappedLinesForIngredients(lines) {
   const src = (lines || [])
     .map((x) => String(x || '').replace(/\s+/g, ' ').trim())
@@ -253,7 +424,6 @@ function joinWrappedLinesForIngredients(lines) {
   while (i < src.length) {
     const cur = src[i];
 
-    // cas: "100" puis "g|ml|..." puis une ou plusieurs lignes de texte
     if (/^\d+$/.test(cur) && i + 1 < src.length && isUnitOnlyLine(src[i + 1])) {
       const qty = cur;
       const unit = src[i + 1].trim();
@@ -271,7 +441,6 @@ function joinWrappedLinesForIngredients(lines) {
         nameParts.push(x);
         i++;
 
-        // stop si on voit un nouveau début d'ingrédient (quantité)
         if (i < src.length && /^\d+/.test(src[i])) break;
       }
 
@@ -280,7 +449,6 @@ function joinWrappedLinesForIngredients(lines) {
       continue;
     }
 
-    // cas: ligne seule "g" => si la ligne précédente finit par un nombre, on l'attache, sinon on ignore
     if (isUnitOnlyLine(cur)) {
       if (out.length > 0 && /\b\d+$/.test(out[out.length - 1])) {
         out[out.length - 1] = `${out[out.length - 1]} ${cur}`.replace(/\s+/g, ' ').trim();
@@ -310,13 +478,11 @@ function uniqLines(arr) {
   return out;
 }
 
-// ✅ ne fait QUE rajouter des ingrédients, ne touche pas aux steps.
 function rescueWrappedIngredientFragmentsOnly(split) {
   const ing = Array.isArray(split?.ingredientLines) ? [...split.ingredientLines] : [];
   const notes = Array.isArray(split?.notesLines) ? split.notesLines : [];
   const steps = Array.isArray(split?.stepLines) ? split.stepLines : [];
 
-  // On ne prend que des "petits morceaux" typiques OCR (pas des phrases)
   const candidates = []
     .concat(notes, steps)
     .map((x) => stripBulletPrefix(String(x || '')).replace(/^[.■]+/g, '').trim())
@@ -324,19 +490,15 @@ function rescueWrappedIngredientFragmentsOnly(split) {
     .filter((t) => {
       const low = t.toLowerCase();
 
-      // ✅ très court / fragment
-      if (isUnitOnlyLine(low)) return true; // "g"
-      if (/^\d{1,4}$/.test(low)) return true; // "100"
-      if (/^(de|d['’])\b/.test(low)) return true; // "de beurre de"
+      if (isUnitOnlyLine(low)) return true;
+      if (/^\d{1,4}$/.test(low)) return true;
+      if (/^(de|d['’])\b/.test(low)) return true;
       if (/^(beurre|cacahu|grill|concas)\b/.test(low)) return true;
 
-      // marqueurs réseaux (souvent collés aux fragments ingrédients)
       if (/\b(recoltos|delico|recettes?\s+d[eé]lice)\b/.test(low)) return true;
 
-      // sinon, on évite de prendre des vraies phrases (trop long)
       if (t.length > 34) return false;
 
-      // petite tolérance: mots "ingrédients" seuls
       if (/^ingr[eé]dients?\s*:?$/.test(low)) return true;
 
       return false;
@@ -344,16 +506,12 @@ function rescueWrappedIngredientFragmentsOnly(split) {
 
   if (!candidates.length) return split;
 
-  // Recolle les fragments ("100", "g", "de beurre de", "cacahuete") => "100 g de beurre de cacahuete"
   const rebuilt = joinWrappedLinesForIngredients(candidates);
 
-  // Ajoute uniquement ce qui ressemble à une ligne ingrédient exploitable
   const add = rebuilt.filter((l) => {
     const s = String(l || '').trim();
     if (!s) return false;
-    // au moins une quantité + une unité
     if (/^\d{1,4}\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(s)) return true;
-    // ou parseOcrIngredient arrive à comprendre
     return !!parseOcrIngredient(s);
   });
 
@@ -365,27 +523,17 @@ function rescueWrappedIngredientFragmentsOnly(split) {
   };
 }
 
-/**
- * ✅ Patch Biscuits:
- * Dé-fusionne une ligne ingrédient quand splitIngredientsAndSteps a déjà collé
- * "100 g de chocolat noir de beurre de cacahuete" au lieu de 2 ingrédients.
- */
 function splitMergedIngredientLine(line, trash) {
   let s = String(line || '').replace(/\s+/g, ' ').trim();
   if (!s) return [];
 
-  // virer bruit de fin (ex: "Recoltos Délico")
   s = s.replace(/\bRecoltos\b.*$/i, '').trim();
 
-  // ✅ cas précis "100 g de chocolat noir de beurre de cacahuete" => 2 ingrédients
   const m = s.match(/^(\d+)\s*g\s+de\s+(.+?)\s+de\s+beurre\s+de\s+cacahu(?:e|è)te\b/i);
   if (m && /chocolat/i.test(m[2])) {
     const qty = m[1];
-
-    // si le même nombre apparaît dans trashSample, on est encore + confiant
     const hasQtyInTrash = Array.isArray(trash) && trash.some((x) => String(x || '').trim() === qty);
     const qty2 = hasQtyInTrash ? qty : qty;
-
     return [`${qty} g de ${m[2].trim()}`, `${qty2} g de beurre de cacahuète`];
   }
 
@@ -409,14 +557,12 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const texts = [];
 
-    // ✅ Titres Vision collectés sur TOUTES les images (en debug et aussi en normal)
     const pickedTitles = [];
     const visionDebugByImage = [];
 
     for (let i = 0; i < req.files.length; i++) {
       const f = req.files[i];
 
-      // ✅ On utilise la version debug pour récupérer pickedTitle (même en normal)
       const out = await ocrFromBufferWithDebug(f.buffer, { lang: 'fr' });
 
       if (out?.text) texts.push(out.text);
@@ -434,26 +580,48 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       }
     }
 
-    // ✅ boucle finie => pickedTitles est COMPLET
-    const mergedFromVision = tryMergeSplitTitle(pickedTitles);
-    const bestVisionTitleRaw = mergedFromVision || pickBestTitle(pickedTitles);
+    const cleanedPickedTitles = (pickedTitles || [])
+      .map((t) => String(t || '').trim())
+      .filter(Boolean)
+      .filter((t) => isValidRecipeTitleCandidate(t))
+      .filter((t) => !isBlacklistedUiTitle(t))
+      .filter((t) => !looksLikeEmotionalHookTitle(t))
+      .filter((t) => !looksLikeStepTitle(t));
 
-    const bestVisionTitle =
-      bestVisionTitleRaw && isValidRecipeTitleCandidate(bestVisionTitleRaw) && !isBlacklistedUiTitle(bestVisionTitleRaw)
+    const mergedFromVision = tryMergeSplitTitle(cleanedPickedTitles);
+    const bestVisionTitleRaw = mergedFromVision || pickBestTitle(cleanedPickedTitles);
+
+    let bestVisionTitle =
+      bestVisionTitleRaw &&
+      isValidRecipeTitleCandidate(bestVisionTitleRaw) &&
+      !isBlacklistedUiTitle(bestVisionTitleRaw) &&
+      !looksLikeEmotionalHookTitle(bestVisionTitleRaw) &&
+      !looksLikeStepTitle(bestVisionTitleRaw)
         ? String(bestVisionTitleRaw).trim()
         : null;
 
     const rawText = texts.join('\n\n');
     const filtered = smartFilterWithTrashFromText(rawText);
 
-    // ✅ On protège le fallback “guessTitleFromLines”
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
 
-    // Split contenu (ingrédients/étapes)
+    if (bestVisionTitle && looksTruncatedTitle(bestVisionTitle)) {
+      const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
+
+      const target = normalizeTitleJoinPiece(bestVisionTitle);
+      let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
+      if (idx < 0) idx = 0;
+
+      const merged = buildMergedTitleCandidate(scan, idx, 3);
+
+      if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
+        bestVisionTitle = merged;
+      }
+    }
+
     let lines = removeSocialHeaderLines(filtered.lines);
     let split = splitIngredientsAndSteps(lines);
 
-    // ✅ Filet de sécurité : récupère des morceaux d'ingrédients tombés en notes/étapes
     split = rescueWrappedIngredientFragmentsOnly(split);
 
     lines = miniReflow(split);
@@ -473,7 +641,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
           l = l.replace(/^[.■]+/g, '').trim();
 
-          // ✅ filtres anti-métadonnées
           if (/^(source|portions?|temps|calories?|remarques?|ingr[eé]dients?\s*:|[eé]tapes?\s+de\s+cuisson\s*:)\b/i.test(l))
             return null;
           if (/\b\w+\.(com|fr|net|org)\b/i.test(l)) return null;
@@ -486,7 +653,14 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             .replace(/\s+/g, ' ')
             .trim();
 
-          if (meta === 'etapes de cuisson:' || meta === 'etapes de cuisson' || meta === 'preparation:' || meta === 'preparation' || meta === 'ingredients:' || meta === 'ingredients')
+          if (
+            meta === 'etapes de cuisson:' ||
+            meta === 'etapes de cuisson' ||
+            meta === 'preparation:' ||
+            meta === 'preparation' ||
+            meta === 'ingredients:' ||
+            meta === 'ingredients'
+          )
             return null;
 
           l = l.replace(/cuill[eè]res?\s+à\s+soupe/gi, 'càs');
@@ -497,15 +671,12 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           if (obj.noQtyList) {
             const name = stripBulletPrefix(l);
             if (!name) return null;
-
             if (/^sel$/i.test(name)) return { name: 'sel', quantity: 0, unit: '' };
             if (/^poivre$/i.test(name)) return { name: 'poivre', quantity: 0, unit: '' };
-
             return { name, quantity: 0, unit: '' };
           }
 
           const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
-
           if (!parsed) return { name: l, quantity: 0, unit: '' };
 
           const row = {
@@ -579,22 +750,15 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       inferTitleFromContent(ingredients, steps) ||
       'Recette importée';
 
-    // CAT-03 — accroches émotionnelles / storytelling
     if (looksLikeEmotionalHookTitle(title)) {
-      title =
-        fabricateTitleFromIngredientsRows(ingredients) ||
-        inferTitleFromContent(ingredients, steps) ||
-        'Recette importée';
+      title = inferTitleFromContent(ingredients, steps) || fabricateTitleFromIngredientsRows(ingredients) || 'Recette importée';
     }
 
-    // Sécurité : un titre ne doit jamais être une étape
     if (looksLikeStepTitle(title)) {
-      title =
-        fabricateTitleFromIngredientsRows(ingredients) ||
-        inferTitleFromContent(ingredients, steps) ||
-        'Recette importée';
+      title = inferTitleFromContent(ingredients, steps) || fabricateTitleFromIngredientsRows(ingredients) || 'Recette importée';
     }
 
+    // ✅ IMPORTANT : draft est déclaré AVANT d’être utilisé (sinon: cannot access draft before initialization)
     const draft = {
       title,
       servings,
@@ -603,7 +767,13 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       ingredients,
       steps,
       trash: filtered.trash,
+      totalCostEur: null,
     };
+
+    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer)
+    const priced = await priceIngredients(draft.ingredients);
+    draft.ingredients = priced.ingredients;
+    draft.totalCostEur = priced.totalCostEur;
 
     // ✅ debug=title : renvoie seulement infos titres
     if (debugMode === 'title') {
@@ -612,6 +782,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         debug: {
           imagesCount: req.files.length,
           pickedTitles,
+          cleanedPickedTitles,
           mergedFromVision: mergedFromVision || null,
           bestVisionTitle: bestVisionTitle || null,
           finalTitle: title,
@@ -628,6 +799,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           imagesCount: req.files.length,
           title,
           servings,
+          totalCostEur: draft.totalCostEur,
           vision: {
             pickedTitles,
             mergedFromVision: mergedFromVision || null,
@@ -658,3 +830,4 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 });
 
 module.exports = router;
+
