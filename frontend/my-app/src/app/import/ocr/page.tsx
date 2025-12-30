@@ -74,25 +74,29 @@ function OcrPageInner() {
         return
       }
 
-      const d = (data as any).draft as OcrDraft
+      const draft = (data as any).draft;
+      sessionStorage.setItem('recipeDraft', JSON.stringify(draft));
+      router.push('/recipes/new?from=ocr=1');
+      return;
+      //demande de supression par chatgpt le 30/12/25 d'ici
+      //const merged: OcrDraft = {
+        //title: (d.title || '').toString().trim() || 'Recette importée',
+        //servings: Number(d.servings || 1) || 1,
+        //imageUrl: d.imageUrl ?? null,
+        //notes: (d.notes || '').toString(),
+        //steps: Array.isArray(d.steps)
+        //  ? d.steps.map((s) => String(s || '').trim()).filter(Boolean)
+        //  : [],
+        //ingredients: Array.isArray(d.ingredients) ? d.ingredients.filter(Boolean) : [],
+        //trash: Array.isArray(d.trash)
+        //  ? d.trash.map((s) => String(s || '').trim()).filter(Boolean)
+        //  : [],
+      //}
+      //sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
+      // A ici
 
-      const merged: OcrDraft = {
-        title: (d.title || '').toString().trim() || 'Recette importée',
-        servings: Number(d.servings || 1) || 1,
-        imageUrl: d.imageUrl ?? null,
-        notes: (d.notes || '').toString(),
-        steps: Array.isArray(d.steps)
-          ? d.steps.map((s) => String(s || '').trim()).filter(Boolean)
-          : [],
-        ingredients: Array.isArray(d.ingredients) ? d.ingredients.filter(Boolean) : [],
-        trash: Array.isArray(d.trash)
-          ? d.trash.map((s) => String(s || '').trim()).filter(Boolean)
-          : [],
-      }
-
-      sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
-      setStatus(`✅ OCR OK (${files.length} image(s))`)
-      router.push('/recipes/new?prefill=1')
+      //setStatus(`✅ OCR OK (${files.length} image(s))`)
+      
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
     } finally {

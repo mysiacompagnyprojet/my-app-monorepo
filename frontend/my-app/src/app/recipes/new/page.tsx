@@ -4,16 +4,19 @@
 import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
+import type { OcrDraft } from 'src/types/recipe'
 
-type Line = { 
-  name: string; 
-  quantity: number; 
-  unit: string; 
-  quantityRaw?: string;
-  price?: { eurPer: number; perUnit: string } | null;
-  costEur?: number | null;
-  priceMatched?: boolean;
-  airtableId?: string | null;
+type Line = {
+  name: string
+  quantity: number
+  unit: string
+  quantityRaw?: string
+
+  // pricing (vient du backend OCR)
+  price?: { eurPer: number; perUnit: string } | null
+  costEur?: number | null
+  priceMatched?: boolean
+  airtableId?: string | null
 }
 
 type Draft = {
@@ -71,6 +74,9 @@ function NewRecipeInner() {
   const router = useRouter()
   const search = useSearchParams()
 
+  // ✅ 5-B) état draft OCR (sert pour total + debug si besoin)
+  const [draft, setDraft] = useState<OcrDraft | null>(null)
+
   const [title, setTitle] = useState('')
   const [servings, setServings] = useState(1)
   const [imageUrl, setImageUrl] = useState('')
@@ -83,6 +89,69 @@ function NewRecipeInner() {
 
   const prefill = useMemo(() => search.get('prefill') === '1', [search])
 
+  // ✅ 5-C) lecture du draft OCR depuis sessionStorage quand on arrive depuis /import/ocr
+  const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
+
+  useEffect(() => {
+    if (!fromOcr) return
+
+    const raw = sessionStorage.getItem('recipeDraft');
+    console.log('RAW recipeDraft =', raw);
+
+    if (!raw) return;
+
+    try {
+      const d = JSON.parse(raw) as OcrDraft
+      setDraft(d)
+
+      // Remplissage des champs avec le draft OCR
+      setTitle(String(d.title || ''))
+      setServings(Number(d.servings || 1) || 1)
+      setImageUrl(String(d.imageUrl || ''))
+      setNotes(String(d.notes || ''))
+
+      const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
+      setSteps(s.length ? s : [''])
+
+      // ingrédients OCR -> Line (on garde price/cost/priceMatched)
+      const ing = Array.isArray(d.ingredients) ? d.ingredients : []
+      const normalized = ing
+        .map((row: any): Line | null => {
+          if (!row) return null
+          if (typeof row === 'string') return { name: row, quantity: 0, unit: '' }
+          if (row.raw) return { name: String(row.raw), quantity: 0, unit: '' }
+
+          return {
+            name: String(row.name || '').trim(),
+            quantity: Number(row.quantity || 0) || 0,
+            unit: String(row.unit || ''),
+            quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+
+            price: row.price ?? null,
+            costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
+            priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
+            airtableId: row.airtableId ?? null,
+          }
+        })
+        .filter((x): x is Line => x !== null)
+
+      const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '' }]
+      setIngredients(finalIngredients)
+      setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
+
+      const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
+      setTrash(tr.join('\n'))
+    } catch (e) {
+      console.error('ocrDraft parse error', e)
+    }
+
+    // Important : on nettoie pour éviter de ré-appliquer au refresh
+    try {
+      sessionStorage.removeItem('ocrDraft')
+    } catch {}
+  }, [fromOcr])
+
+  // ✅ ton prefill existant (recipeDraft) : inchangé
   useEffect(() => {
     if (!prefill) return
 
@@ -112,6 +181,12 @@ function NewRecipeInner() {
             quantity: Number(row.quantity || 0) || 0,
             unit: String(row.unit || ''),
             quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+
+            //Prix OCR
+            price: row.price ?? null,
+            costEur: typeof row.costEur === 'number' ? row.costEur : null,
+            priceMatched: row.priceMatched ?? false,
+            airtableId: row.airtableId ?? null,
           }
         })
         .filter((x): x is Line => x !== null)
@@ -195,9 +270,7 @@ function NewRecipeInner() {
       {/* Header */}
       <section className="app-card p-6">
         <h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
-        <p className="mt-2 app-muted">
-          Remplis l’essentiel. Tu peux toujours ajuster plus tard.
-        </p>
+        <p className="mt-2 app-muted">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
       </section>
 
       {/* Corbeille */}
@@ -300,9 +373,7 @@ function NewRecipeInner() {
       {/* Ingrédients */}
       <section className="app-card p-6" style={{ marginTop: 16 }}>
         <h2 className="text-lg font-extrabold app-title">Ingrédients</h2>
-        <p className="mt-2 text-sm app-muted">
-          Un ingrédient par ligne : nom, quantité, unité.
-        </p>
+        <p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
 
         <div className="mt-4 grid gap-3">
           {ingredients.map((ing, idx) => (
@@ -318,8 +389,10 @@ function NewRecipeInner() {
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: '1fr 140px 120px',
+                  // ✅ 5-D: colonne prix à droite de l’unité
+                  gridTemplateColumns: '1fr 140px 120px 110px',
                   gap: 10,
+                  alignItems: 'center',
                 }}
               >
                 <input
@@ -357,6 +430,15 @@ function NewRecipeInner() {
                     padding: 10,
                   }}
                 />
+
+                {/* ✅ PRIX à côté de l’unité */}
+                <div style={{ minWidth: 110, textAlign: 'right', fontSize: 13, opacity: 0.9 }}>
+                  {ing.priceMatched ? (
+                    <span>{typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '—'}</span>
+                  ) : (
+                    <span style={{ color: '#ffb020' }}>—</span>
+                  )}
+                </div>
               </div>
             </div>
           ))}
@@ -371,15 +453,18 @@ function NewRecipeInner() {
           >
             + Ajouter un ingrédient
           </button>
+
+          {/* ✅ 5-E: Total en bas de la colonne prix */}
+          <div style={{ marginTop: 8, fontWeight: 800, textAlign: 'right' }}>
+            Total : {typeof draft?.totalCostEur === 'number' ? `${draft.totalCostEur.toFixed(2)} €` : '—'}
+          </div>
         </div>
       </section>
 
       {/* Étapes */}
       <section className="app-card p-6" style={{ marginTop: 16 }}>
         <h2 className="text-lg font-extrabold app-title">Étapes</h2>
-        <p className="mt-2 text-sm app-muted">
-          1 étape = 1 bloc. Garde les phrases courtes.
-        </p>
+        <p className="mt-2 text-sm app-muted">1 étape = 1 bloc. Garde les phrases courtes.</p>
 
         <div className="mt-4 grid gap-3">
           {steps.map((s, idx) => (
@@ -467,3 +552,4 @@ export default function Page() {
     </Suspense>
   )
 }
+

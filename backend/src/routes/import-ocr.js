@@ -29,117 +29,6 @@ try {
 
 // ---------------- Helpers ----------------
 
-function roundMoney(n) {
-  if (!Number.isFinite(n)) return null;
-  return Math.round(n * 100) / 100;
-}
-
-function spoonToMl(unit) {
-  const u = String(unit || '').toLowerCase().trim();
-  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
-  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
-  return null;
-}
-
-/**
- * ing: { name, quantity, unit }
- * priceRow: { unit: 'g'|'ml'|'piece', pricePerUnit: number, airtableId, ... }
- */
-function computeIngredientCostEur(ing, priceRow) {
-  if (!priceRow || !Number.isFinite(priceRow.pricePerUnit)) {
-    return { price: null, costEur: null, matched: false };
-  }
-
-  const qty = Number(ing?.quantity || 0);
-
-  // ex: sel/poivre "au goût" => coût non calculé (mais on marque matched si on a trouvé le prix)
-  if (!Number.isFinite(qty) || qty <= 0) {
-    return {
-      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-      costEur: 0,
-      matched: true,
-    };
-  }
-
-  // unit OCR
-  const unitRaw = String(ing?.unit || '').trim();
-
-  // ✅ cuillères -> ml (uniquement si Airtable est en "ml")
-  const mlPerSpoon = spoonToMl(unitRaw);
-  if (mlPerSpoon) {
-    if (priceRow.unit !== 'ml') {
-      return {
-        price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-        costEur: null,
-        matched: true,
-      };
-    }
-    const totalMl = qty * mlPerSpoon;
-    const cost = totalMl * Number(priceRow.pricePerUnit || 0);
-    return {
-      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-      costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
-      matched: true,
-    };
-  }
-
-  // ✅ unités standard -> base (g/ml/piece)
-  const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
-  const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon);
-
-  // On ne calcule que si la base correspond à l’unité du prix unitaire Airtable
-  if (baseUnit !== priceRow.unit) {
-    return {
-      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-      costEur: null,
-      matched: true,
-    };
-  }
-
-  const cost = baseQty * Number(priceRow.pricePerUnit || 0);
-  return {
-    price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-    costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
-    matched: true,
-  };
-}
-
-async function priceIngredients(ingredients) {
-  let totalCostEur = 0;
-
-  const pricedIngredients = await Promise.all(
-    (ingredients || []).map(async (ing) => {
-      try {
-        const priceRow = await getIngredientPriceByName(ing.name);
-        const { price, costEur, matched } = computeIngredientCostEur(ing, priceRow);
-
-        if (typeof costEur === 'number' && Number.isFinite(costEur)) {
-          totalCostEur += costEur;
-        }
-
-        return {
-          ...ing,
-          price,                          // { eurPer, perUnit } | null
-          costEur,                        // number | null
-          priceMatched: matched,          // boolean
-          airtableId: priceRow?.airtableId || null,
-        };
-      } catch (e) {
-        // si Airtable plante, on ne bloque pas l’OCR
-        return {
-          ...ing,
-          price: null,
-          costEur: null,
-          priceMatched: false,
-          airtableId: null,
-        };
-      }
-    })
-  );
-
-  return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
-}
-
 function stripBulletPrefix(s) {
   return String(s || '')
     .trim()
@@ -540,6 +429,129 @@ function splitMergedIngredientLine(line, trash) {
   return [s];
 }
 
+//Airtable pricing (v1)
+function roundMoney(n) {
+  if (!Number.isFinite(n)) return null;
+  return Math.round(n * 100) / 100;
+}
+
+function spoonToMl(unit) {
+  const u = String(unit || '').toLowerCase().trim();
+  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
+  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
+  return null;
+}
+
+/**
+ * Calcul le cout à partir :
+ * ing: { name, quantity, unit }
+ * priceRow: { unit: 'g'|'ml'|'piece', pricePerUnit: number, airtableId, ... }
+ */
+function computeIngredientCostEur(ing, priceRow) {
+  if (!priceRow || !Number.isFinite(priceRow.pricePerUnit)) {
+    return { price: null, costEur: null, matched: false };
+  }
+  //si pas de quantité exploitable => on ne calcule pas le coût, mais on affiche le prix unitaire
+  const qty = Number(ing?.quantity || 0);
+  if (!Number.isFinite(qty) || qty <= 0) {
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: 0,
+      matched: true,
+    };
+  }
+
+  // unit OCR
+  const unitRaw = String(ing?.unit || '').trim();
+
+  // ✅ cuillères -> ml (uniquement si Airtable est en "ml")
+  const mlPerSpoon = spoonToMl(unitRaw);
+  if (mlPerSpoon) {
+    if (priceRow.unit !== 'ml') {
+      return {
+        price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+        costEur: null,
+        matched: true,
+      };
+    }
+    const totalMl = qty * mlPerSpoon;
+    const cost = totalMl * Number(priceRow.pricePerUnit || 0);
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
+      matched: true,
+    };
+  }
+
+  // ✅ unités standard -> base (g/ml/piece)
+  const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
+  const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon);
+
+  // On ne calcule que si la base correspond à l’unité du prix unitaire Airtable
+  if (baseUnit !== priceRow.unit) {
+    return {
+      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+      costEur: null,
+      matched: true,
+    };
+  }
+
+  const cost = baseQty * Number(priceRow.pricePerUnit || 0);
+  return {
+    price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+    costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
+    matched: true,
+  };
+}
+
+async function priceIngredients(ingredients) {
+  let totalCostEur = 0;
+
+  const pricedIngredients = await Promise.all(
+    (ingredients || []).map(async (ing) => {
+      try {
+        // cas "sel" / "poivre" => on ne cherche pas de prix
+        const n = String(ing?.name || '').trim().toLowerCase();
+        if (n === 'sel' || n === 'poivre') {
+          return {
+            ...ing,
+            price: null,
+            costEur: null,
+            priceMatched: true, // on marque comme "ok" (pas d'alerte)
+            airtableId: null,
+          };
+        }
+        const priceRow = await getIngredientPriceByName(ing.name);
+        const { price, costEur, matched } = computeIngredientCostEur(ing, priceRow);
+
+        if (typeof costEur === 'number' && Number.isFinite(costEur)) {
+          totalCostEur += costEur;
+        }
+
+        return {
+          ...ing,
+          price,                          // { eurPer, perUnit } | null
+          costEur,                        // number | null
+          priceMatched: matched,          // boolean
+          airtableId: priceRow?.airtableId || null,
+        };
+      } catch (e) {
+        // si Airtable plante, on ne bloque pas l’OCR
+        return {
+          ...ing,
+          price: null,
+          costEur: null,
+          priceMatched: false,
+          airtableId: null,
+        };
+      }
+    })
+  );
+
+  return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
+}
+// jusqu'ici Airtable pricing (v1)
+
 // ---------------- Router ----------------
 
 const router = express.Router();
@@ -770,10 +782,10 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       totalCostEur: null,
     };
 
-    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer)
-    const priced = await priceIngredients(draft.ingredients);
-    draft.ingredients = priced.ingredients;
-    draft.totalCostEur = priced.totalCostEur;
+    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer) 
+    const priced = await priceIngredients(draft.ingredients); 
+    draft.ingredients = priced.ingredients; 
+    draft.totalCostEur = priced.totalCostEur; 
 
     // ✅ debug=title : renvoie seulement infos titres
     if (debugMode === 'title') {
