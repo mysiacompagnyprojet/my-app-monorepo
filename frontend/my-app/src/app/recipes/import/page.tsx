@@ -39,7 +39,7 @@ export default function ImportRecipePage() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(res.draft))
       setStatus('✅ Import OK')
-      router.push('/recipes/new?prefill=1')
+      router.push('/recipes/new?from=ocr=1')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }
@@ -74,7 +74,7 @@ export default function ImportRecipePage() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
       setStatus('✅ OCR OK')
-      router.push('/recipes/new?prefill=1')
+      router.push('/recipes/new?from=ocr=1')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }

@@ -33,7 +33,7 @@ export default function Page() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(res.draft))
       setStatus('✅ Import OK')
-      router.push('/recipes/new?prefill=1')
+      router.push('/recipes/new?from=ocr=1')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }
