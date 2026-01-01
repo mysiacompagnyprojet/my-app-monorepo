@@ -255,6 +255,26 @@ async function findAliasTargetId(raw) {
   return null;
 }
 
+function pickBestRecordByUnit(records, preferUnitRaw) {
+ if (!Array.isArray(records) || records.length === 0) return null
+ if (!preferUnitRaw) return records[0]
+
+  const preferredBase = toBaseUnit(preferUnitRaw)?.unit // 'g' | 'ml' | 'piece'
+  if (!preferredBase) return records[0]
+
+ // On préfère un record dont l’unité Airtable (après normalisation) matche la base voulue
+ for (const r of records) {
+ try {
+  const fields = r.fields || {}
+  const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT]
+  const baseU = toBaseUnit(unitRaw)?.unit
+ if (baseU === preferredBase) return r
+ } catch {}
+ }
+
+ return records[0]
+}
+
 /**
  * Retourne:
  *  {
@@ -265,22 +285,23 @@ async function findAliasTargetId(raw) {
  *  }
  * ou null si non trouvé.
  */
-async function getIngredientPriceByName(name) {
+async function getIngredientPriceByName(name, preferUnitRaw) {
   const raw = String(name || '').trim();
   if (!raw) return null;
 
-  const cacheKey = `n:${raw.toLowerCase()}`;
+  const cacheKey = `n:${raw.toLowerCase()}:u:${canonUnit(preferUnitRaw || '') || ''}`;
   const fromCache = cacheGet(cacheKey);
   if (fromCache !== null) return fromCache;
 
   // 1) Essai exact sur Ingrédients (évite les soucis d’accents avec une comparaison LOWER)
   const formula = `LOWER({${COL_NAME}}) = LOWER("${raw.replace(/"/g, '\\"')}")`;
   const exact = await base(TABLE)
-    .select({ filterByFormula: formula, maxRecords: 1 })
+    .select({ filterByFormula: formula, maxRecords: 5 })
     .all();
 
   if (exact.length) {
-    const r = exact[0];
+    const r = pickBestRecordByUnit(exact, preferUnitRaw);
+    if (!r) { cacheSet(cacheKey, null); return null };
     const fields = r.fields || {};
     const { ppu, unit } = computePPUFromRow(fields);
     const out = {

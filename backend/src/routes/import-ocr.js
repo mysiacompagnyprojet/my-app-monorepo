@@ -521,7 +521,7 @@ async function priceIngredients(ingredients) {
             airtableId: null,
           };
         }
-        const priceRow = await getIngredientPriceByName(ing.name);
+        const priceRow = await getIngredientPriceByName(ing.name, ing.unit);
         const { price, costEur, matched } = computeIngredientCostEur(ing, priceRow);
 
         if (typeof costEur === 'number' && Number.isFinite(costEur)) {
