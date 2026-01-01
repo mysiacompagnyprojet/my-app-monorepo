@@ -1,4 +1,4 @@
-//frontend/my-app/src/app/import/ocr/page.tsx
+// frontend/my-app/src/app/import/ocr/page.tsx
 'use client'
 
 import { Suspense, useMemo, useState } from 'react'
@@ -22,8 +22,8 @@ function OcrPageInner() {
   const [status, setStatus] = useState('')
   const [isRunning, setIsRunning] = useState(false)
   const [debugOut, setDebugOut] = useState<any>(null)
-
   const [draft, setDraft] = useState<OcrDraft | null>(null)
+
   const canRun = useMemo(
     () => files.length >= 1 && files.length <= MAX_FILES && !isRunning,
     [files, isRunning]
@@ -32,6 +32,7 @@ function OcrPageInner() {
   async function run() {
     try {
       setDebugOut(null)
+      setDraft(null)
       setStatus('')
 
       if (!files.length) {
@@ -54,49 +55,32 @@ function OcrPageInner() {
 
       const data = await apiFetch<ImportOcrResponse>(`/import/ocr${qs}`, {
         method: 'POST',
-        headers: {
-          'Accept-Language': navigator.language || 'fr-FR',
-        },
+        headers: { 'Accept-Language': navigator.language || 'fr-FR' },
         body: form,
       })
 
-      if ('draft' in data) {
-        setDraft(data.draft)
-      }
+      // Erreur API
       if ((data as any)?.ok === false) {
         setStatus('❌ ' + ((data as any)?.message || (data as any)?.error || 'Erreur OCR'))
         return
       }
 
+      // Mode debug (pas de redirection)
       if ('debug' in data) {
         setDebugOut((data as any).debug)
         setStatus('✅ Debug reçu (aucune redirection)')
         return
       }
 
-      const draft = (data as any).draft;
-      sessionStorage.setItem('recipeDraft', JSON.stringify(draft));
-      router.push('/recipes/new?from=ocr=1');
-      return;
-      //demande de supression par chatgpt le 30/12/25 d'ici
-      //const merged: OcrDraft = {
-        //title: (d.title || '').toString().trim() || 'Recette importée',
-        //servings: Number(d.servings || 1) || 1,
-        //imageUrl: d.imageUrl ?? null,
-        //notes: (d.notes || '').toString(),
-        //steps: Array.isArray(d.steps)
-        //  ? d.steps.map((s) => String(s || '').trim()).filter(Boolean)
-        //  : [],
-        //ingredients: Array.isArray(d.ingredients) ? d.ingredients.filter(Boolean) : [],
-        //trash: Array.isArray(d.trash)
-        //  ? d.trash.map((s) => String(s || '').trim()).filter(Boolean)
-        //  : [],
-      //}
-      //sessionStorage.setItem('recipeDraft', JSON.stringify(merged))
-      // A ici
+      // Draft OK
+      if ('draft' in data) {
+        setDraft(data.draft)
+        sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
+        router.push('/recipes/new?from=ocr')
+        return
+      }
 
-      //setStatus(`✅ OCR OK (${files.length} image(s))`)
-      
+      setStatus('❌ Réponse inattendue du serveur.')
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
     } finally {
@@ -109,7 +93,6 @@ function OcrPageInner() {
 
   return (
     <main className="app-container" style={{ margin: '20px auto 40px' }}>
-      {/* En-tête */}
       <section className="app-card p-5">
         <h1 className="text-2xl font-extrabold app-title">Importer par photo (OCR)</h1>
 
@@ -118,7 +101,7 @@ function OcrPageInner() {
           Facebook, photo d&apos;un livre, etc.
         </p>
 
-        {/* Instructions sous forme de carte interne */}
+        {/* Instructions */}
         <div
           className="mt-4 app-card p-4"
           style={{
@@ -130,6 +113,7 @@ function OcrPageInner() {
           <div className="text-sm font-bold" style={{ color: 'var(--primary)' }}>
             Comment faire
           </div>
+
           <ol className="mt-2 list-decimal" style={{ marginLeft: 18, lineHeight: 1.7 }}>
             <li>Fais une ou plusieurs captures d&apos;écran de la recette.</li>
             <li>Sélectionne toutes les images en même temps ci-dessous.</li>
@@ -137,7 +121,7 @@ function OcrPageInner() {
           </ol>
         </div>
 
-        {/* Zone sélection fichiers */}
+        {/* Upload */}
         <div className="mt-5">
           <label className="text-sm font-semibold" htmlFor="ocrFiles">
             Images de la recette
@@ -160,9 +144,8 @@ function OcrPageInner() {
 
           {files.length > 0 && (
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <span className="app-badge">
-                {files.length} image(s) sélectionnée(s)
-              </span>
+              <span className="app-badge">{files.length} image(s) sélectionnée(s)</span>
+
               <span className="text-sm app-muted">
                 max {MAX_FILES}
                 {files.length > MAX_FILES ? ' — ❌ trop d’images' : ''}
@@ -175,50 +158,7 @@ function OcrPageInner() {
             <button onClick={run} disabled={!canRun} className="app-btn-primary">
               {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
             </button>
-            return (
-            <div style={{ padding: 16 }}>
-            {/* ... ton UI existant (upload, bouton run, status) ... */}
 
-              {draft && (
-              <div style={{ marginTop: 16 }}>
-              <h3>Ingrédients</h3>
-
-              {draft?.ingredients?.map((ing, idx) => (
-              <div key={idx} style={{ padding: '8px 0', borderBottom: '1px solid #222' }}>
-               <div>
-                <strong>{ing.name}</strong>{' '}
-                 <span style={{ opacity: 0.8 }}>
-                 {ing.quantity ? `${ing.quantity}` : ''} {ing.unit || ''}
-                  </span>
-                  </div>
-
-                  <div style={{ fontSize: 13, opacity: 0.85 }}>
-                  {ing.priceMatched ? (
-                 <>
-                 <span>
-                      Prix unitaire: {ing.price?.eurPer ?? '—'} € / {ing.price?.perUnit ?? '—'}
-                  </span>
-                  {' · '}
-                   <span>
-                    Coût: {typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '—'}
-                   </span>
-                    </>
-                    ) : (
-                    <span style={{ color: '#ffb020' }}>Prix non trouvé dans Airtable</span>
-                   )}
-                    </div>
-                    </div>
-                    ))}
-
-                   {/* ✅ Total */}
-                   <div style={{ marginTop: 12, fontWeight: 700 }}>
-                       Total recette :{' '}
-                        {typeof draft.totalCostEur === 'number' ? `${draft.totalCostEur.toFixed(2)} €` : '—'}
-                       </div>
-                       </div>
-                       )}
-                       </div>
-                      );
             {isDebug && (
               <span className="app-badge" style={{ background: 'rgba(168,184,161,0.35)' }}>
                 Debug actif
@@ -226,7 +166,56 @@ function OcrPageInner() {
             )}
           </div>
 
-          {/* Status message */}
+          {/* Aperçu (utile surtout en debug, car sinon redirection immédiate) */}
+          {draft && (
+            <div
+              className="mt-4 app-card p-4"
+              style={{
+                boxShadow: 'none',
+                borderColor: 'var(--border)',
+                background: 'rgba(255,255,255,0.7)',
+              }}
+            >
+              <h3 className="text-lg font-extrabold app-title">Aperçu ingrédients + prix</h3>
+
+              <div className="mt-3 grid gap-3">
+                {draft.ingredients?.map((ing, idx) => (
+                  <div
+                    key={idx}
+                    style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+                      <div>
+                        <strong>{ing.name}</strong>{' '}
+                        <span style={{ opacity: 0.8 }}>
+                          {ing.quantity ? `${ing.quantity}` : ''} {ing.unit || ''}
+                        </span>
+                      </div>
+
+                      <div style={{ minWidth: 90, textAlign: 'right' }}>
+                        {typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '0.00 €'}
+                      </div>
+                    </div>
+
+                    {ing.priceMatched === false && (
+                      <div style={{ fontSize: 12, opacity: 0.85, color: '#ffb020' }}>
+                        Prix non trouvé dans Airtable (0 appliqué)
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <div style={{ marginTop: 10, fontWeight: 800, textAlign: 'right' }}>
+                  Total recette :{' '}
+                  {typeof draft.totalCostEur === 'number'
+                    ? `${draft.totalCostEur.toFixed(2)} €`
+                    : '0.00 €'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Status */}
           {status && (
             <div
               className="mt-4 app-card p-3 text-sm"
@@ -236,14 +225,14 @@ function OcrPageInner() {
                   statusKind === 'success'
                     ? 'rgba(168,184,161,0.7)'
                     : statusKind === 'error'
-                    ? 'rgba(176,0,32,0.25)'
-                    : 'var(--border)',
+                      ? 'rgba(176,0,32,0.25)'
+                      : 'var(--border)',
                 background:
                   statusKind === 'success'
                     ? 'rgba(168,184,161,0.15)'
                     : statusKind === 'error'
-                    ? 'rgba(176,0,32,0.06)'
-                    : 'rgba(255,255,255,0.7)',
+                      ? 'rgba(176,0,32,0.06)'
+                      : 'rgba(255,255,255,0.7)',
               }}
             >
               <span
@@ -253,8 +242,8 @@ function OcrPageInner() {
                     statusKind === 'success'
                       ? 'rgba(43,43,43,0.95)'
                       : statusKind === 'error'
-                      ? '#b00020'
-                      : 'rgba(43,43,43,0.9)',
+                        ? '#b00020'
+                        : 'rgba(43,43,43,0.9)',
                 }}
               >
                 {status}
@@ -274,6 +263,7 @@ function OcrPageInner() {
       {debugOut && (
         <section className="app-card p-5" style={{ marginTop: 16 }}>
           <h2 className="text-lg font-extrabold app-title">Debug</h2>
+
           <pre
             className="mt-3 app-card p-3 text-sm overflow-auto"
             style={{

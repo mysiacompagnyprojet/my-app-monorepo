@@ -1,3 +1,4 @@
+//frontend/my-app/src/types/recipe.ts
 export type IngredientLine = {
 name: string;
 quantity?: number;

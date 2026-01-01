@@ -449,7 +449,7 @@ function spoonToMl(unit) {
  */
 function computeIngredientCostEur(ing, priceRow) {
   if (!priceRow || !Number.isFinite(priceRow.pricePerUnit)) {
-    return { price: null, costEur: null, matched: false };
+    return { price: null, costEur: 0, matched: false };
   }
   //si pas de quantité exploitable => on ne calcule pas le coût, mais on affiche le prix unitaire
   const qty = Number(ing?.quantity || 0);
@@ -516,7 +516,7 @@ async function priceIngredients(ingredients) {
           return {
             ...ing,
             price: null,
-            costEur: null,
+            costEur: 0,
             priceMatched: true, // on marque comme "ok" (pas d'alerte)
             airtableId: null,
           };
@@ -540,7 +540,7 @@ async function priceIngredients(ingredients) {
         return {
           ...ing,
           price: null,
-          costEur: null,
+          costEur: 0,
           priceMatched: false,
           airtableId: null,
         };

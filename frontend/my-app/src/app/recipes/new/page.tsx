@@ -147,7 +147,7 @@ function NewRecipeInner() {
 
     // Important : on nettoie pour éviter de ré-appliquer au refresh
     try {
-      sessionStorage.removeItem('ocrDraft')
+      sessionStorage.removeItem('recipeDraft')
     } catch {}
   }, [fromOcr])
 
@@ -433,15 +433,15 @@ function NewRecipeInner() {
 
                 {/* ✅ PRIX à côté de l’unité */}
                 <div style={{ minWidth: 110, textAlign: 'right', fontSize: 13, opacity: 0.9 }}>
-                  {ing.priceMatched ? (
-                    <span>{typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '—'}</span>
-                  ) : (
-                    <span style={{ color: '#ffb020' }}>—</span>
-                  )}
-                </div>
-              </div>
-            </div>
-          ))}
+                 <span>
+                  {typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '0.00 €'}
+                 </span>
+                  {ing.priceMatched === false && (
+                 <div style={{ fontSize: 11, color: '#ffb020' }}>Airtable: non trouvé</div>
+                  )}</div>
+               </div>
+             </div>
+            ))}
 
           <button
             onClick={() => {
@@ -456,7 +456,7 @@ function NewRecipeInner() {
 
           {/* ✅ 5-E: Total en bas de la colonne prix */}
           <div style={{ marginTop: 8, fontWeight: 800, textAlign: 'right' }}>
-            Total : {typeof draft?.totalCostEur === 'number' ? `${draft.totalCostEur.toFixed(2)} €` : '—'}
+            Total : {typeof draft?.totalCostEur === 'number' ? `${draft.totalCostEur.toFixed(2)} €` : '0.00 €'}
           </div>
         </div>
       </section>
