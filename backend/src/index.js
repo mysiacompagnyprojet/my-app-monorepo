@@ -67,7 +67,7 @@ app.use(cors({
 
 
 // 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
-app.use(devAirtable);
+app.use('/dev', devAirtable);
 
 // 9) Auth globale (remplit req.user pour toutes les routes suivantes)
 app.use(supabaseAuth);

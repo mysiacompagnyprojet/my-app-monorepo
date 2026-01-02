@@ -9,7 +9,7 @@ const router = express.Router();
  * Usage :
  *   GET /dev/airtable/lookup?name=Carotte
  */
-router.get('/dev/airtable/lookup', async (req, res) => {
+router.get('/airtable/lookup', async (req, res) => {
   const name = req.query.name || '';
   try {
     const r = await getIngredientPriceByName(name);
