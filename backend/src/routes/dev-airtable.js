@@ -4,6 +4,10 @@ const { getIngredientPriceByName } = require('../services/airtable');
 
 const router = express.Router();
 
+router.get('/', (req, res) => {
+  res.json({ ok: true, hint: 'Try /dev/airtable/lookup?name=oignon ' });
+});
+
 /**
  * ⚙️ Route publique de test Airtable
  * Usage :
