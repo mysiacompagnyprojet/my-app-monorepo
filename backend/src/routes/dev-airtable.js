@@ -15,11 +15,13 @@ router.get('/', (req, res) => {
  */
 router.get('/airtable/lookup', async (req, res) => {
   const name = req.query.name || '';
+  console.log('[DEV Airtable] result =', r);
   try {
     const r = await getIngredientPriceByName(name);
+    console.log('[DEV Airtable] result =', r);
     res.json({ ok: true, input: name, result: r });
   } catch (e) {
-    console.error('Error in /airtable/lookup:', e);
+    console.error('[DEV Airtable] ERROR =', e);
     res.status(500).json({ ok: false, error: e?.message });
   }
 });
