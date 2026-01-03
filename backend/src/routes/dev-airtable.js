@@ -26,11 +26,11 @@ router.get('/airtable/lookup', async (req, res) => {
       });
     }
     return res.json({ ok: true, input: name, result: r });
-    //console.log('[DEV Airtable] result =', r);
-    //res.json({ ok: true, input: name, result: r });
   } catch (e) {
     console.error('[DEV Airtable] ERROR =', e);
-    res.status(500).json({ ok: false, error: e?.message || String(e) });
+    res.status(500).json({ 
+      ok: false, 
+      error: e?.message || String(e) });
   }
 });
 
