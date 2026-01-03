@@ -65,6 +65,12 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
+// 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
+app.use('/dev', devAirtable);
+
+// 9) Auth globale (remplit req.user pour toutes les routes suivantes)
+app.use(supabaseAuth);
+
 // 10) Routes métier (ordre lisible)
 app.use('/billing', billing);                // POST /billing/checkout
 app.use('/auth', authRouter);                // /auth/*
@@ -72,13 +78,6 @@ app.use('/import', importUrlRouter);         // POST /import/url
 app.use('/import', importOcrRouter);         // POST /import/ocr
 app.use('/recipes', recipesRouter);          // GET/POST /recipes
 app.use('/shopping-list', shoppingListRouter); // POST /shopping-list
-
-
-// 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
-app.use('/dev', devAirtable);
-
-// 9) Auth globale (remplit req.user pour toutes les routes suivantes)
-app.use(supabaseAuth);
 
 // 11) Root (petite page d’accueil JSON)
 app.get('/', (_req, res) => {
