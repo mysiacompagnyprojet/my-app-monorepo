@@ -104,7 +104,7 @@ router.post('/', needAuth, async (req, res) => {
         }
 
         //sinon on cherche le prix dans Airtable
-        const price = await getIngredientPriceByName(l.name);
+        const price = await getIngredientPriceByName(l.name, l.unit);
 
         if (!price) {
           return {

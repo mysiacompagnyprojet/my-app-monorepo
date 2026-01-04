@@ -180,6 +180,38 @@ return String(s)
 .replace(/pommes?\sde terre$/, 'pomme de terre');
 }
 
+function normalizeKey(s = '') {
+    return String(s)
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // enlève accents
+    .replace(/[^a-z0-9\s&]/g, ' ') // garde lettres, chiffres, espaces et &
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitSynonymsCell(v) {
+    if (v == null) return [];
+    //ta cellule est "texte" : on split sur ; , / ou retours ligne
+    return String(v)
+    .split(/[;\n, \/]+/g)
+    .map((x) => x.trim())
+    .filter(Boolean);
+}
+
+function recordHasSynonym(fields, rawName) {
+    const wanted = normalizeKey(rawName);
+    if (!wanted) return false;
+
+    const synCell = fields[COL_SYNONYMS];
+    const list = splitSynonymsCell(synCell);
+
+    for (const s of list) {
+        if (normalizeKey(s) === wanted) return true;
+    }
+    return false;
+}
+
+
 function levenshtein(a = '', b = '') {
 const m = a.length,
 n = b.length;
@@ -306,25 +338,58 @@ return null;
 }
 
 function pickBestRecordByUnit(records, preferUnitRaw) {
-if (!Array.isArray(records) || records.length === 0) return null;
-if (!preferUnitRaw) return records[0];
+ if (!Array.isArray(records) || records.length === 0) return null;
+ if (!preferUnitRaw) return records[0];
 
-const preferredBase = toBaseUnit(preferUnitRaw)?.unit; // 'g' | 'ml' | 'piece'
-if (!preferredBase) return records[0];
+ const preferredBase = toBaseUnit(preferUnitRaw)?.unit; // 'g' | 'ml' | 'piece'
+ if (!preferredBase) return records[0];
 
-// On préfère un record dont l’unité Airtable (après normalisation) matche la base voulue
-for (const r of records) {
-try {
-const fields = r.fields || {};
-const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
-const baseU = toBaseUnit(unitRaw)?.unit;
-if (baseU === preferredBase) return r;
-} catch {}
+ // On préfère un record dont l’unité Airtable (après normalisation) matche la base voulue
+  for (const r of records) {
+   try {
+    const fields = r.fields || {};
+    const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
+    const baseU = toBaseUnit(unitRaw)?.unit;
+     if (baseU === preferredBase) return r;
+   } catch {}
+  }
+
+ return records[0];
 }
 
-return records[0];
-}
+function pickCheapestRecord(records, preferUnitRaw) {
+    if (!Array.isArray(records) || records.length === 0) return null;
 
+    //1) si on a une unité préférée, on garde d'abord ceux compatibles (g/ml/piece)
+    let candidates = records;
+    if (preferredBase) {
+        const filtered = records.filter((r) => {
+            try {
+                const fields = r.fields || {};
+                const unitRaw = fields[COL_UNIT_KIND] ?? fields[COL_UNIT];
+                const baseU = toBaseUnit(unitRaw)?.unit;
+                return baseU === preferredBase;
+            } catch {
+                return false;
+            }
+        });
+        if (filtered.length) candidates = filtered;    
+    }
+    //2) parmi les candidats, on choisit le moins cher
+    let best = null;
+    for (const r of candidates) {
+        try {
+            const fields = r.fields || {};
+            const { ppu } = computePPUFromRow(fields); //ppu déjà "par g/ml/pièce"
+            if (!Number.isFinite(ppu)) continue;
+
+            if (!best || ppu < best.ppu) best = { r, ppu, unit };
+        } catch {
+            //ignore record non exploitable
+        }
+    }
+    return best ? best.r : candidates[0];    
+}
 /**
 * Retourne:
 * {
@@ -336,66 +401,66 @@ return records[0];
 * ou null si non trouvé.
 */
 async function getIngredientPriceByName(name, preferUnitRaw) {
-const raw = String(name || '').trim();
-if (!raw) return null;
+ const raw = String(name || '').trim();
+  if (!raw) return null;
 
-const cacheKey = `n:${raw.toLowerCase()}:u:${canonUnit(preferUnitRaw || '') || ''}`;
-const fromCache = cacheGet(cacheKey);
-if (fromCache !== null) return fromCache;
+ const cacheKey = `n:${raw.toLowerCase()}:u:${canonUnit(preferUnitRaw || '') || ''}`;
+ const fromCache = cacheGet(cacheKey);
+  if (fromCache !== null) return fromCache;
 
-// ───────────────────────────────────────────────────────────
-// 0) ✅ Synonyme (texte) : si match, choisir le MOINS CHER
-// (sans casser ton exact/alias/fuzzy après)
-// ───────────────────────────────────────────────────────────
-try {
-const wanted = normalizeName(raw);
+ // ───────────────────────────────────────────────────────────
+ // 0) ✅ Synonyme (texte) : si match, choisir le MOINS CHER
+ // (sans casser ton exact/alias/fuzzy après)
+ // ───────────────────────────────────────────────────────────
+ try {
+ const wanted = normalizeName(raw);
 
-const allKey = 'all:ingredients';
-let batch = cacheGet(allKey);
-if (!batch) {
-batch = await base(TABLE).select({ maxRecords: 1000 }).all();
-cacheSet(allKey, batch);
-}
+ const allKey = 'all:ingredients';
+ let batch = cacheGet(allKey);
+ if (!batch) {
+  batch = await base(TABLE).select({ maxRecords: 1000 }).all();
+  cacheSet(allKey, batch);
+ }
 
-const candidates = [];
+ const candidates = [];
 
-for (const r of batch) {
-const fields = r.fields || {};
-const baseName = String(fields[COL_NAME] ?? '');
-const baseNorm = normalizeName(baseName);
+ for (const r of batch) {
+  const fields = r.fields || {};
+  const baseName = String(fields[COL_NAME] ?? '');
+  const baseNorm = normalizeName(baseName);
 
-const synList = parseSynonymsCell(fields[COL_SYNONYMS]);
-const synNorms = synList.map(normalizeName).filter(Boolean);
+  const synList = parseSynonymsCell(fields[COL_SYNONYMS]);
+  const synNorms = synList.map(normalizeName).filter(Boolean);
 
-const isSynMatch = synNorms.includes(wanted);
+  const isSynMatch = synNorms.includes(wanted);
 
-// ⚠️ On fait volontairement "synonyme seulement" ici,
-// l'exact NOM reste géré juste après, comme avant.
-if (!isSynMatch) continue;
+  // ⚠️ On fait volontairement "synonyme seulement" ici,
+  // l'exact NOM reste géré juste après, comme avant.
+ if (!isSynMatch) continue;
 
-try {
-const { ppu, unit } = computePPUFromRow(fields);
-const ppuRounded = roundPPU(ppu, unit);
-if (!Number.isFinite(ppuRounded)) continue;
+ try {
+  const { ppu, unit } = computePPUFromRow(fields);
+  const ppuRounded = roundPPU(ppu, unit);
+   if (!Number.isFinite(ppuRounded)) continue;
 
-candidates.push({
-airtableId: r.id,
-name: fields[COL_NAME] ?? raw,
-unit,
-pricePerUnit: ppuRounded,
-});
-} catch {
-// pas de prix exploitable -> ignore ce candidat
-}
-}
+    candidates.push({
+     airtableId: r.id,
+     name: fields[COL_NAME] ?? raw,
+     unit,
+     pricePerUnit: ppuRounded,
+    });
+ } catch {
+ // pas de prix exploitable -> ignore ce candidat
+  }
+ }
 
-if (candidates.length) {
-const best = pickCheapest(candidates, preferUnitRaw);
-cacheSet(cacheKey, best);
-return best;
-}
-} catch (e) {
-if (DEBUG) console.warn('[Airtable] synonyms lookup failed:', e?.message || e);
+  if (candidates.length) {
+   const best = pickCheapest(candidates, preferUnitRaw);
+    cacheSet(cacheKey, best);
+   return best;
+ }
+ } catch (e) {
+  if (DEBUG) console.warn('[Airtable] synonyms lookup failed:', e?.message || e);
 }
 
 // ───────────────────────────────────────────────────────────
@@ -406,6 +471,35 @@ const exact = await base(TABLE).select({ filterByFormula: formula, maxRecords: 5
 
 if (exact.length) {
 const r = pickBestRecordByUnit(exact, preferUnitRaw);
+//1bis) recherche via la colonne Synonyme  (texte) dans la table Ingrédients
+// on récupére quelques candidats via Airtable, puis on valide côté JS (matche exact normalisé)
+try {
+    const rawEsc = raw.replace(/"/g, '\\"');
+    const synFormula = 'AND({${COL_SYNONYMS}} != "", FIND(LOWER("${rawEsc}"), LOWER({${COL_SYNONYMS}})) > 0)';
+
+    const synHits = await base(TABLE)
+    .select({ filterByFormula: synFormula, maxRecords: 25 })
+    .all();
+
+    const strong = synHits.filter((r) => recordHasSynonym(r.fields || {}, raw));
+
+    if (strong.length) {
+        const r = pickCheapestRecord(strong, preferUnitRaw);
+        const fields = r.fields || {};
+        const { ppu, unit } = computePPUFromRow(fields);
+
+        const out = {
+        airtableId: r.id,
+        name: fields[COL_NAME] ?? raw,
+        unit,
+        pricePerUnit: roundPPU(ppu, unit),
+        };
+        cacheSet(cacheKey, out);
+        return out;
+    }
+} catch (e) {
+    if (DEBUG) console.warn('[Airtable] lookup Synonyme ignoré:', e?.message || e);
+}
 if (!r) {
 cacheSet(cacheKey, null);
 return null;
