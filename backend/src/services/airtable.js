@@ -26,6 +26,7 @@ const COL_NAME = process.env.AIRTABLE_FIELD_NAME || 'NOM';
 const COL_UNIT = process.env.AIRTABLE_FIELD_UNIT || 'Unité (g,ml, pièce)';
 const COL_REF_QTY = process.env.AIRTABLE_FIELD_REF_QTY || 'Quantité de référence';
 const COL_BUY_PRICE = process.env.AIRTABLE_FIELD_BUY_PRICE || "Prix d'achat";
+const COL_FIELD_COUNT = process.env.AIRTABLE_FIELD_COUNT || 'Nombre';
 
 // ⚠️ IMPORTANT : bien respecter l’accent : "pièce" (è), pas "piéce"
 const COL_PRICE_KG_L_PIECE = process.env.AIRTABLE_FIELD_PPU || 'Prix kg/L/pièce';
@@ -493,7 +494,25 @@ try {
         name: fields[COL_NAME] ?? raw,
         unit,
         pricePerUnit: roundPPU(ppu, unit),
+        packQty: Number.isFinite(packQty) ? packQty : null,
+        count: Number.isFinite(count) ? count : null,
+        gramsPerPiece: Number.isFinite(gramsPerPiece) ? gramsPerPiece : null,
+        mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
         };
+
+        const packQty = toNumberLoose(fields[COL_UNIT]);
+        const count = toNumberLoose(fields[COL_FIELD_COUNT]);
+        let gramsPerPiece = null;
+        let mlPerPiece = null;
+
+        //si l'unité de pricing est en g, et qu'on a un pack + un nombre de pieces => g/pièce
+        if (unit === 'g' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+        gramsPerPiece = packQty / count;
+        }
+        //si l'unité de pricing est en ml, et qu'on a un pack + un nombre de pieces => ml/pièce
+        if (unit === 'ml' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+        mlPerPiece = packQty / count;
+        }
         cacheSet(cacheKey, out);
         return out;
     }
@@ -508,13 +527,31 @@ const fields = r.fields || {};
 const { ppu, unit } = computePPUFromRow(fields);
 
 const out = {
-airtableId: r.id,
-name: fields[COL_NAME] ?? raw,
-unit,
-pricePerUnit: roundPPU(ppu, unit),
-};
-cacheSet(cacheKey, out);
-return out;
+    airtableId: r.id,
+    name: fields[COL_NAME] ?? raw,
+    unit,
+    pricePerUnit: roundPPU(ppu, unit),
+    packQty: Number.isFinite(packQty) ? packQty : null,
+    count: Number.isFinite(count) ? count : null,
+    gramsPerPiece: Number.isFinite(gramsPerPiece) ? gramsPerPiece : null,
+    mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
+    };
+
+    const packQty = toNumberLoose(fields[COL_UNIT]);
+    const count = toNumberLoose(fields[COL_FIELD_COUNT]);
+    let gramsPerPiece = null;
+    let mlPerPiece = null;
+
+    //si l'unité de pricing est en g, et qu'on a un pack + un nombre de pieces => g/pièce
+    if (unit === 'g' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+    gramsPerPiece = packQty / count;
+    }
+    //si l'unité de pricing est en ml, et qu'on a un pack + un nombre de pieces => ml/pièce
+    if (unit === 'ml' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+    mlPerPiece = packQty / count;
+    }
+    cacheSet(cacheKey, out);
+    return out;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -527,13 +564,31 @@ const fields = ingrRec.fields || {};
 const { ppu, unit } = computePPUFromRow(fields);
 
 const out = {
-airtableId: ingrRec.id,
-name: fields[COL_NAME] || raw,
-unit,
-pricePerUnit: roundPPU(ppu, unit),
+ airtableId: ingrRec.id,
+ name: fields[COL_NAME] || raw,
+ unit,
+ pricePerUnit: roundPPU(ppu, unit),
+ packQty: Number.isFinite(packQty) ? packQty : null,
+ count: Number.isFinite(count) ? count : null,
+ gramsPerPiece: Number.isFinite(gramsPerPiece) ? gramsPerPiece : null,
+ mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
 };
-cacheSet(cacheKey, out);
-return out;
+
+const packQty = toNumberLoose(fields[COL_UNIT]);
+const count = toNumberLoose(fields[COL_FIELD_COUNT]);
+let gramsPerPiece = null;
+let mlPerPiece = null;
+
+//si l'unité de pricing est en g, et qu'on a un pack + un nombre de pieces => g/pièce
+if (unit === 'g' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+gramsPerPiece = packQty / count;
+}
+//si l'unité de pricing est en ml, et qu'on a un pack + un nombre de pieces => ml/pièce
+if (unit === 'ml' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+mlPerPiece = packQty / count;
+}
+ cacheSet(cacheKey, out);
+ return out;
 }
 
 // ───────────────────────────────────────────────────────────
@@ -568,7 +623,25 @@ airtableId: r.id,
 name: fields[COL_NAME] ?? best.matchedLabel,
 unit,
 pricePerUnit: roundPPU(ppu, unit),
-};
+packQty: Number.isFinite(packQty) ? packQty : null,
+        count: Number.isFinite(count) ? count : null,
+        gramsPerPiece: Number.isFinite(gramsPerPiece) ? gramsPerPiece : null,
+        mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
+        };
+
+        const packQty = toNumberLoose(fields[COL_UNIT]);
+        const count = toNumberLoose(fields[COL_FIELD_COUNT]);
+        let gramsPerPiece = null;
+        let mlPerPiece = null;
+
+        //si l'unité de pricing est en g, et qu'on a un pack + un nombre de pieces => g/pièce
+        if (unit === 'g' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+        gramsPerPiece = packQty / count;
+        }
+        //si l'unité de pricing est en ml, et qu'on a un pack + un nombre de pieces => ml/pièce
+        if (unit === 'ml' && Number.isFinite(packQty) && packQty > 0 && Number.isFinite(count) && count > 0) {
+        mlPerPiece = packQty / count;
+        }
 cacheSet(cacheKey, out);
 return out;
 }

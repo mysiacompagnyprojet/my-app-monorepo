@@ -120,6 +120,66 @@ router.post('/', needAuth, async (req, res) => {
 
         const priceUnit = price.unit; // unité de base du PPU (g/ml/piece)
         const unitRecipeCanon = canonUnit(l.unit);
+        
+        // ✅ Priorité conversion "pièce -> g/ml" via Airtable (packQty / nombre)
+        if (unitRecipeCanon === 'piece' && priceUnit === 'g' && Number.isFinite(price.gramsPerPiece)) {
+        const qtyG = Number(l.quantity || 0) * Number(price.gramsPerPiece);
+        const conv = { qty: qtyG, unit: 'g' };
+
+        // ensuite ton calcul continue comme si conv venait de convertUnitForPricing
+        let recipeCost = 0;
+        let buyPrice = 0;
+        let note;
+
+        const pricePerUnit = Number(price.pricePerUnit);
+        if (Number.isFinite(pricePerUnit) && Number.isFinite(Number(conv.qty))) {
+        recipeCost = Number(conv.qty) * pricePerUnit;
+        buyPrice = recipeCost;
+        } else {
+        note = 'prix unitaire invalide';
+        }
+
+       return {
+        name: l.name,
+        unit: l.unit,
+        quantity: l.quantity,
+        unitPriceBuy: Number.isFinite(pricePerUnit) ? pricePerUnit : null,
+        recipeCost,
+        buyPrice,
+        airtableId: price.airtableId ?? null,
+        unitNormalized: 'g',
+        ...(note ? { note } : {}),
+        };
+       }
+
+        if (unitRecipeCanon === 'piece' && priceUnit === 'ml' && Number.isFinite(price.mlPerPiece)) {
+        const qtyMl = Number(l.quantity || 0) * Number(price.mlPerPiece);
+        const conv = { qty: qtyMl, unit: 'ml' };
+
+        let recipeCost = 0;
+        let buyPrice = 0;
+        let note;
+
+        const pricePerUnit = Number(price.pricePerUnit);
+        if (Number.isFinite(pricePerUnit) && Number.isFinite(Number(conv.qty))) {
+        recipeCost = Number(conv.qty) * pricePerUnit;
+        buyPrice = recipeCost;
+        } else {
+        note = 'prix unitaire invalide';
+        }
+
+        return {
+        name: l.name,
+        unit: l.unit,
+        quantity: l.quantity,
+        unitPriceBuy: Number.isFinite(pricePerUnit) ? pricePerUnit : null,
+        recipeCost,
+        buyPrice,
+        airtableId: price.airtableId ?? null,
+        unitNormalized: 'ml',
+        ...(note ? { note } : {}),
+        };
+        }
 
         // Conversion éventuelle (ex: piece -> g) pour matcher l’unité du PPU
         const conv = convertUnitForPricing(
