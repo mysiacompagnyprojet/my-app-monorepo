@@ -12,6 +12,15 @@ function needAuth(req, res, next) {
   next();
 }
 
+function normalizeKey(s = '') {
+  return String(s)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // enlève accents
+    .replace(/[^a-z0-9\s&]/g, ' ') // enlève tout sauf lettres et chiffres
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 /**
  * POST /shopping-list
  * body: { recipeIds: string[] }
@@ -64,6 +73,37 @@ router.post('/', needAuth, async (req, res) => {
     // Enrichissement prix en parallèle (Airtable)
     const pricedItems = await Promise.all(
       merged.map(async (l) => {
+        //0) règles "gratuit" (ne pas appeler Airtable)
+        const Key = normalizeKey(l.name);
+
+        const isWater = 
+        key === 'eau' ||
+        key.startsWith('eau ');
+
+        const isSaltPepper = 
+        key === 'sel' ||
+        key === 'poivre' ||
+        key === 'sel & poivre' ||
+        key === 'sel&poivre' ||
+        key.includes('sel & poivre') ||
+        key.includes('sel et poivre') ||
+        key.includes('poivre') && key.includes('sel');
+
+        if (isWater || isSaltPepper) {
+          return {
+            name: l.name,
+            unit: l.unit,
+            quantity: l.quantity,
+            unitPriceBuy: 0,
+            recipeCost: 0,
+            buyPrice: 0,
+            airtableId: null,
+            unitNormalized: null,
+            //pas de note, c'est volontaire
+          };
+        }
+
+        //sinon on cherche le prix dans Airtable
         const price = await getIngredientPriceByName(l.name);
 
         if (!price) {
