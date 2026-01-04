@@ -74,7 +74,7 @@ router.post('/', needAuth, async (req, res) => {
     const pricedItems = await Promise.all(
       merged.map(async (l) => {
         //0) règles "gratuit" (ne pas appeler Airtable)
-        const Key = normalizeKey(l.name);
+        const key = normalizeKey(l.name);
 
         const isWater = 
         key === 'eau' ||
