@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import Link from 'next/link';
+
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -122,51 +124,63 @@ export default function RecipesListPage() {
               }}
             >
               {recipes.map((r) => (
-                <li key={r.id} className="app-card p-4">
-                  {r.imageUrl ? (
-                    <img
-                      src={r.imageUrl}
-                      alt={r.title}
-                      style={{
-                        width: '100%',
-                        height: 160,
-                        objectFit: 'cover',
-                        borderRadius: 10,
-                        marginBottom: 10,
-                        border: '1px solid var(--border)',
-                      }}
-                    />
-                  ) : (
-                    <div
-                      className="app-card"
-                      style={{
-                        height: 160,
-                        borderRadius: 10,
-                        boxShadow: 'none',
-                        background: 'rgba(255,255,255,0.7)',
-                        borderColor: 'var(--border)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        marginBottom: 10,
-                      }}
-                    >
-                      <span className="app-muted text-sm">Aucune image</span>
-                    </div>
-                  )}
+               <li key={r.id} className="app-card p-4" style={{ padding: 0 }}>
+               <Link
+                href={`/recipes/${r.id}`}
+                className="block"
+                style={{
+                padding: 16,
+                textDecoration: 'none',
+                color: 'inherit',
+                cursor: 'pointer',
+                }}
+              >
+      {r.imageUrl ? (
+        <img
+          src={r.imageUrl}
+          alt={r.title}
+          style={{
+            width: '100%',
+            height: 160,
+            objectFit: 'cover',
+            borderRadius: 10,
+            marginBottom: 10,
+            border: '1px solid var(--border)',
+          }}
+        />
+      ) : (
+        <div
+          className="app-card"
+          style={{
+            height: 160,
+            borderRadius: 10,
+            boxShadow: 'none',
+            background: 'rgba(255,255,255,0.7)',
+            borderColor: 'var(--border)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 10,
+          }}
+        >
+          <span className="app-muted text-sm">Aucune image</span>
+        </div>
+      )}
 
-                  <div className="font-extrabold" style={{ color: 'var(--text)' }}>
-                    {r.title}
-                  </div>
+      <div className="font-extrabold" style={{ color: 'var(--text)' }}>
+        {r.title}
+      </div>
 
-                  <div className="mt-1 text-sm app-muted">
-                    <span className="app-badge">Portions : {r.servings}</span>
-                    <span style={{ marginLeft: 8 }}>
-                      {new Date(r.createdAt).toLocaleDateString('fr-FR')}
-                    </span>
-                  </div>
-                </li>
-              ))}
+      <div className="mt-1 text-sm app-muted">
+        <span className="app-badge">Portions : {r.servings}</span>
+        <span style={{ marginLeft: 8 }}>
+          {new Date(r.createdAt).toLocaleDateString('fr-FR')}
+        </span>
+      </div>
+    </Link>
+  </li>
+))}
+
             </ul>
           )}
         </section>

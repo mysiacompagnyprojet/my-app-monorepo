@@ -30,6 +30,61 @@ router.get('/', needAuth, async (req, res) => {
   res.json({ ok: true, recipes });
 });
 
+// GET /recipes/:id (détail d'une recette)
+router.get('/recipes/:id', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        ok: false,
+        error: 'ID de recette manquant',
+      });
+    }
+
+    // Récupération de l'utilisateur authentifié
+    const userId = req.user?.id;
+    if (!userId) {
+      return res.status(401).json({
+        ok: false,
+        error: 'Utilisateur non authentifié',
+      });
+    }
+
+    // Récupération de la recette
+    const { data: recipe, error } = await req.supabase
+      .from('recipes')
+      .select('*')
+      .eq('id', id)
+      .eq('user_id', userId)
+      .single();
+
+    if (error) {
+      if (error.code === 'PGRST116') {
+        return res.status(404).json({
+          ok: false,
+          error: 'Recette introuvable',
+        });
+      }
+
+      throw error;
+    }
+
+    return res.json({
+      ok: true,
+      recipe,
+    });
+  } catch (err) {
+    console.error('[GET /recipes/:id]', err);
+
+    return res.status(500).json({
+      ok: false,
+      error: 'Erreur serveur lors du chargement de la recette',
+    });
+  }
+});
+
+
 /**
  * POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
  * ⚠️ Pipeline ingrédients sécurisé :

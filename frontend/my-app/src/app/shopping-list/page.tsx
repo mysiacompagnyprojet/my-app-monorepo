@@ -60,10 +60,19 @@ export default function ShoppingListPage() {
   const [status, setStatus] = useState('')
 
   useEffect(() => {
-    apiFetch<ListRecipesResponse>('/recipes')
-      .then((r) => setRecipes(r.recipes))
-      .catch((e) => setStatus('❌ ' + e.message))
+  apiFetch<ListRecipesResponse>('/recipes')
+    .then((r) => setRecipes(Array.isArray((r as any).recipes) ? (r as any).recipes : []))
+    .catch((e) => setStatus('❌ ' + e.message))
   }, [])
+
+
+
+
+  //useEffect(() => {
+    //apiFetch<ListRecipesResponse>('/recipes')
+      //.then((r) => setRecipes(r.recipes))
+      //.catch((e) => setStatus('❌ ' + e.message))
+  //}, [])
 
   function toggle(id: string) {
     setSelected((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]))
@@ -141,7 +150,7 @@ export default function ShoppingListPage() {
       <section className="app-card p-6" style={{ marginTop: 16 }}>
         <h2 className="text-lg font-extrabold app-title">Choisir des recettes</h2>
 
-        {recipes.length === 0 ? (
+        {(recipes?.length ?? 0 ) === 0 ? (
           <p className="mt-3 app-muted">Aucune recette disponible.</p>
         ) : (
           <ul className="mt-4 grid gap-2" style={{ listStyle: 'none', padding: 0 }}>
