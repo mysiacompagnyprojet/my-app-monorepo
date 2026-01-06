@@ -170,8 +170,19 @@ function computePPUFromRow(fields) {
   // 1) prix normalisé prioritaire
   let ppuNormalized = toNumberLoose(fields[COL_PRICE_KG_L_PIECE]);
   if (Number.isFinite(ppuNormalized) && ppuNormalized > 0) {
-    dlog('[PPU] normalized ok:', fields[COL_NAME] || fields.NOM, ppuNormalized);
-    return { ppu: ppuNormalized, unit: baseU };
+    // la colonne est au kg/L/pièce, on convertit en g/ml/pièce
+    let ppu = ppuNormalized;
+
+    if (baseU === 'g') {
+      //€/kg -> €/g
+      ppu = ppuNormalized / 1000;
+    } else if (baseU === 'ml') {
+      //€/L -> €/ml
+      ppu = ppuNormalized / 1000;
+    } // pièce -> inchangé
+
+    dlog('[PPU] normalized ok:', fields[COL_NAME] || fields.NOM, { baseU, ppuNormalized, ppu});
+    return { ppu, unit: baseU };
   }
 
   // 2) fallback: prix d'achat / quantité de référence
