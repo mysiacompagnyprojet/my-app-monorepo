@@ -1,104 +1,110 @@
-// backend/src/routes/recipes.js
 const express = require('express');
-const { prisma } = require('../lib/prisma');
-const { enrichIngredientWithCost } = require('../utils/costs');
-const { canonUnit, normalizeUnit } = require('../utils/units');
-const { cleanAndNormalizeIngredients, tidyName } = require('../utils/ingredients');
-
 const router = express.Router();
+const { PrismaClient } = require('@prisma/client');
 
-function needAuth(req, res, next) {
-  if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
-  next();
-}
+const prisma = new PrismaClient();
 
-// GET /recipes
+const { supabaseAuth } = require('../middleware/supabaseAuth');
+const needAuth = supabaseAuth;
+
+
+
+const {
+  cleanAndNormalizeIngredients,
+  enrichIngredientWithCost,
+  tidyName,
+  canonUnit,
+  normalizeUnit,
+} = require('../utils/ingredients');
+
+// ─────────────────────────────────────────────
+// GET /recipes → liste des recettes
+// ─────────────────────────────────────────────
 router.get('/', needAuth, async (req, res) => {
-  const { userId } = req.user;
-  const recipes = await prisma.recipe.findMany({
-    where: { userId },
-    orderBy: { createdAt: 'desc' },
-    select: {
-      id: true,
-      title: true,
-      servings: true,
-      imageUrl: true,
-      createdAt: true,
-      ingredients: { select: { name: true, quantity: true, unit: true, costRecipe: true } },
-    },
-  });
-  res.json({ ok: true, recipes });
-});
-
-// GET /recipes/:id (détail d'une recette)
-router.get('/recipes/:id', auth, async (req, res) => {
   try {
-    const { id } = req.params;
+    const { userId } = req.user;
 
-    if (!id) {
-      return res.status(400).json({
-        ok: false,
-        error: 'ID de recette manquant',
-      });
-    }
-
-    // Récupération de l'utilisateur authentifié
-    const userId = req.user?.id;
-    if (!userId) {
-      return res.status(401).json({
-        ok: false,
-        error: 'Utilisateur non authentifié',
-      });
-    }
-
-    // Récupération de la recette
-    const { data: recipe, error } = await req.supabase
-      .from('recipes')
-      .select('*')
-      .eq('id', id)
-      .eq('user_id', userId)
-      .single();
-
-    if (error) {
-      if (error.code === 'PGRST116') {
-        return res.status(404).json({
-          ok: false,
-          error: 'Recette introuvable',
-        });
-      }
-
-      throw error;
-    }
-
-    return res.json({
-      ok: true,
-      recipe,
+    const recipes = await prisma.recipe.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        title: true,
+        servings: true,
+        imageUrl: true,
+        createdAt: true,
+        ingredients: {
+          select: {
+            name: true,
+            quantity: true,
+            unit: true,
+            costRecipe: true,
+          },
+        },
+      },
     });
-  } catch (err) {
-    console.error('[GET /recipes/:id]', err);
 
-    return res.status(500).json({
-      ok: false,
-      error: 'Erreur serveur lors du chargement de la recette',
-    });
+    res.json({ ok: true, recipes });
+  } catch (e) {
+    console.error('GET /recipes error:', e);
+    res.status(500).json({ ok: false, error: 'internal error' });
   }
 });
 
+// ─────────────────────────────────────────────
+// GET /recipes/:id → détail d’une recette
+// ─────────────────────────────────────────────
+router.get('/:id', needAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
 
-/**
- * POST /recipes — crée une recette avec ingrédients enrichis (Airtable)
- * ⚠️ Pipeline ingrédients sécurisé :
- *   (1) cleanAndNormalizeIngredients  → [{ nameCanon, quantityNum, unit }]
- *   (2) enrichIngredientWithCost(base) → whitelist des champs coût (pas de réécriture name/unit/quantity)
- *   (3) garde-fou final (tidyName + canon unit) avant insert Prisma
- */
+    const recipe = await prisma.recipe.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        title: true,
+        servings: true,
+        imageUrl: true,
+        createdAt: true,
+        notes: true,
+        steps: true,
+        ingredients: {
+          select: {
+            name: true,
+            quantity: true,
+            unit: true,
+            costRecipe: true,
+          },
+        },
+      },
+    });
+
+    if (!recipe) {
+      return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' });
+    }
+
+    res.json({ ok: true, recipe });
+  } catch (e) {
+    console.error('GET /recipes/:id error:', e);
+    res.status(500).json({ ok: false, error: 'internal error' });
+  }
+});
+
+// ─────────────────────────────────────────────
+// POST /recipes → création manuelle
+// ─────────────────────────────────────────────
 router.post('/', needAuth, async (req, res) => {
   try {
     const body = req.body ?? {};
     let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
     if (typeof steps === 'string') {
-      try { steps = JSON.parse(steps); } catch { steps = []; }
+      try {
+        steps = JSON.parse(steps);
+      } catch {
+        steps = [];
+      }
     }
 
     if (!title || typeof title !== 'string' || !title.trim()) {
@@ -114,11 +120,11 @@ router.post('/', needAuth, async (req, res) => {
     if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
       imageUrl = imageUrl.url;
     }
+
     notes = typeof notes === 'string' ? notes : '';
     ingredients = Array.isArray(ingredients) ? ingredients : [];
 
     // 1) Normalisation forte
-    // (on accepte {name, quantity, unit} bruts comme ton front les envoie)
     const normalized = cleanAndNormalizeIngredients(
       ingredients.map(i => ({
         name: i?.name,
@@ -127,18 +133,19 @@ router.post('/', needAuth, async (req, res) => {
       }))
     );
 
-    // 2) Enrichissement (whitelist)
+    // 2) Enrichissement coûts
     const ingData = await Promise.all(
       normalized.map(async (i) => {
         const base = {
-          name: i.nameCanon,                                   // "Pomme de terre"
-          quantity: i.quantityNum != null ? i.quantityNum : 0, // 500
-          unit: i.unit || 'piece',                             // "g" | "ml" | "piece"
+          name: i.nameCanon,
+          quantity: i.quantityNum ?? 0,
+          unit: i.unit || 'piece',
         };
+
         const enriched = await enrichIngredientWithCost(base);
+
         return {
-          ...base, // le nettoyé garde la main
-          // whitelist des champs de coût / référence externe :
+          ...base,
           airtableId: enriched?.airtableId ?? null,
           unitPriceBuy: enriched?.unitPriceBuy ?? null,
           costRecipe: enriched?.costRecipe ?? null,
@@ -162,37 +169,48 @@ router.post('/', needAuth, async (req, res) => {
         steps,
         imageUrl: imageUrl || null,
         notes,
-        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
+        ingredients: ingDataFinal.length
+          ? { createMany: { data: ingDataFinal } }
+          : undefined,
       },
       include: { ingredients: true },
     });
 
-    return res.status(201).json({ ok: true, recipe });
+    res.status(201).json({ ok: true, recipe });
   } catch (e) {
     console.error('POST /recipes error:', e);
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+    res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
 });
 
-/**
- * POST /recipes/from-draft/:draftId
- * Importe un brouillon (recipeDraft) en recette finale.
- * Pipeline identique à POST /recipes (sécurisé).
- */
+// ─────────────────────────────────────────────
+// POST /recipes/from-draft/:draftId → import OCR
+// ─────────────────────────────────────────────
 router.post('/from-draft/:draftId', needAuth, async (req, res) => {
   try {
     const { draftId } = req.params;
 
-    const draft = await prisma.recipeDraft.findUnique({ where: { id: draftId } });
-    if (!draft) return res.status(404).json({ ok: false, error: 'DRAFT_NOT_FOUND' });
+    const draft = await prisma.recipeDraft.findUnique({
+      where: { id: draftId },
+    });
+
+    if (!draft) {
+      return res.status(404).json({ ok: false, error: 'DRAFT_NOT_FOUND' });
+    }
 
     if (!draft.parsed) {
-      return res.status(400).json({ ok: false, error: 'DRAFT_NOT_PARSED', message: 'Remplis draft.parsed avant import.' });
+      return res.status(400).json({
+        ok: false,
+        error: 'DRAFT_NOT_PARSED',
+        message: 'Remplis draft.parsed avant import.',
+      });
     }
 
     const data = draft.parsed || {};
     const title = String(data.title || '').trim();
-    if (!title) return res.status(400).json({ ok: false, error: "parsed.title manquant" });
+    if (!title) {
+      return res.status(400).json({ ok: false, error: 'parsed.title manquant' });
+    }
 
     const servings = Number(data.servings || 1);
     const steps = Array.isArray(data.steps) ? data.steps : [];
@@ -200,18 +218,18 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
     const notes = typeof data.notes === 'string' ? data.notes : '';
     const rawIngredients = Array.isArray(data.ingredients) ? data.ingredients : [];
 
-    // 1) Normalisation forte
     const normalized = cleanAndNormalizeIngredients(rawIngredients);
 
-    // 2) Enrichissement (whitelist)
     const ingData = await Promise.all(
       normalized.map(async (i) => {
         const base = {
           name: i.nameCanon,
-          quantity: i.quantityNum != null ? i.quantityNum : 0,
+          quantity: i.quantityNum ?? 0,
           unit: i.unit || 'piece',
         };
+
         const enriched = await enrichIngredientWithCost(base);
+
         return {
           ...base,
           airtableId: enriched?.airtableId ?? null,
@@ -221,7 +239,6 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
       })
     );
 
-    // 3) Garde-fou final
     const ingDataFinal = ingData.map(i => ({
       ...i,
       name: tidyName(i.name),
@@ -229,18 +246,17 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
       unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
     }));
 
-    // console.log('normalized =', normalized);
-    // console.log('ingData(final) =', ingDataFinal);
-
     const recipe = await prisma.recipe.create({
       data: {
         userId: req.user.userId,
         title,
         servings: Number.isFinite(servings) && servings > 0 ? servings : 1,
         steps,
-        imageUrl: imageUrl || null,
+        imageUrl,
         notes,
-        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
+        ingredients: ingDataFinal.length
+          ? { createMany: { data: ingDataFinal } }
+          : undefined,
       },
       include: { ingredients: true },
     });
@@ -250,12 +266,11 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
       data: { status: 'imported', updatedAt: new Date() },
     });
 
-    return res.json({ ok: true, recipe });
+    res.json({ ok: true, recipe });
   } catch (e) {
     console.error('POST /recipes/from-draft error:', e);
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+    res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
 });
 
 module.exports = router;
-
