@@ -1,211 +1,232 @@
 // backend/src/utils/costs.js
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
 
-// Règles "gratuit" (évite Airtable + évite faux calculs)
-function normalizeKey(s = '') {
-  return String(s)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // enlève accents
-    .replace(/[^a-z0-9\s&]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+/**
+* Nettoyage “soft” du nom pour maximiser le match Airtable.
+* - enlève contenus entre parenthèses
+* - enlève certains trailers type "selon votre ..."
+* - trim + espaces
+*/
+function cleanNameForPricing(name) {
+let s = String(name || '').trim();
+if (!s) return '';
+
+// enlève (....)
+s = s.replace(/\([^)]*\)/g, ' ');
+
+// enlève "selon ..." (souvent ajouté par OCR / recettes)
+s = s.replace(/\bselon\b.*$/i, ' ');
+
+// espaces
+s = s.replace(/\s+/g, ' ').trim();
+
+return s;
 }
 
 /**
- * Enrichit un ingrédient avec Airtable + calcule le coût.
- * ✅ Gère :
- * - conversions standard (kg/mg -> g, cl/dl/l -> ml)
- * - densité (g <-> ml) via density_g_per_ml
- * - gousse / pièce via gramsPerPiece / mlPerPiece
- *
- * @param {{ name: string, quantity?: number, unit?: string }} i
- * @returns {Promise<{
- *  name: string,
- *  quantity: number,
- *  unit: string,
- *  airtableId: string|null,
- *  unitPriceBuy: number|null,
- *  costRecipe: number|null,
- *  unitNormalized?: string|null,
- *  note?: string
- * }>}
- */
-async function enrichIngredientWithCost(i) {
-  const base = {
-    name: String(i?.name || '').trim(),
-    quantity: Number(i?.quantity || 0) || 0,
-    unit: String(i?.unit || '').trim(),
-  };
+* Unités "spéciales" => on les traite comme pièce.
+* Exemple: gousse = pièce
+*/
+function canonUnitExtended(uRaw) {
+const u = canonUnit(uRaw);
+if (!u) return null;
 
-  // Garde-fou
-  if (!base.name) {
-    return {
-      ...base,
-      airtableId: null,
-      unitPriceBuy: null,
-      costRecipe: 0,
-      unitNormalized: null,
-      note: 'nom vide',
-    };
-  }
+// gousse / gousses -> piece
+if (u === 'gousse' || u === 'gousses') return 'piece';
 
-  // 0) Règles "gratuit"
-  const key = normalizeKey(base.name);
-
-  const isWater = key === 'eau' || key.startsWith('eau ');
-  const isSaltPepper =
-    key === 'sel' ||
-    key === 'poivre' ||
-    key === 'sel & poivre' ||
-    key === 'sel&poivre' ||
-    key.includes('sel & poivre') ||
-    key.includes('sel et poivre') ||
-    (key.includes('poivre') && key.includes('sel'));
-
-  if (isWater || isSaltPepper) {
-    return {
-      ...base,
-      airtableId: null,
-      unitPriceBuy: 0,
-      costRecipe: 0,
-      unitNormalized: null,
-    };
-  }
-
-  // 1) Lookup Airtable (en tenant compte de l'unité recette si possible)
-  const pricing = await getIngredientPriceByName(base.name, base.unit);
-  if (!pricing) {
-    return {
-      ...base,
-      airtableId: null,
-      unitPriceBuy: null,
-      costRecipe: 0,
-      unitNormalized: null,
-      note: 'non trouvé dans Airtable',
-    };
-  }
-
-  const priceUnit = pricing.unit; // 'g' | 'ml' | 'piece'
-  const pricePerUnit = Number(pricing.pricePerUnit);
-
-  if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
-    return {
-      ...base,
-      airtableId: pricing.airtableId ?? null,
-      unitPriceBuy: null,
-      costRecipe: 0,
-      unitNormalized: priceUnit || null,
-      note: 'prix unitaire invalide',
-    };
-  }
-
-  const uRecipe = canonUnit(base.unit); // ex: 'cl' => 'cl'
-  const qty = Number(base.quantity || 0);
-
-  // 2) Conversion densité (g <-> ml) si dispo
-  // density = g/ml
-  const density = Number(pricing.density_g_per_ml);
-
-  if (Number.isFinite(density) && density > 0) {
-    // recette en volume -> Airtable en g
-    if (priceUnit === 'g' && ['ml', 'cl', 'dl', 'l'].includes(uRecipe)) {
-      const b = toBaseQty(qty, uRecipe); // -> ml
-      if (b.unit === 'ml' && Number.isFinite(b.qty)) {
-        const qtyG = Number(b.qty) * density; // g = ml * densité
-        const cost = qtyG * pricePerUnit;
-
-        return {
-          ...base,
-          airtableId: pricing.airtableId ?? null,
-          unitPriceBuy: pricePerUnit,
-          costRecipe: cost,
-          unitNormalized: 'g',
-          note: 'conversion densité (ml→g)',
-        };
-      }
-    }
-
-    // recette en masse -> Airtable en ml
-    if (priceUnit === 'ml' && ['g', 'kg', 'mg'].includes(uRecipe)) {
-      const b = toBaseQty(qty, uRecipe); // -> g
-      if (b.unit === 'g' && Number.isFinite(b.qty)) {
-        const qtyMl = Number(b.qty) / density; // ml = g / densité
-        const cost = qtyMl * pricePerUnit;
-
-        return {
-          ...base,
-          airtableId: pricing.airtableId ?? null,
-          unitPriceBuy: pricePerUnit,
-          costRecipe: cost,
-          unitNormalized: 'ml',
-          note: 'conversion densité (g→ml)',
-        };
-      }
-    }
-  }
-
-  // 3) Conversion pièce -> g/ml via Airtable
-  if (uRecipe === 'piece' && priceUnit === 'g') {
-    const gpp = Number(pricing.gramsPerPiece);
-    if (Number.isFinite(gpp) && gpp > 0) {
-      const qtyG = qty * gpp;
-      const cost = qtyG * pricePerUnit;
-
-      return {
-        ...base,
-        airtableId: pricing.airtableId ?? null,
-        unitPriceBuy: pricePerUnit,
-        costRecipe: cost,
-        unitNormalized: 'g',
-        note: 'conversion pièce→g (Airtable)',
-      };
-    }
-  }
-
-  if (uRecipe === 'piece' && priceUnit === 'ml') {
-    const mpp = Number(pricing.mlPerPiece);
-    if (Number.isFinite(mpp) && mpp > 0) {
-      const qtyMl = qty * mpp;
-      const cost = qtyMl * pricePerUnit;
-
-      return {
-        ...base,
-        airtableId: pricing.airtableId ?? null,
-        unitPriceBuy: pricePerUnit,
-        costRecipe: cost,
-        unitNormalized: 'ml',
-        note: 'conversion pièce→ml (Airtable)',
-      };
-    }
-  }
-
-  // 4) Conversion standard (kg/mg->g, cl/dl/l->ml) si compatible direct
-  const b = toBaseQty(qty, uRecipe); // -> g/ml/piece (base)
-  if (b && b.unit === priceUnit && Number.isFinite(b.qty)) {
-    const cost = Number(b.qty) * pricePerUnit;
-
-    return {
-      ...base,
-      airtableId: pricing.airtableId ?? null,
-      unitPriceBuy: pricePerUnit,
-      costRecipe: cost,
-      unitNormalized: priceUnit || null,
-    };
-  }
-
-  // 5) Sinon : incompatible
-  return {
-    ...base,
-    airtableId: pricing.airtableId ?? null,
-    unitPriceBuy: pricePerUnit,
-    costRecipe: 0,
-    unitNormalized: priceUnit || null,
-    note: 'unité incompatible (conversion manquante)',
-  };
+return u;
 }
 
-module.exports = { enrichIngredientWithCost };
+/**
+* Convertit une quantité de recette vers une unité cible (g/ml/piece) quand c'est simple.
+* Retourne { qty, unit } ou null si conversion impossible.
+*/
+function convertRecipeToPricingUnit(qty, unitRaw, targetUnit) {
+const unitCanon = canonUnitExtended(unitRaw);
+const q = Number(qty || 0);
+if (!Number.isFinite(q)) return null;
+
+// d’abord on passe en base (g/ml/piece) selon l’unité recette
+// ⚠️ toBaseQty de airtable.js gère déjà cl/dl/l etc via canonUnit(),
+// mais canonUnit() ne connaît pas "gousse". On le traite en amont.
+if (unitCanon === 'piece') {
+return { qty: q, unit: 'piece' };
+}
+
+const base = toBaseQty(q, unitCanon); // => { qty, unit: 'g'|'ml'|'piece' }
+if (!base || !base.unit) return null;
+
+// si la base correspond à la target => OK
+if (base.unit === targetUnit) return base;
+
+// sinon, on ne convertit pas ici (densité g<->ml géré plus bas)
+return base; // on renvoie quand même base pour densité éventuelle
+}
+
+/**
+* Enrichit un ingrédient avec Airtable + calcule costRecipe en g/ml/piece
+* en gérant:
+* - conversions standard (cl->ml, kg->g, etc.)
+* - densité (g<->ml) si Airtable fournit density_g_per_ml
+* - piece/gousse -> g ou ml si Airtable fournit gramsPerPiece/mlPerPiece
+*
+* @param {{ name: string, quantity?: number, unit?: string }} i
+* @returns {Promise<{
+* name: string,
+* quantity: number,
+* unit: string,
+* airtableId: string|null,
+* unitPriceBuy: number|null,
+* costRecipe: number|null,
+* priceMatched?: boolean,
+* note?: string
+* }>}
+*/
+async function enrichIngredientWithCost(i) {
+const rawName = String(i?.name || '').trim();
+const name = cleanNameForPricing(rawName);
+const quantity = Number(i?.quantity || 0) || 0;
+const unitRaw = String(i?.unit || '').trim();
+
+const outBase = {
+name: rawName || name,
+quantity,
+unit: unitRaw,
+};
+
+if (!name) {
+return {
+...outBase,
+airtableId: null,
+unitPriceBuy: null,
+costRecipe: 0,
+priceMatched: false,
+note: 'nom vide',
+};
+}
+
+// ⚠️ preferUnitRaw = l’unité recette pour choisir un record compatible si plusieurs
+const pricing = await getIngredientPriceByName(name, unitRaw);
+
+if (!pricing) {
+return {
+...outBase,
+airtableId: null,
+unitPriceBuy: null,
+costRecipe: 0,
+priceMatched: false,
+note: 'non trouvé dans Airtable',
+};
+}
+
+const priceUnit = pricing.unit; // 'g' | 'ml' | 'piece'
+const pricePerUnit = Number(pricing.pricePerUnit);
+const density = Number(pricing.density_g_per_ml); // g/ml
+const gramsPerPiece = Number(pricing.gramsPerPiece);
+const mlPerPiece = Number(pricing.mlPerPiece);
+
+if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: null,
+costRecipe: 0,
+priceMatched: Boolean(pricing.airtableId),
+note: 'pricePerUnit invalide',
+};
+}
+
+// 1) Conversion simple vers base
+const base = convertRecipeToPricingUnit(quantity, unitRaw, priceUnit);
+if (!base || !base.unit || !Number.isFinite(base.qty)) {
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: 0,
+priceMatched: Boolean(pricing.airtableId),
+note: 'conversion de base impossible',
+};
+}
+
+// 2) Cas direct: base.unit === priceUnit
+if (base.unit === priceUnit) {
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: base.qty * pricePerUnit,
+priceMatched: Boolean(pricing.airtableId),
+};
+}
+
+// 3) Cas "piece" recette → pricing en g/ml via gramsPerPiece/mlPerPiece
+// (inclut gousse car canonUnitExtended la traite comme piece)
+if (base.unit === 'piece' && priceUnit === 'g' && Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) {
+const qtyG = base.qty * gramsPerPiece;
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: qtyG * pricePerUnit,
+priceMatched: Boolean(pricing.airtableId),
+note: 'conversion piece→g (gramsPerPiece)',
+};
+}
+
+if (base.unit === 'piece' && priceUnit === 'ml' && Number.isFinite(mlPerPiece) && mlPerPiece > 0) {
+const qtyMl = base.qty * mlPerPiece;
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: qtyMl * pricePerUnit,
+priceMatched: Boolean(pricing.airtableId),
+note: 'conversion piece→ml (mlPerPiece)',
+};
+}
+
+// 4) Cas densité g<->ml
+if (Number.isFinite(density) && density > 0) {
+// recette en ml (base.unit=ml) pricing en g
+if (base.unit === 'ml' && priceUnit === 'g') {
+const qtyG = base.qty * density; // g = ml * densité
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: qtyG * pricePerUnit,
+priceMatched: Boolean(pricing.airtableId),
+note: 'conversion densité (ml→g)',
+};
+}
+
+// recette en g (base.unit=g) pricing en ml
+if (base.unit === 'g' && priceUnit === 'ml') {
+const qtyMl = base.qty / density; // ml = g / densité
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: qtyMl * pricePerUnit,
+priceMatched: Boolean(pricing.airtableId),
+note: 'conversion densité (g→ml)',
+};
+}
+}
+
+// 5) Sinon: pas de conversion trouvée
+return {
+...outBase,
+airtableId: pricing.airtableId ?? null,
+unitPriceBuy: pricePerUnit,
+costRecipe: 0,
+priceMatched: Boolean(pricing.airtableId),
+note: 'unité incompatible (conversion manquante)',
+};
+}
+
+module.exports = { enrichIngredientWithCost, cleanNameForPricing };
 
 
 

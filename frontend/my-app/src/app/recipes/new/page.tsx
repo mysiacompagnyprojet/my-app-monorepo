@@ -321,6 +321,21 @@ setIsRepricing(false)
 }
 }
 
+// 🔁 Recalcul automatique après import OCR (après que setIngredients() ait vraiment rempli l'écran)
+useEffect(() => {
+if (!fromOcr) return
+if (isRepricing) return
+
+const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
+if (!hasRealIngredient) return
+
+// évite un double recalcul en cas de rerender
+if (status.startsWith('✅ Prix recalculés')) return
+
+recalcPrices()
+// eslint-disable-next-line react-hooks/exhaustive-deps
+}, [fromOcr, ingredients])
+
 async function save() {
 try {
 setStatus('⏳ Enregistrement…')
@@ -374,7 +389,9 @@ return (
 <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
 🗑️ Corbeille (texte non-recette détecté)
 </summary>
-<p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
+<p className="mt-2 text-sm app-muted">
+Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+</p>
 <textarea
 value={trash}
 onChange={(e) => setTrash(e.target.value)}
@@ -604,7 +621,12 @@ padding: 12,
 </div>
 ))}
 
-<button onClick={() => setSteps((p) => [...p, ''])} className="app-btn-secondary" style={{ width: 220 }} type="button">
+<button
+onClick={() => setSteps((p) => [...p, ''])}
+className="app-btn-secondary"
+style={{ width: 220 }}
+type="button"
+>
 + Ajouter une étape
 </button>
 </div>

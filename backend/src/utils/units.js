@@ -35,7 +35,13 @@ function canonUnit(uRaw) {
     u === 'pc' || u === 'pce' ||
     u === 'unite' || u === 'unites' ||
     u === 'pièce' || u === 'piéce' || u === 'pièces' ||
-    u === 'botte' || u === 'bottes' || u === "botte(s)"
+    u === 'botte' || u === 'bottes' || u === "botte(s)" ||
+
+    //unités OCR courantes
+    u === 'gousse' || u === 'gousses' ||
+    u === 'tranche' || u === 'tranches' ||
+    u === 'cuillere' || u === 'cuilleres' || 
+    u === 'cuillère' || u === 'cuillères' 
   ) return 'piece';
 
   // cuillères
