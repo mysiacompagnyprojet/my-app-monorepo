@@ -443,6 +443,7 @@ function pickCheapestRecord(records, preferUnitRaw) {
  * ou null si non trouvé.
  */
 async function getIngredientPriceByName(name, preferUnitRaw) {
+  
   const raw = String(name || '').trim();
   if (!raw) return null;
 
@@ -521,6 +522,7 @@ async function getIngredientPriceByName(name, preferUnitRaw) {
       unit,
       pricePerUnit: roundPPU(ppu, unit),
       gramsPerPiece: toNumberLoose(fields[COL_GRAMS_PER_PIECE]),
+      density_g_per_ml: toNumberLoose(fields[COL_DENSITY]),
       ...packInfo,
     };
 
