@@ -28,6 +28,7 @@ const COL_BUY_PRICE = process.env.AIRTABLE_FIELD_BUY_PRICE || "Prix d'achat";
 
 // ✅ NOUVEAU : colonne "Nombre" (nb de pièces/cubes dans le paquet)
 const COL_FIELD_COUNT = process.env.AIRTABLE_FIELD_COUNT || 'Nombre';
+const COL_GRAMS_PER_PIECE = process.env.AIRTABLE_FIELD_COL_GRAM || 'Gramme par pièce';
 
 // ⚠️ IMPORTANT : bien respecter l’accent : "pièce" (è), pas "piéce"
 const COL_PRICE_KG_L_PIECE = process.env.AIRTABLE_FIELD_PPU || 'Prix kg/L/pièce';
@@ -517,6 +518,7 @@ async function getIngredientPriceByName(name, preferUnitRaw) {
       name: fields[COL_NAME] ?? raw,
       unit,
       pricePerUnit: roundPPU(ppu, unit),
+      gramsPerPiece: toNumberLoose(fields[COL_GRAMS_PER_PIECE]),
       ...packInfo,
     };
 
@@ -548,6 +550,7 @@ async function getIngredientPriceByName(name, preferUnitRaw) {
         name: fields[COL_NAME] ?? raw,
         unit,
         pricePerUnit: roundPPU(ppu, unit),
+        gramsPerPiece: toNumberLoose(fields[COL_GRAMS_PER_PIECE]),
         ...packInfo,
       };
 
@@ -573,6 +576,7 @@ async function getIngredientPriceByName(name, preferUnitRaw) {
       name: fields[COL_NAME] || raw,
       unit,
       pricePerUnit: roundPPU(ppu, unit),
+      gramsPerPiece: toNumberLoose(fields[COL_GRAMS_PER_PIECE]),
       ...packInfo,
     };
 
@@ -611,6 +615,7 @@ async function getIngredientPriceByName(name, preferUnitRaw) {
       name: fields[COL_NAME] ?? best.matchedLabel,
       unit,
       pricePerUnit: roundPPU(ppu, unit),
+      gramsPerPiece: toNumberLoose(fields[COL_GRAMS_PER_PIECE]),
       ...packInfo,
     };
 
