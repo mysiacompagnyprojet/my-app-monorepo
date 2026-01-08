@@ -18,7 +18,7 @@ const recipesRouter = require('./routes/recipes');
 const authRouter = require('./routes/auth');
 const shoppingListRouter = require('./routes/shopping-list');
 
-app.use('/beta', require('./routes/beta'));
+
 // 3) Healthcheck (ultra simple et avant tout)
 app.get('/health', (_req, res) => res.json({ ok: true, status: 'ok' }));
 
@@ -28,12 +28,14 @@ app.use('/billing/webhook', billingWebhookHandler());
 // 5) JSON pour le reste
 app.use(express.json());
 
+
 // 6) Force la réponse en UTF-8 (évite les soucis d’accents côté clients/outils)
 app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   next();
 });
-
+// 6b) Route bêta
+app.use('/beta', require('./routes/beta'));
 // 7) CORS — liste blanche (garde tes URLs + variables d’env)
 const allowedOrigins = [
   'http://localhost:3000',
