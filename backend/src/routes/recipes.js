@@ -114,9 +114,10 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
 
           // ✅ NOUVEAU: prix d’achat "pack" (produit en magasin)
           // Sera null tant que costs.js ne le renvoie pas.
-          buyPriceEur: typeof enriched?.buyPriceEur === 'number' ? enriched.buyPriceEur : null,
-          buyRefQty: typeof enriched?.buyRefQty === 'number' ? enriched.buyRefQty : null,
-          buyRefUnit: enriched?.buyRefUnit ? String(enriched.buyRefUnit) : null,
+          buyPriceEur: enriched?.buyPriceEur ?? null,
+          buyLabel: enriched?.buyLabel ?? null,
+          buyRefQty: enriched?.buyRefQty ?? null,
+          buyRefUnit: enriched?.buyRefUnit ?? null,
 
           ...(enriched?.note ? { note: enriched.note } : {}),
         }

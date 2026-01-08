@@ -73,7 +73,7 @@ function convertRecipeToPricingUnit(qty, unitRaw, targetUnit) {
 
 /**
  * Helpers robustes: on essaye plusieurs noms possibles
- * car services/airtable.js peut exposer des clés différentes.
+ * (utile si tu changes des clés côté airtable.js)
  */
 function pickNumber(obj, keys) {
   for (const k of keys) {
@@ -91,6 +91,24 @@ function pickString(obj, keys) {
   return null
 }
 
+function formatPackLabel(refQty, refUnit) {
+  const q = Number(refQty)
+  const u = String(refUnit || '').trim()
+  if (!Number.isFinite(q) || !u) return null
+
+  // affichage propre
+  if (u === 'g' || u === 'ml') {
+    // ex: 450 g, 1000 ml
+    return `${q} ${u}`
+  }
+  if (u === 'piece') {
+    // ex: 6 pièces
+    const n = Math.round(q)
+    return `${n} pièce${n > 1 ? 's' : ''}`
+  }
+  return `${q} ${u}`
+}
+
 /**
  * Enrichit un ingrédient avec Airtable + calcule costRecipe en g/ml/piece
  * en gérant:
@@ -98,21 +116,25 @@ function pickString(obj, keys) {
  * - densité (g<->ml) si Airtable fournit density_g_per_ml
  * - piece/gousse -> g ou ml si Airtable fournit gramsPerPiece/mlPerPiece
  *
- * + ✅ NOUVEAU: renvoie aussi le "prix d'achat pack" (prix du produit magasin)
+ * + ✅ NOUVEAU:
+ * - buyPriceEur : prix du pack en magasin (ex: pot 450g = 2.19)
+ * - buyRefQty / buyRefUnit : la quantité de référence du pack
+ * - buyLabel : texte affichable ("450 g", "1 L", "6 pièces")
  *
  * @param {{ name: string, quantity?: number, unit?: string }} i
  * @returns {Promise<{
- * name: string,
- * quantity: number,
- * unit: string,
- * airtableId: string|null,
- * unitPriceBuy: number|null,
- * costRecipe: number|null,
- * buyPriceEur?: number|null,
- * buyRefQty?: number|null,
- * buyRefUnit?: string|null,
- * priceMatched?: boolean,
- * note?: string
+ *  name: string,
+ *  quantity: number,
+ *  unit: string,
+ *  airtableId: string|null,
+ *  unitPriceBuy: number|null,
+ *  costRecipe: number|null,
+ *  buyPriceEur?: number|null,
+ *  buyRefQty?: number|null,
+ *  buyRefUnit?: string|null,
+ *  buyLabel?: string|null,
+ *  priceMatched?: boolean,
+ *  note?: string
  * }>}
  */
 async function enrichIngredientWithCost(i) {
@@ -135,6 +157,7 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur: null,
       buyRefQty: null,
       buyRefUnit: null,
+      buyLabel: null,
       costRecipe: 0,
       priceMatched: false,
       note: 'nom vide',
@@ -152,34 +175,18 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur: null,
       buyRefQty: null,
       buyRefUnit: null,
+      buyLabel: null,
       costRecipe: 0,
       priceMatched: false,
       note: 'non trouvé dans Airtable',
     }
   }
 
-  // ✅ Prix d'achat pack (si airtable.js le renvoie déjà)
-  const buyPriceEur = pickNumber(pricing, [
-    'buyPrice',
-    'buyPriceEur',
-    'buy_price',
-    'purchasePrice',
-    'purchase_price',
-  ])
-  const buyRefQty = pickNumber(pricing, [
-    'refQty',
-    'buyRefQty',
-    'referenceQty',
-    'ref_quantity',
-    'reference_quantity',
-  ])
-  const buyRefUnit = pickString(pricing, [
-    'refUnit',
-    'buyRefUnit',
-    'referenceUnit',
-    'ref_unit',
-    'reference_unit',
-  ])
+  // ✅ Prix d'achat pack + infos pack (si airtable.js les renvoie)
+  const buyPriceEur = pickNumber(pricing, ['buyPrice', 'buyPriceEur', 'buy_price', 'purchasePrice', 'purchase_price'])
+  const buyRefQty = pickNumber(pricing, ['refQty', 'buyRefQty', 'referenceQty', 'ref_quantity', 'reference_quantity'])
+  const buyRefUnit = pickString(pricing, ['refUnit', 'buyRefUnit', 'referenceUnit', 'ref_unit', 'reference_unit'])
+  const buyLabel = formatPackLabel(buyRefQty, buyRefUnit)
 
   const priceUnit = pricing.unit // 'g' | 'ml' | 'piece'
   const pricePerUnit = Number(pricing.pricePerUnit)
@@ -195,6 +202,7 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur,
       buyRefQty,
       buyRefUnit,
+      buyLabel,
       costRecipe: 0,
       priceMatched: Boolean(pricing.airtableId),
       note: 'pricePerUnit invalide',
@@ -211,6 +219,7 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur,
       buyRefQty,
       buyRefUnit,
+      buyLabel,
       costRecipe: 0,
       priceMatched: Boolean(pricing.airtableId),
       note: 'conversion de base impossible',
@@ -226,13 +235,13 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur,
       buyRefQty,
       buyRefUnit,
+      buyLabel,
       costRecipe: base.qty * pricePerUnit,
       priceMatched: Boolean(pricing.airtableId),
     }
   }
 
   // 3) Cas "piece" recette → pricing en g/ml via gramsPerPiece/mlPerPiece
-  // (inclut gousse car canonUnitExtended la traite comme piece)
   if (base.unit === 'piece' && priceUnit === 'g' && Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) {
     const qtyG = base.qty * gramsPerPiece
     return {
@@ -242,6 +251,7 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur,
       buyRefQty,
       buyRefUnit,
+      buyLabel,
       costRecipe: qtyG * pricePerUnit,
       priceMatched: Boolean(pricing.airtableId),
       note: 'conversion piece→g (gramsPerPiece)',
@@ -257,6 +267,7 @@ async function enrichIngredientWithCost(i) {
       buyPriceEur,
       buyRefQty,
       buyRefUnit,
+      buyLabel,
       costRecipe: qtyMl * pricePerUnit,
       priceMatched: Boolean(pricing.airtableId),
       note: 'conversion piece→ml (mlPerPiece)',
@@ -275,6 +286,7 @@ async function enrichIngredientWithCost(i) {
         buyPriceEur,
         buyRefQty,
         buyRefUnit,
+        buyLabel,
         costRecipe: qtyG * pricePerUnit,
         priceMatched: Boolean(pricing.airtableId),
         note: 'conversion densité (ml→g)',
@@ -291,6 +303,7 @@ async function enrichIngredientWithCost(i) {
         buyPriceEur,
         buyRefQty,
         buyRefUnit,
+        buyLabel,
         costRecipe: qtyMl * pricePerUnit,
         priceMatched: Boolean(pricing.airtableId),
         note: 'conversion densité (g→ml)',
@@ -306,6 +319,7 @@ async function enrichIngredientWithCost(i) {
     buyPriceEur,
     buyRefQty,
     buyRefUnit,
+    buyLabel,
     costRecipe: 0,
     priceMatched: Boolean(pricing.airtableId),
     note: 'unité incompatible (conversion manquante)',
@@ -313,3 +327,4 @@ async function enrichIngredientWithCost(i) {
 }
 
 module.exports = { enrichIngredientWithCost, cleanNameForPricing }
+
