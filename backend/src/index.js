@@ -33,6 +33,9 @@ app.use((req, res, next) => {
   next();
 });
 
+//beta
+app.use('/beta', require('./routes/beta'));
+
 // 7) CORS — liste blanche (garde tes URLs + variables d’env)
 const allowedOrigins = [
   'http://localhost:3000',

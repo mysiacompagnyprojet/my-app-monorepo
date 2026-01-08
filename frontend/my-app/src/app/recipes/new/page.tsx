@@ -12,14 +12,12 @@ quantity: number
 unit: string
 quantityRaw?: string
 
-// pricing (vient du backend OCR OU du recalcul)
 price?: { eurPer: number; perUnit: string } | null
 costEur?: number | null
 unitPriceBuy?: number | null
 priceMatched?: boolean
 airtableId?: string | null
 
-// ✅ NOUVEAU affichage "prix produit"
 buyPriceEur?: number | null
 buyLabel?: string | null
 buyRefQty?: number | null
@@ -49,7 +47,6 @@ priceMatched?: boolean
 note?: string
 price?: { eurPer: number; perUnit: string } | null
 
-// ✅ NOUVEAU
 buyPriceEur?: number | null
 buyLabel?: string | null
 buyRefQty?: number | null
@@ -68,7 +65,6 @@ function parseQtyInput(raw: string): number {
 const s = String(raw || '').trim()
 if (!s) return 0
 
-// mix "1 1/2"
 const mix = s.match(/^\s*(\d+)\s+(\d+)\s*\/\s*(\d+)\s*$/)
 if (mix) {
 const a = Number(mix[1])
@@ -77,7 +73,6 @@ const c = Number(mix[3])
 if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0) return a + b / c
 }
 
-// fraction "1/4"
 const frac = s.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/)
 if (frac) {
 const a = Number(frac[1])
@@ -85,7 +80,6 @@ const b = Number(frac[2])
 if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) return a / b
 }
 
-// décimal FR "1,2"
 const n = Number(s.replace(',', '.'))
 return Number.isFinite(n) ? n : 0
 }
@@ -107,7 +101,6 @@ function NewRecipeInner() {
 const router = useRouter()
 const search = useSearchParams()
 
-// draft OCR (juste pour pré-remplir)
 const [draft, setDraft] = useState<OcrDraft | null>(null)
 
 const [title, setTitle] = useState('')
@@ -125,19 +118,14 @@ const [isRepricing, setIsRepricing] = useState(false)
 const prefill = useMemo(() => search.get('prefill') === '1', [search])
 const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
 
-// ✅ total recette = somme des costs affichés
 const totalCost = useMemo(() => {
 return ingredients.reduce((acc, i) => acc + (typeof i.costEur === 'number' ? i.costEur : 0), 0)
 }, [ingredients])
 
-// ✅ total produits = somme des buyPriceEur
 const totalProducts = useMemo(() => {
 return ingredients.reduce((acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0), 0)
 }, [ingredients])
 
-// ───────────────────────────────────────────────────────────
-// Import depuis OCR : remplit le formulaire
-// ───────────────────────────────────────────────────────────
 useEffect(() => {
 if (!fromOcr) return
 
@@ -175,7 +163,6 @@ unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unit
 priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
 airtableId: row.airtableId ?? null,
 
-// ✅ NEW
 buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
@@ -196,13 +183,11 @@ setTrash(tr.join('\n'))
 console.error('ocrDraft parse error', e)
 }
 
-// Important : on nettoie pour éviter de ré-appliquer au refresh
 try {
 sessionStorage.removeItem('recipeDraft')
 } catch {}
 }, [fromOcr])
 
-// ✅ ton prefill existant : inchangé
 useEffect(() => {
 if (!prefill) return
 
@@ -239,7 +224,6 @@ unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unit
 priceMatched: row.priceMatched ?? false,
 airtableId: row.airtableId ?? null,
 
-// ✅ NEW
 buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
@@ -274,7 +258,6 @@ copy[idx] = raw
 return copy
 })
 
-// on modifie quantité mais on NE recalcul pas automatiquement les prix
 setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined })
 }
 
@@ -290,6 +273,7 @@ return copy.length ? copy : ['']
 })
 }
 
+// ✅ Supprime une étape, mais garde toujours au moins 1 ligne
 function removeStep(idx: number) {
 setSteps((prev) => {
 const copy = prev.filter((_, i) => i !== idx)
@@ -302,7 +286,6 @@ try {
 setIsRepricing(true)
 setStatus('⏳ Recalcul des prix…')
 
-// On envoie uniquement les lignes non vides, mais on garde un mapping d’index
 const idxs: number[] = []
 const list = ingredients
 .map((i, idx) => {
@@ -350,11 +333,7 @@ const old = copy[idx]
 const e = enriched[k] as any
 
 const cost =
-typeof e.costEur === 'number'
-? e.costEur
-: typeof e.costRecipe === 'number'
-? e.costRecipe
-: null
+typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
 
 copy[idx] = {
 ...old,
@@ -369,7 +348,6 @@ priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.a
 airtableId: e.airtableId ?? null,
 price: e.price ?? old?.price ?? null,
 
-// ✅ NEW
 buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
 buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
 buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
@@ -388,7 +366,6 @@ setIsRepricing(false)
 }
 }
 
-// 🔁 Recalcul automatique après import OCR : on le fait 1 seule fois
 const autoRepricedRef = useRef(false)
 useEffect(() => {
 if (!fromOcr) return
@@ -440,6 +417,18 @@ setStatus('❌ ' + (e?.message || 'Erreur'))
 
 const statusKind =
 status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
+
+// ✅ Style commun du petit bouton X (ingrédients + étapes)
+const smallXBtnStyle: React.CSSProperties = {
+width: 30,
+height: 30,
+padding: 0,
+display: 'grid',
+placeItems: 'center',
+fontSize: 14,
+lineHeight: '14px',
+borderRadius: 10,
+}
 
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
@@ -620,7 +609,6 @@ padding: 10,
 }}
 />
 
-{/* ✅ NOUVEL AFFICHAGE : 2 PRIX (recette / produit) */}
 <div
 style={{
 minWidth: 220,
@@ -631,10 +619,7 @@ fontSize: 13,
 fontWeight: 800,
 }}
 >
-{/* Prix recette */}
 <span>{fmtEur(typeof ing.costEur === 'number' ? ing.costEur : null)}</span>
-
-{/* Prix produit (pack) */}
 <span>{fmtEur(typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null)}</span>
 </div>
 
@@ -642,7 +627,7 @@ fontWeight: 800,
 type="button"
 onClick={() => removeIngredient(idx)}
 className="app-btn-secondary"
-style={{ width: 44, padding: 0, display: 'grid', placeItems: 'center' }}
+style={smallXBtnStyle}
 title="Supprimer cette ligne"
 >
 ✕
@@ -663,7 +648,6 @@ type="button"
 + Ajouter un ingrédient
 </button>
 
-{/* ✅ Totaux : recette + produits (même style/gras) */}
 <div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', gap: 28 }}>
 <div style={{ fontWeight: 900 }}>Total recette : {totalCost.toFixed(2)} €</div>
 <div style={{ fontWeight: 900 }}>Total produits : {totalProducts.toFixed(2)} €</div>
@@ -687,6 +671,7 @@ background: 'rgba(255,255,255,0.7)',
 borderColor: 'var(--border)',
 }}
 >
+{/* ✅ Header étape + petit bouton X */}
 <div className="flex items-center justify-between gap-2 mb-2">
 <span className="app-badge">Étape {idx + 1}</span>
 
@@ -694,10 +679,10 @@ borderColor: 'var(--border)',
 type="button"
 onClick={() => removeStep(idx)}
 className="app-btn-secondary"
-style={{ padding: '6px 10px' }}
+style={smallXBtnStyle}
 title="Supprimer cette étape"
 >
-Supprimer
+✕
 </button>
 </div>
 
