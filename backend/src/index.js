@@ -34,8 +34,7 @@ app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   next();
 });
-// 6b) Route bêta
-app.use('/beta', require('./routes/beta'));
+
 // 7) CORS — liste blanche (garde tes URLs + variables d’env)
 const allowedOrigins = [
   'http://localhost:3000',
@@ -67,6 +66,9 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// 6b) Route bêta
+app.use('/beta', require('./routes/beta'));
 
 // 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
 app.use('/dev', devAirtable);
