@@ -18,6 +18,7 @@ const recipesRouter = require('./routes/recipes');
 const authRouter = require('./routes/auth');
 const shoppingListRouter = require('./routes/shopping-list');
 
+app.use('/beta', require('./routes/beta'));
 // 3) Healthcheck (ultra simple et avant tout)
 app.get('/health', (_req, res) => res.json({ ok: true, status: 'ok' }));
 
@@ -32,9 +33,6 @@ app.use((req, res, next) => {
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   next();
 });
-
-//beta
-app.use('/beta', require('./routes/beta'));
 
 // 7) CORS — liste blanche (garde tes URLs + variables d’env)
 const allowedOrigins = [

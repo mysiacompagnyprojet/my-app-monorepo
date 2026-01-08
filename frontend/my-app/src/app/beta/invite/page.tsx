@@ -1,12 +1,10 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 
-type VerifyResp =
-| { ok: true }
-| { ok: false; error: string; message?: string }
+type VerifyResp = { ok: true } | { ok: false; error: string; message?: string }
 
 function getOrCreateDeviceId(): string {
 const KEY = 'beta_device_id'
@@ -17,12 +15,12 @@ const id = crypto.randomUUID()
 localStorage.setItem(KEY, id)
 return id
 } catch {
-// fallback si localStorage bloqué (rare)
 return crypto.randomUUID()
 }
 }
 
-export default function BetaInvitePage() {
+// ✅ 1) Ton code actuel va ici
+function BetaInviteInner() {
 const router = useRouter()
 const search = useSearchParams()
 
@@ -59,7 +57,6 @@ setStatus('❌ ' + msg)
 return
 }
 
-// on “mémorise” l’accès sur cet appareil
 localStorage.setItem('beta_ok', '1')
 localStorage.setItem('beta_token', t)
 
@@ -76,9 +73,7 @@ return (
 <main className="app-container" style={{ margin: '40px auto' }}>
 <section className="app-card p-6">
 <h1 className="text-2xl font-extrabold app-title">Accès bêta</h1>
-<p className="mt-2 app-muted">
-Colle ton code bêta pour activer l’accès sur cet appareil.
-</p>
+<p className="mt-2 app-muted">Colle ton code bêta pour activer l’accès sur cet appareil.</p>
 
 <div className="mt-6 grid gap-3" style={{ maxWidth: 520 }}>
 <label className="grid gap-1 text-sm font-semibold">
@@ -114,5 +109,14 @@ style={{ width: 220, opacity: isLoading ? 0.7 : 1 }}
 </div>
 </section>
 </main>
+)
+}
+
+// ✅ 2) Et ton export devient JUSTE le wrapper Suspense
+export default function BetaInvitePage() {
+return (
+<Suspense fallback={<div style={{ padding: 24 }}>Chargement…</div>}>
+<BetaInviteInner />
+</Suspense>
 )
 }
