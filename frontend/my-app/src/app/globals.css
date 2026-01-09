@@ -97,7 +97,106 @@ body {
     background: rgba(230, 220, 210, 0.55);
   }
 }
+/* ─────────────────────────────────────────────
+Étapes recette (UNIQUEMENT sur la fiche recette)
+───────────────────────────────────────────── */
 
+/* Container d'une étape : effet "vague / papier" */
+.recipe-step-card {
+max-width: 740px;
+margin: 0 auto 16px;
+padding: 10px 12px;
+
+background: var(--bg);
+border: 1px solid var(--border);
+
+/* Coins arrondis doux + organiques */
+border-radius: 22px;
+
+/* Petit relief */
+box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+
+/* Effet ondulé léger sur le contour (SVG mask inline) */
+-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220'%3E%3Cpath d='M40 8 C20 18 10 38 12 60 C14 85 6 102 10 122 C14 145 30 162 46 176 C70 198 110 208 150 206 C190 204 210 214 250 210 C292 206 318 196 340 180 C365 162 388 138 390 110 C392 78 380 58 382 38 C384 18 368 8 346 8 C320 8 295 2 270 6 C245 10 220 10 200 6 C180 2 160 6 140 10 C120 14 100 10 80 6 C60 2 52 4 40 8 Z' fill='white'/%3E%3C/svg%3E");
+-webkit-mask-size: 100% 100%;
+-webkit-mask-repeat: no-repeat;
+mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220'%3E%3Cpath d='M40 8 C20 18 10 38 12 60 C14 85 6 102 10 122 C14 145 30 162 46 176 C70 198 110 208 150 206 C190 204 210 214 250 210 C292 206 318 196 340 180 C365 162 388 138 390 110 C392 78 380 58 382 38 C384 18 368 8 346 8 C320 8 295 2 270 6 C245 10 220 10 200 6 C180 2 160 6 140 10 C120 14 100 10 80 6 C60 2 52 4 40 8 Z' fill='white'/%3E%3C/svg%3E");
+mask-size: 100% 100%;
+mask-repeat: no-repeat;
+}
+
+/* Variation légère (1 étape sur 2) */
+.recipe-step-card.is-alt {
+border-radius: 18px 28px 20px 30px;
+transform: rotate(0.12deg);
+}
+
+/* Badge "Étape X" : plus petit + plus clair */
+.recipe-step-badge {
+display: inline-block;
+font-size: 11px;
+font-weight: 700;
+line-height: 18px;
+padding: 0 8px;
+border-radius: 999px;
+
+/* brun plus clair (ton de l'app) */
+background: rgba(139, 106, 79, 0.12);
+border: 1px solid rgba(139, 106, 79, 0.18);
+color: var(--primary);
+}
+
+/* Texte étape : lisible + aéré */
+.recipe-step-text {
+white-space: pre-wrap;
+line-height: 1.65;
+font-size: 14px;
+}
+/* =========================
+Étapes recette (UNIQUEMENT)
+Cible: .recipe-step-card / .recipe-step-badge / .recipe-step-text
+========================= */
+
+.recipe-step-card {
+/* position / taille */
+max-width: 820px; /* plus long */
+margin: 0 auto 18px 0; /* aligné à gauche + plus d’espace entre blocs */
+
+/* rendu “dans la DA” */
+background: var(--bg); /* même fond que l’application */
+border: 1px solid var(--border);
+border-radius: 18px 26px 20px 28px; /* forme organique */
+padding: 10px 12px; /* moins haut */
+box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
+}
+
+/* alternance “vague” légère (effet organique) */
+.recipe-step-card.is-alt {
+border-radius: 26px 18px 28px 20px;
+transform: rotate(0.12deg);
+}
+
+/* badge Étape X : plus petit, plus clair, moins haut */
+.recipe-step-badge {
+display: inline-block;
+font-size: 11px; /* plus petit */
+font-weight: 700;
+line-height: 18px; /* moins haut */
+padding: 0 8px; /* badge plus fin */
+border-radius: 999px;
+
+/* ton brun + clair */
+background: rgba(139, 106, 79, 0.12);
+color: var(--primary);
+border: 1px solid rgba(139, 106, 79, 0.18);
+}
+
+/* texte étape : plus aéré */
+.recipe-step-text {
+white-space: pre-wrap;
+line-height: 1.65; /* plus espacé */
+font-size: 14px;
+}
 
 
 

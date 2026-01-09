@@ -18,6 +18,61 @@ const {
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs')
 
+/**
+ * ✅ PATCH: enrichissement "à la volée" pour l'affichage (SANS migration DB)
+ * Objectif : que le GET /recipes et GET /recipes/:id renvoient aussi :
+ * - buyPriceEur (prix du pack)
+ * - buyRefQty / buyRefUnit (quantité du pack)
+ * - buyLabel (label/pack)
+ * - unitPriceBuy (€/unité)
+ *
+ * Comme tu l’as vu, ces champs existent déjà dans POST /recipes/enrich-ingredients,
+ * mais ils n’étaient pas renvoyés par les GET (d’où 0,00€ / — côté fiche recette).
+ */
+async function enrichIngredientsForResponse(ingredients) {
+  const list = Array.isArray(ingredients) ? ingredients : []
+
+  return Promise.all(
+    list.map(async (ing) => {
+      const base = {
+        name: String(ing?.name || '').trim(),
+        quantity: Number(ing?.quantity || 0) || 0,
+        unit: String(ing?.unit || '').trim(),
+      }
+
+      if (!base.name) {
+        return {
+          ...ing,
+          buyPriceEur: null,
+          buyLabel: null,
+          buyRefQty: null,
+          buyRefUnit: null,
+        }
+      }
+
+      // On réutilise la même source de vérité que l'import (costs.js / Airtable)
+      const enriched = await enrichIngredientWithCost(base)
+
+      return {
+        ...ing,
+
+        // On garde les champs existants si déjà présents en DB, sinon on prend l'enrichissement
+        airtableId: enriched?.airtableId ?? ing?.airtableId ?? null,
+        unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
+        costRecipe: enriched?.costRecipe ?? ing?.costRecipe ?? null,
+
+        // ✅ Champs "produit/pack" (ce que tu veux afficher sur la fiche recette)
+        buyPriceEur: enriched?.buyPriceEur ?? null,
+        buyLabel: enriched?.buyLabel ?? null,
+        buyRefQty: enriched?.buyRefQty ?? null,
+        buyRefUnit: enriched?.buyRefUnit ?? null,
+
+        ...(enriched?.note ? { note: enriched.note } : {}),
+      }
+    })
+  )
+}
+
 // ─────────────────────────────────────────────
 // GET /recipes → liste des recettes
 // ─────────────────────────────────────────────
@@ -25,7 +80,7 @@ router.get('/', needAuth, async (req, res) => {
   try {
     const { userId } = req.user
 
-    const recipes = await prisma.recipe.findMany({
+    const recipesRaw = await prisma.recipe.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },
       select: {
@@ -40,10 +95,22 @@ router.get('/', needAuth, async (req, res) => {
             quantity: true,
             unit: true,
             costRecipe: true,
+
+            // ✅ (facultatif mais utile) si présent en DB
+            airtableId: true,
+            unitPriceBuy: true,
           },
         },
       },
     })
+
+    // ✅ PATCH: on enrichit les ingrédients pour renvoyer aussi le coût produit (pack)
+    const recipes = await Promise.all(
+      recipesRaw.map(async (r) => ({
+        ...r,
+        ingredients: await enrichIngredientsForResponse(r.ingredients),
+      }))
+    )
 
     return res.json({ ok: true, recipes })
   } catch (e) {
@@ -127,7 +194,9 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
     return res.json({ ok: true, ingredients: out })
   } catch (e) {
     console.error('POST /recipes/enrich-ingredients error:', e)
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
+    return res
+      .status(500)
+      .json({ ok: false, error: 'internal error', message: e?.message })
   }
 })
 
@@ -205,7 +274,9 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
         steps,
         imageUrl,
         notes,
-        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
+        ingredients: ingDataFinal.length
+          ? { createMany: { data: ingDataFinal } }
+          : undefined,
       },
       include: { ingredients: true },
     })
@@ -218,7 +289,9 @@ router.post('/from-draft/:draftId', needAuth, async (req, res) => {
     return res.json({ ok: true, recipe })
   } catch (e) {
     console.error('POST /recipes/from-draft error:', e)
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
+    return res
+      .status(500)
+      .json({ ok: false, error: 'internal error', message: e?.message })
   }
 })
 
@@ -239,12 +312,16 @@ router.post('/', needAuth, async (req, res) => {
     }
 
     if (!title || typeof title !== 'string' || !title.trim()) {
-      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" })
+      return res
+        .status(400)
+        .json({ ok: false, error: "Champ 'title' manquant ou invalide" })
     }
 
     servings = Number(servings ?? 1)
     if (!Number.isFinite(servings) || servings < 1) {
-      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
+      return res
+        .status(400)
+        .json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
     }
 
     steps = Array.isArray(steps) ? steps : []
@@ -300,7 +377,9 @@ router.post('/', needAuth, async (req, res) => {
         steps,
         imageUrl: imageUrl || null,
         notes,
-        ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
+        ingredients: ingDataFinal.length
+          ? { createMany: { data: ingDataFinal } }
+          : undefined,
       },
       include: { ingredients: true },
     })
@@ -308,7 +387,9 @@ router.post('/', needAuth, async (req, res) => {
     return res.status(201).json({ ok: true, recipe })
   } catch (e) {
     console.error('POST /recipes error:', e)
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
+    return res
+      .status(500)
+      .json({ ok: false, error: 'internal error', message: e?.message })
   }
 })
 
@@ -321,7 +402,7 @@ router.get('/:id', needAuth, async (req, res) => {
     const { id } = req.params
     const { userId } = req.user
 
-    const recipe = await prisma.recipe.findFirst({
+    const recipeRaw = await prisma.recipe.findFirst({
       where: { id, userId },
       select: {
         id: true,
@@ -337,13 +418,23 @@ router.get('/:id', needAuth, async (req, res) => {
             quantity: true,
             unit: true,
             costRecipe: true,
+
+            // ✅ (facultatif mais utile) si présent en DB
+            airtableId: true,
+            unitPriceBuy: true,
           },
         },
       },
     })
 
-    if (!recipe) {
+    if (!recipeRaw) {
       return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
+    }
+
+    // ✅ PATCH: enrichit aussi buyPriceEur / buyRefQty / buyRefUnit pour l’affichage fiche recette
+    const recipe = {
+      ...recipeRaw,
+      ingredients: await enrichIngredientsForResponse(recipeRaw.ingredients),
     }
 
     return res.json({ ok: true, recipe })
@@ -354,3 +445,4 @@ router.get('/:id', needAuth, async (req, res) => {
 })
 
 module.exports = router
+

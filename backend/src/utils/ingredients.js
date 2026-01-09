@@ -217,4 +217,6 @@ module.exports = {
   mergeIngredientsCanon,
   mergeIngredients, // pour /shopping-list
   parseRawLine,     // ✅ désormais bien exportée
+  canonUnit,
+  normalizeUnit,
 };

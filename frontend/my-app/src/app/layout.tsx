@@ -1,20 +1,33 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
-import "./globals.css";
-import AuthTokenBridge from "./_auth-bridge";
+// frontend/my-app/src/app/layout.tsx
+import type { Metadata } from 'next'
+import { Inter, Playfair_Display } from 'next/font/google'
+import './globals.css'
+import AuthTokenBridge from './_auth-bridge'
 
-const geistSans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const geistMono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+// ✅ Police STRUCTURE / APPLICATION (global)
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-inter',
+  weight: ['400', '500', '600', '700'],
+})
+
+// ✅ Police TITRES recettes (à utiliser seulement quand tu veux)
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  variable: '--font-playfair',
+  weight: ['400', '600', '700'],
+})
 
 export const metadata: Metadata = {
-  title: "Mon application",
-  description: "Application de recettes et organisation",
-};
+  title: 'Mon application',
+  description: 'Application de recettes et organisation',
+}
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fr">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      {/* ✅ Inter par défaut sur toute l’app */}
+      <body className={`${inter.variable} ${playfair.variable} ${inter.className} antialiased`}>
         <AuthTokenBridge />
 
         {/* Header en “carte” pour rester dans la DA */}
@@ -38,6 +51,5 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         </div>
       </body>
     </html>
-  );
+  )
 }
-
