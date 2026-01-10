@@ -1,3 +1,4 @@
+/* frontend/my-app/src/app/globals.css*/
 @import "tailwindcss";
 
 /* =========================
@@ -117,12 +118,12 @@ border-radius: 22px;
 box-shadow: 0 1px 0 rgba(0, 0, 0, 0.02);
 
 /* Effet ondulé léger sur le contour (SVG mask inline) */
--webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220'%3E%3Cpath d='M40 8 C20 18 10 38 12 60 C14 85 6 102 10 122 C14 145 30 162 46 176 C70 198 110 208 150 206 C190 204 210 214 250 210 C292 206 318 196 340 180 C365 162 388 138 390 110 C392 78 380 58 382 38 C384 18 368 8 346 8 C320 8 295 2 270 6 C245 10 220 10 200 6 C180 2 160 6 140 10 C120 14 100 10 80 6 C60 2 52 4 40 8 Z' fill='white'/%3E%3C/svg%3E");
+/*-webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220'%3E%3Cpath d='M40 8 C20 18 10 38 12 60 C14 85 6 102 10 122 C14 145 30 162 46 176 C70 198 110 208 150 206 C190 204 210 214 250 210 C292 206 318 196 340 180 C365 162 388 138 390 110 C392 78 380 58 382 38 C384 18 368 8 346 8 C320 8 295 2 270 6 C245 10 220 10 200 6 C180 2 160 6 140 10 C120 14 100 10 80 6 C60 2 52 4 40 8 Z' fill='white'/%3E%3C/svg%3E");
 -webkit-mask-size: 100% 100%;
 -webkit-mask-repeat: no-repeat;
 mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 220'%3E%3Cpath d='M40 8 C20 18 10 38 12 60 C14 85 6 102 10 122 C14 145 30 162 46 176 C70 198 110 208 150 206 C190 204 210 214 250 210 C292 206 318 196 340 180 C365 162 388 138 390 110 C392 78 380 58 382 38 C384 18 368 8 346 8 C320 8 295 2 270 6 C245 10 220 10 200 6 C180 2 160 6 140 10 C120 14 100 10 80 6 C60 2 52 4 40 8 Z' fill='white'/%3E%3C/svg%3E");
 mask-size: 100% 100%;
-mask-repeat: no-repeat;
+mask-repeat: no-repeat;*/
 }
 
 /* Variation légère (1 étape sur 2) */
@@ -136,8 +137,8 @@ transform: rotate(0.12deg);
 display: inline-block;
 font-size: 11px;
 font-weight: 700;
-line-height: 18px;
-padding: 0 8px;
+line-height: 16px;
+padding: 0px 7px;
 border-radius: 999px;
 
 /* brun plus clair (ton de l'app) */
