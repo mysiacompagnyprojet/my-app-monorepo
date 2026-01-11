@@ -1,3 +1,4 @@
+// frontend/my-app/src/app/auth/callback/page.tsx
 'use client';
 
 import { Suspense, useEffect, useState } from 'react';

@@ -1,3 +1,4 @@
+// frontend/my-app/src/app/beta/invite/page.tsx
 'use client'
 
 import { Suspense, useEffect, useMemo, useState } from 'react'
