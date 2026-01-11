@@ -20,7 +20,6 @@ return crypto.randomUUID()
 }
 }
 
-// ✅ 1) Ton code actuel va ici
 function BetaInviteInner() {
 const router = useRouter()
 const search = useSearchParams()
@@ -58,11 +57,18 @@ setStatus('❌ ' + msg)
 return
 }
 
+// ✅ Marque l'accès beta sur cet appareil
+try {
 localStorage.setItem('beta_ok', '1')
 localStorage.setItem('beta_token', t)
+} catch {}
 
-setStatus('✅ Accès bêta activé')
-router.push('/import/ocr')
+setStatus('✅ Accès bêta activé. Redirection…')
+
+// ✅ IMPORTANT : on ne va PLUS sur /import/ocr directement.
+// On redirige vers la page de login, qui enverra le magic link et créera la session.
+const next = '/import/ocr'
+router.replace(`/login?next=${encodeURIComponent(next)}`)
 } catch (e: any) {
 setStatus('❌ ' + (e?.message || 'Erreur'))
 } finally {
@@ -113,7 +119,6 @@ style={{ width: 220, opacity: isLoading ? 0.7 : 1 }}
 )
 }
 
-// ✅ 2) Et ton export devient JUSTE le wrapper Suspense
 export default function BetaInvitePage() {
 return (
 <Suspense fallback={<div style={{ padding: 24 }}>Chargement…</div>}>
