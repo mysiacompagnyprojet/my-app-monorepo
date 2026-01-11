@@ -57,18 +57,14 @@ setStatus('❌ ' + msg)
 return
 }
 
-// ✅ Marque l'accès beta sur cet appareil
-try {
+// ✅ Marque l’appareil comme autorisé pour la bêta
 localStorage.setItem('beta_ok', '1')
 localStorage.setItem('beta_token', t)
-} catch {}
 
-setStatus('✅ Accès bêta activé. Redirection…')
+setStatus('✅ Accès bêta activé — connexion requise…')
 
-// ✅ IMPORTANT : on ne va PLUS sur /import/ocr directement.
-// On redirige vers la page de login, qui enverra le magic link et créera la session.
-const next = '/import/ocr'
-router.replace(`/login?next=${encodeURIComponent(next)}`)
+// ✅ IMPORTANT : on force la connexion avant d’aller sur /import/ocr
+router.push('/login?next=/import/ocr')
 } catch (e: any) {
 setStatus('❌ ' + (e?.message || 'Erreur'))
 } finally {
@@ -80,7 +76,9 @@ return (
 <main className="app-container" style={{ margin: '40px auto' }}>
 <section className="app-card p-6">
 <h1 className="text-2xl font-extrabold app-title">Accès bêta</h1>
-<p className="mt-2 app-muted">Colle ton code bêta pour activer l’accès sur cet appareil.</p>
+<p className="mt-2 app-muted">
+Colle ton code bêta pour activer l’accès sur cet appareil.
+</p>
 
 <div className="mt-6 grid gap-3" style={{ maxWidth: 520 }}>
 <label className="grid gap-1 text-sm font-semibold">
@@ -88,7 +86,7 @@ Code bêta (token)
 <input
 value={token}
 onChange={(e) => setToken(e.target.value)}
-placeholder="Ex: 8f2c…"
+placeholder="Ex: TEST123"
 style={{
 background: 'white',
 border: '1px solid var(--border)',

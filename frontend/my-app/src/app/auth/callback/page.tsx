@@ -20,13 +20,6 @@ email?: string
 subscriptionStatus?: string | null
 }
 
-function safeNext(n: string | null): string {
-const v = (n || '').trim()
-if (!v) return '/import/ocr'
-if (!v.startsWith('/')) return '/import/ocr'
-return v
-}
-
 function SupabaseCallbackInner() {
 const [msg, setMsg] = useState('Connexion en cours…')
 const searchParams = useSearchParams()
@@ -45,7 +38,6 @@ throw new Error(
 }
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
-
 const code = searchParams.get('code')
 if (code) {
 const { data, error } = await supabase.auth.exchangeCodeForSession(code)
@@ -83,7 +75,9 @@ let text = ''
 try {
 text = await r.text()
 } catch {}
-throw new Error(`Appel /auth/sync a échoué (${r.status}). ${text || 'Aucun corps de réponse'}`)
+throw new Error(
+`Appel /auth/sync a échoué (${r.status}). ${text || 'Aucun corps de réponse'}`
+)
 }
 
 const out = (await r.json()) as SyncResponse
@@ -101,12 +95,15 @@ document.cookie = `user_id=${out.userId}; Path=/; Max-Age=${oneMonth}; SameSite=
 document.cookie = `subscription_status=${subscriptionStatus}; Path=/; Max-Age=${oneMonth}; SameSite=Lax${secureAttr}`
 }
 
-// ✅ NOUVEAU : on respecte "next"
-const next = safeNext(searchParams.get('next'))
+// ✅ NOUVEAU : redirection prioritaire vers ?next=...
+const next = (searchParams.get('next') || '').trim()
+const safeNext = next.startsWith('/') ? next : ''
 
-// ✅ garde ton check premium
 const dest =
-subscriptionStatus && !['active', 'trialing'].includes(subscriptionStatus) ? '/premium' : next
+safeNext ||
+(subscriptionStatus && !['active', 'trialing'].includes(subscriptionStatus)
+? '/premium'
+: '/')
 
 setMsg('Connexion réussie ✅ Redirection…')
 router.replace(dest)
