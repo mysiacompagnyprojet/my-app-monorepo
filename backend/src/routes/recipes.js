@@ -8,12 +8,7 @@ const prisma = new PrismaClient()
 const { supabaseAuth } = require('../middleware/supabaseAuth')
 const needAuth = supabaseAuth
 
-const {
-cleanAndNormalizeIngredients,
-tidyName,
-canonUnit,
-normalizeUnit,
-} = require('../utils/ingredients')
+const { cleanAndNormalizeIngredients, tidyName, canonUnit, normalizeUnit } = require('../utils/ingredients')
 
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs')
@@ -79,6 +74,20 @@ priceMessage: enriched?.priceMessage ?? null,
 )
 }
 
+/**
+* ✅ totalCostEur "à la volée" (SANS migration DB)
+* On additionne costRecipe (le coût de la quantité utilisée dans la recette).
+*/
+function computeTotalCostEur(ingredients) {
+const list = Array.isArray(ingredients) ? ingredients : []
+const total = list.reduce((acc, ing) => {
+const v = ing?.costRecipe
+const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(String(v).replace(',', '.')) : NaN
+return acc + (Number.isFinite(n) ? n : 0)
+}, 0)
+return Number.isFinite(total) ? total : 0
+}
+
 // ─────────────────────────────────────────────
 // GET /recipes → liste des recettes
 // ─────────────────────────────────────────────
@@ -110,12 +119,16 @@ unitPriceBuy: true,
 },
 })
 
-// ✅ PATCH: on enrichit les ingrédients pour renvoyer aussi le coût produit (pack)
+// ✅ PATCH: enrichit ingrédients + calcule totalCostEur à la volée
 const recipes = await Promise.all(
-recipesRaw.map(async (r) => ({
+recipesRaw.map(async (r) => {
+const enrichedIngredients = await enrichIngredientsForResponse(r.ingredients)
+return {
 ...r,
-ingredients: await enrichIngredientsForResponse(r.ingredients),
-}))
+ingredients: enrichedIngredients,
+totalCostEur: computeTotalCostEur(enrichedIngredients),
+}
+})
 )
 
 return res.json({ ok: true, recipes })
@@ -298,9 +311,7 @@ servings: Number.isFinite(servings) && servings > 0 ? servings : 1,
 steps,
 imageUrl,
 notes,
-ingredients: ingDataFinal.length
-? { createMany: { data: ingDataFinal } }
-: undefined,
+ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
 },
 include: { ingredients: true },
 })
@@ -313,9 +324,7 @@ data: { status: 'imported', updatedAt: new Date() },
 return res.json({ ok: true, recipe })
 } catch (e) {
 console.error('POST /recipes/from-draft error:', e)
-return res
-.status(500)
-.json({ ok: false, error: 'internal error', message: e?.message })
+return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
 }
 })
 
@@ -336,16 +345,12 @@ steps = []
 }
 
 if (!title || typeof title !== 'string' || !title.trim()) {
-return res
-.status(400)
-.json({ ok: false, error: "Champ 'title' manquant ou invalide" })
+return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" })
 }
 
 servings = Number(servings ?? 1)
 if (!Number.isFinite(servings) || servings < 1) {
-return res
-.status(400)
-.json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
+return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
 }
 
 steps = Array.isArray(steps) ? steps : []
@@ -401,9 +406,7 @@ servings,
 steps,
 imageUrl: imageUrl || null,
 notes,
-ingredients: ingDataFinal.length
-? { createMany: { data: ingDataFinal } }
-: undefined,
+ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
 },
 include: { ingredients: true },
 })
@@ -411,9 +414,7 @@ include: { ingredients: true },
 return res.status(201).json({ ok: true, recipe })
 } catch (e) {
 console.error('POST /recipes error:', e)
-return res
-.status(500)
-.json({ ok: false, error: 'internal error', message: e?.message })
+return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
 }
 })
 
@@ -455,10 +456,12 @@ if (!recipeRaw) {
 return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
 }
 
-// ✅ PATCH: enrichit aussi buyPriceEur / buyRefQty / buyRefUnit pour l’affichage fiche recette
+// ✅ PATCH: enrichit aussi buyPriceEur / buyRefQty / buyRefUnit + calcule totalCostEur
+const enrichedIngredients = await enrichIngredientsForResponse(recipeRaw.ingredients)
 const recipe = {
 ...recipeRaw,
-ingredients: await enrichIngredientsForResponse(recipeRaw.ingredients),
+ingredients: enrichedIngredients,
+totalCostEur: computeTotalCostEur(enrichedIngredients),
 }
 
 return res.json({ ok: true, recipe })

@@ -15,6 +15,8 @@ title: string
 servings: number
 imageUrl: string | null
 createdAt: string
+
+// ✅ backend = number
 totalCostEur: number | null
 }
 
@@ -203,9 +205,7 @@ lineHeight: 1.25,
 </div>
 
 <div className="text-sm" style={{ marginTop: -6, marginBottom: 10 }}>
-<span className="app-muted">
-Coût estimé : {costStr ? `~${costStr} €` : '—'}
-</span>
+<span className="app-muted">Coût estimé : {costStr ? `~${costStr} €` : '—'}</span>
 </div>
 
 <div className="mt-1 text-sm app-muted">
