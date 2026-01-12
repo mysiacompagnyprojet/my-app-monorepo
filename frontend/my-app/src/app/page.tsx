@@ -4,8 +4,6 @@
 import { useMemo, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
-
 // --- Lecture des variables d'environnement (côté client) ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
@@ -15,7 +13,6 @@ return (
 <div className="flex flex-col gap-6">
 {/* Carte principale */}
 <section className="app-card p-5">
-{/* ⚠️ On évite "Accueil" ici car déjà dans la nav/header */}
 <div className="mt-2 flex flex-wrap gap-3">
 <a className="app-btn-primary" href="/import/ocr">
 Import OCR
@@ -28,22 +25,22 @@ Nouvelle recette
 </a>
 </div>
 
-{/* ✅ Container login (bêta) directement dans Accueil */}
+{/* Container login (bêta) */}
 <div className="mt-6">
-<LoginCard nextPath="/" apiUrl={API_URL} />
+<LoginCard nextPath="/" />
 </div>
 </section>
 </div>
 )
 }
 
-function LoginCard({ nextPath, apiUrl }: { nextPath: string; apiUrl: string }) {
+function LoginCard({ nextPath }: { nextPath: string }) {
 const [email, setEmail] = useState('')
 const [busy, setBusy] = useState(false)
 const [error, setError] = useState<string | null>(null)
-const [magicStatus, setMagicStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
+const [magicStatus, setMagicStatus] =
+useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
 
-// ✅ Client Supabase seulement si config OK
 const supabase = useMemo(() => {
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
 return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
@@ -68,8 +65,9 @@ typeof window !== 'undefined' && window.location.origin.includes('localhost')
 ? window.location.origin
 : 'https://my-app-monorepo.vercel.app'
 
-// ✅ on passe next dans l’URL, comme ça /auth/callback peut rediriger ensuite
-const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
+const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(
+nextPath
+)}`
 
 const { error } = await supabase.auth.signInWithOtp({
 email,
@@ -90,10 +88,11 @@ return (
 <section className="app-card p-5">
 <h2 className="text-lg font-extrabold app-title">Connexion</h2>
 
-{/* Texte sobre */}
-<p className="mt-1 app-muted text-sm">Accès à la bêta par lien magique.</p>
+<p className="mt-1 app-muted text-sm">
+Accède à la bêta de Mysia par lien magique pour tester l’import de recettes
+et le calcul du budget.
+</p>
 
-{/* Champ email */}
 <div className="mt-4 grid gap-2">
 <label className="grid gap-1 text-sm font-semibold">
 Email
@@ -115,7 +114,6 @@ padding: 10,
 onClick={handleMagicLink}
 disabled={busy || magicStatus === 'loading' || !email || supabaseConfigMissing}
 className="app-btn-secondary w-full"
-title={supabaseConfigMissing ? 'Variables Supabase manquantes (voir Vercel env)' : undefined}
 type="button"
 >
 {magicStatus === 'loading'
@@ -144,10 +142,6 @@ background: 'rgba(176,0,32,0.06)',
 </div>
 )}
 
-{/* Je garde l’info API (utile en dev), mais discrète.
-Si tu veux la supprimer aussi, dis-le et je l’enlève. */}
-<p className="mt-3 text-xs app-muted">API : {apiUrl || '(non définie)'}</p>
-
 {supabaseConfigMissing && (
 <div
 className="mt-3 app-card p-3 text-sm"
@@ -159,7 +153,8 @@ background: 'rgba(176,0,32,0.06)',
 >
 <strong style={{ color: '#b00020' }}>Configuration manquante :</strong>
 <br />
-Vérifie les variables Vercel : <code>NEXT_PUBLIC_SUPABASE_URL</code> et{' '}
+Vérifie les variables Vercel :{' '}
+<code>NEXT_PUBLIC_SUPABASE_URL</code> et{' '}
 <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
 </div>
 )}

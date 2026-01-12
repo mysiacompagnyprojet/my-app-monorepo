@@ -109,11 +109,14 @@ margin-top: 16px;
 /* Branding dans le header (petit, sobre, type “signature”) */
 .app-brand {
 color: var(--text);
-font-weight: 600;
-font-size: 13px;
-letter-spacing: 0.2px;
-opacity: 0.85;
+font-weight: 650;
+font-size: 14px;
+letter-spacing: 0.25px;
+opacity: 0.9;
 text-decoration: none;
+
+/*rendu plus doux / arrondi */
+font-feature-settings: "ss01" 1;
 }
 .app-brand:hover {
 opacity: 1;
