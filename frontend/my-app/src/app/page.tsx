@@ -1,115 +1,169 @@
-"use client";
+// frontend/my-app/src/app/page.tsx
+'use client'
 
-import { useState } from "react";
+import { useMemo, useState } from 'react'
+import { createClient } from '@supabase/supabase-js'
 
-const API = process.env.NEXT_PUBLIC_API_URL || "http://localhost:4000";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000'
+
+// --- Lecture des variables d'environnement (côté client) ---
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 export default function Home() {
-  return (
-    <div className="flex flex-col gap-6">
-      {/* Titre / intro */}
-      <section className="app-card p-5">
-        <h1 className="text-2xl font-extrabold app-title">Accueil</h1>
-        <p className="mt-2 app-muted">
-          Interface claire, lisible et rassurante — fond beige, cartes blanches, accents bruns.
-        </p>
+return (
+<div className="flex flex-col gap-6">
+{/* Carte principale */}
+<section className="app-card p-5">
+{/* ⚠️ On évite "Accueil" ici car déjà dans la nav/header */}
+<div className="mt-2 flex flex-wrap gap-3">
+<a className="app-btn-primary" href="/import/ocr">
+Import OCR
+</a>
+<a className="app-btn-secondary" href="/recipes">
+Mes recettes
+</a>
+<a className="app-btn-secondary" href="/recipes/new">
+Nouvelle recette
+</a>
+</div>
 
-        <div className="mt-4 flex flex-wrap gap-3">
-          <a className="app-btn-primary" href="/import/ocr">
-            Import OCR
-          </a>
-          <a className="app-btn-secondary" href="/recipes">
-            Mes recettes
-          </a>
-          <a className="app-btn-secondary" href="/recipes/new">
-            Nouvelle recette
-          </a>
-        </div>
-      </section>
-
-      {/* Carte debug API */}
-      <section className="app-card p-5">
-        <div className="flex flex-col gap-3">
-          <div>
-            <div className="text-sm font-semibold">Connexion API</div>
-            <div className="text-sm app-muted">API: {API}</div>
-          </div>
-
-          <TestSyncButton />
-        </div>
-      </section>
-    </div>
-  );
+{/* ✅ Container login (bêta) directement dans Accueil */}
+<div className="mt-6">
+<LoginCard nextPath="/" apiUrl={API_URL} />
+</div>
+</section>
+</div>
+)
 }
 
-function TestSyncButton() {
-  const [loading, setLoading] = useState(false);
-  const [out, setOut] = useState<any>(null);
-  const [err, setErr] = useState<string | null>(null);
+function LoginCard({ nextPath, apiUrl }: { nextPath: string; apiUrl: string }) {
+const [email, setEmail] = useState('')
+const [busy, setBusy] = useState(false)
+const [error, setError] = useState<string | null>(null)
+const [magicStatus, setMagicStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
 
-  async function send() {
-    setLoading(true);
-    setErr(null);
-    setOut(null);
+// ✅ Client Supabase seulement si config OK
+const supabase = useMemo(() => {
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
+return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+}, [])
 
-    try {
-      // 1) register (une fois)
-      await fetch(`${API}/auth/register`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "test@example.com", password: "pass1234" }),
-      });
+const supabaseConfigMissing = !SUPABASE_URL || !SUPABASE_ANON_KEY
 
-      // 2) login
-      const loginRes = await fetch(`${API}/auth/login`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: "test@example.com", password: "pass1234" }),
-      });
+async function handleMagicLink() {
+setMagicStatus('loading')
+setError(null)
+setBusy(true)
 
-      const login = await loginRes.json();
-      const token = login?.token;
+try {
+if (!supabase) {
+throw new Error(
+'Configuration Supabase manquante : NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY'
+)
+}
 
-      if (!token) {
-        throw new Error("Token manquant après login. Vérifie la réponse /auth/login.");
-      }
+const origin =
+typeof window !== 'undefined' && window.location.origin.includes('localhost')
+? window.location.origin
+: 'https://my-app-monorepo.vercel.app'
 
-      // 3) sync (protégée)
-      const syncRes = await fetch(`${API}/auth/sync`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ ping: true }),
-      });
+// ✅ on passe next dans l’URL, comme ça /auth/callback peut rediriger ensuite
+const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
 
-      const sync = await syncRes.json();
-      setOut(sync);
-    } catch (e: any) {
-      setErr(e?.message || "Erreur inconnue");
-    } finally {
-      setLoading(false);
-    }
-  }
+const { error } = await supabase.auth.signInWithOtp({
+email,
+options: { emailRedirectTo: redirectTo },
+})
 
-  return (
-    <div className="w-full">
-      <button onClick={send} disabled={loading} className="app-btn-primary">
-        {loading ? "Envoi..." : "Envoyer POST /auth/sync"}
-      </button>
+if (error) throw error
+setMagicStatus('sent')
+} catch (err: any) {
+setMagicStatus('error')
+setError(err?.message ?? 'Erreur magic link.')
+} finally {
+setBusy(false)
+}
+}
 
-      {err && (
-        <pre className="mt-3 p-3 app-card" style={{ borderColor: "rgba(255,0,0,0.25)" }}>
-          <span style={{ color: "#b00020", fontWeight: 700 }}>Erreur:</span> {err}
-        </pre>
-      )}
+return (
+<section className="app-card p-5">
+<h2 className="text-lg font-extrabold app-title">Connexion</h2>
 
-      {out && (
-        <pre className="mt-3 p-3 app-card overflow-auto text-sm">
-          {JSON.stringify(out, null, 2)}
-        </pre>
-      )}
-    </div>
-  );
+{/* Texte sobre */}
+<p className="mt-1 app-muted text-sm">Accès à la bêta par lien magique.</p>
+
+{/* Champ email */}
+<div className="mt-4 grid gap-2">
+<label className="grid gap-1 text-sm font-semibold">
+Email
+<input
+type="email"
+value={email}
+onChange={(e) => setEmail(e.target.value)}
+required
+style={{
+background: 'white',
+border: '1px solid var(--border)',
+borderRadius: 10,
+padding: 10,
+}}
+/>
+</label>
+
+<button
+onClick={handleMagicLink}
+disabled={busy || magicStatus === 'loading' || !email || supabaseConfigMissing}
+className="app-btn-secondary w-full"
+title={supabaseConfigMissing ? 'Variables Supabase manquantes (voir Vercel env)' : undefined}
+type="button"
+>
+{magicStatus === 'loading'
+? 'Envoi du lien…'
+: magicStatus === 'sent'
+? 'Lien envoyé ✅'
+: 'Recevoir mon lien magique'}
+</button>
+
+{magicStatus === 'sent' && (
+<p className="mt-2 app-muted text-sm">
+Ouvre ton mail sur <strong>le même appareil</strong> et clique sur le lien.
+</p>
+)}
+
+{error && (
+<div
+className="mt-3 app-card p-3 text-sm"
+style={{
+boxShadow: 'none',
+borderColor: 'rgba(176,0,32,0.25)',
+background: 'rgba(176,0,32,0.06)',
+}}
+>
+<strong style={{ color: '#b00020' }}>Erreur :</strong> {error}
+</div>
+)}
+
+{/* Je garde l’info API (utile en dev), mais discrète.
+Si tu veux la supprimer aussi, dis-le et je l’enlève. */}
+<p className="mt-3 text-xs app-muted">API : {apiUrl || '(non définie)'}</p>
+
+{supabaseConfigMissing && (
+<div
+className="mt-3 app-card p-3 text-sm"
+style={{
+boxShadow: 'none',
+borderColor: 'rgba(176,0,32,0.25)',
+background: 'rgba(176,0,32,0.06)',
+}}
+>
+<strong style={{ color: '#b00020' }}>Configuration manquante :</strong>
+<br />
+Vérifie les variables Vercel : <code>NEXT_PUBLIC_SUPABASE_URL</code> et{' '}
+<code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
+</div>
+)}
+</div>
+</section>
+)
 }

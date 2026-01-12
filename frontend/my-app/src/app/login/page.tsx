@@ -87,7 +87,7 @@ setError(null)
 try {
 if (!supabase) {
 throw new Error(
-"Configuration Supabase manquante : NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY"
+'Configuration Supabase manquante : NEXT_PUBLIC_SUPABASE_URL ou NEXT_PUBLIC_SUPABASE_ANON_KEY'
 )
 }
 
