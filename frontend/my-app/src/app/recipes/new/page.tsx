@@ -668,17 +668,17 @@ title="Supprimer cette ligne"
 {isNotFoundLine(ing) && (
 <div
 style={{
-marginTop: 8,
+marginTop: 6,
 fontSize: 12,
-fontWeight: 800,
-color: '#b00020',
-background: 'rgba(176,0,32,0.06)',
-border: '1px solid rgba(176,0,32,0.18)',
+fontWeight: 600,
+color: 'rgba(90, 70, 50, 0.85)',
+background: 'rgba(255, 193, 7, 0.06)',
+border: '1px solid rgba(255, 193, 7, 0.25)',
 borderRadius: 10,
-padding: '8px 10px',
+padding: '6px 10px',
 }}
 >
-⚠️ Ingrédient non trouvé dans Airtable — prix mis à 0,00 € (tu peux quand même enregistrer).
+⚠️ Ingrédient non trouvé — prix mis à 0,00 € (tu peux quand même enregistrer).
 </div>
 )}
 </div>
@@ -719,7 +719,18 @@ borderColor: 'var(--border)',
 }}
 >
 <div className="flex items-center justify-between gap-2 mb-2">
-<span className="app-badge">Étape {idx + 1}</span>
+<span 
+    style={{
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'rgba(60,60,60,0.85)',
+        background: 'rgba(120, 120, 120, 0.12)',
+        borderRadius: 8,
+        padding: '4px 8px',
+    }}
+>
+    Étape {idx + 1}
+</span>
 
 <button
 type="button"
