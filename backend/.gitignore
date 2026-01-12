@@ -5,3 +5,5 @@ node_modules
 /src/@prisma/client
 # Google service account keys
 keys/
+backend/my-app-vision-ocr1-*.json
+backend/*vision-ocr*.json
