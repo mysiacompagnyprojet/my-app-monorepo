@@ -15,7 +15,7 @@ title: string
 servings: number
 imageUrl: string | null
 createdAt: string
-totalCost: number | null
+totalCostEur: number | null
 }
 
 function formatEur(v: unknown): string | null {
@@ -145,7 +145,7 @@ margin: 0,
 }}
 >
 {recipes.map((r) => {
-const costStr = formatEur(r.totalCost)
+const costStr = formatEur(r.totalCostEur)
 
 return (
 <li key={r.id} className="app-card p-4" style={{ padding: 0 }}>
