@@ -13,17 +13,7 @@ return (
 <div className="flex flex-col gap-6">
 {/* Carte principale */}
 <section className="app-card p-5">
-<div className="mt-2 flex flex-wrap gap-3">
-<a className="app-btn-primary" href="/import/ocr">
-Import OCR
-</a>
-<a className="app-btn-secondary" href="/recipes">
-Mes recettes
-</a>
-<a className="app-btn-secondary" href="/recipes/new">
-Nouvelle recette
-</a>
-</div>
+{/* ✅ Boutons du haut supprimés (Import OCR / Mes recettes / Nouvelle recette) */}
 
 {/* Container login (bêta) */}
 <div className="mt-6">
@@ -38,8 +28,7 @@ function LoginCard({ nextPath }: { nextPath: string }) {
 const [email, setEmail] = useState('')
 const [busy, setBusy] = useState(false)
 const [error, setError] = useState<string | null>(null)
-const [magicStatus, setMagicStatus] =
-useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
+const [magicStatus, setMagicStatus] = useState<'idle' | 'loading' | 'sent' | 'error'>('idle')
 
 const supabase = useMemo(() => {
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
@@ -65,9 +54,7 @@ typeof window !== 'undefined' && window.location.origin.includes('localhost')
 ? window.location.origin
 : 'https://my-app-monorepo.vercel.app'
 
-const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(
-nextPath
-)}`
+const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(nextPath)}`
 
 const { error } = await supabase.auth.signInWithOtp({
 email,
@@ -89,8 +76,8 @@ return (
 <h2 className="text-lg font-extrabold app-title">Connexion</h2>
 
 <p className="mt-1 app-muted text-sm">
-Accède à la bêta de Mysia par lien magique pour tester l’import de recettes
-et le calcul du budget.
+Accède à la bêta de Mysia par lien magique pour tester l’import de recettes et le calcul du
+budget.
 </p>
 
 <div className="mt-4 grid gap-2">
@@ -153,8 +140,7 @@ background: 'rgba(176,0,32,0.06)',
 >
 <strong style={{ color: '#b00020' }}>Configuration manquante :</strong>
 <br />
-Vérifie les variables Vercel :{' '}
-<code>NEXT_PUBLIC_SUPABASE_URL</code> et{' '}
+Vérifie les variables Vercel : <code>NEXT_PUBLIC_SUPABASE_URL</code> et{' '}
 <code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code>.
 </div>
 )}

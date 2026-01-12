@@ -46,6 +46,11 @@ Mysia.app
 📜 Mes recettes
 </a>
 
+{/* ✅ Import OCR entre Mes recettes et Nouvelle recette */}
+<a className="font-semibold" href="/import/ocr">
+📷 Import OCR
+</a>
+
 <a className="font-semibold" href="/recipes/new">
 ➕ Nouvelle recette
 </a>

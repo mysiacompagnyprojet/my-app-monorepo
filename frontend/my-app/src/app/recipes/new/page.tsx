@@ -1,4 +1,5 @@
 // frontend/my-app/src/app/recipes/new/page.tsx
+// frontend/my-app/src/app/recipes/new/page.tsx
 'use client'
 
 import type React from 'react'
@@ -106,13 +107,9 @@ function isNotFoundLine(ing: Line): boolean {
 const nameOk = String(ing?.name || '').trim().length > 0
 if (!nameOk) return false
 
-// Si le backend renvoie explicitement false
 if (ing.priceMatched === false) return true
-
-// Si pas d’airtableId => pas match
 if (!ing.airtableId) return true
 
-// Si note contient "non trouvé" (ou "introuvable")
 const note = String(ing.note || '').toLowerCase()
 if (note.includes('non trouvé') || note.includes('introuvable')) return true
 
@@ -305,7 +302,6 @@ return copy.length ? copy : ['']
 })
 }
 
-// ✅ Supprime une étape, mais garde toujours au moins 1 ligne
 function removeStep(idx: number) {
 setSteps((prev) => {
 const copy = prev.filter((_, i) => i !== idx)
@@ -313,9 +309,6 @@ return copy.length ? copy : ['']
 })
 }
 
-// ─────────────────────────────────────────────────────────────
-// ✅ applique enrich-ingredients sans re-écrire les champs de saisie
-// ─────────────────────────────────────────────────────────────
 function applyEnriched(enriched: EnrichIngredientOut[], idxs: number[]) {
 setIngredients((prev) => {
 const copy = [...prev]
@@ -325,15 +318,11 @@ const idx = idxs[k]
 const old = copy[idx]
 const e = enriched[k] as any
 
-const cost =
-typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
+const cost = typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
 
 copy[idx] = {
 ...old,
-
-// ⚠️ On garde name/quantity/unit saisis par l’utilisateur
 quantityRaw: old?.quantityRaw,
-
 costEur: typeof cost === 'number' ? cost : null,
 unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
 priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.airtableId),
@@ -408,10 +397,6 @@ setIsRepricing(false)
 }
 }
 
-// ─────────────────────────────────────────────────────────────
-// ✅ AUTO-RECALCUL PROPRE (debounce + pas de boucle)
-// Déclenche uniquement si name/quantity/unit changent
-// ─────────────────────────────────────────────────────────────
 const repricingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 const lastSigRef = useRef<string>('')
 
@@ -489,9 +474,23 @@ lineHeight: '14px',
 borderRadius: 10,
 }
 
+const sectionTitleStyle: React.CSSProperties = {
+fontSize: '1.13rem', // ✅ ~ +13% vs text-lg (1.125rem ≈ +13% vs 1rem)
+fontWeight: 800, // ✅ légèrement plus gras
+color: 'var(--primary)', // ✅ même couleur que titres recettes
+}
+
+const inputStyle: React.CSSProperties = {
+background: 'white',
+border: '1px solid var(--border)',
+borderRadius: 12,
+padding: 14, // ✅ padding augmenté
+}
+
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
-<section className="app-card p-6">
+{/* ✅ header sans fond blanc */}
+<section style={{ marginBottom: 16 }}>
 <h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
 <p className="mt-2 app-muted">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
 </section>
@@ -502,7 +501,9 @@ return (
 <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
 🗑️ Corbeille (texte non-recette détecté)
 </summary>
-<p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
+<p className="mt-2 text-sm app-muted">
+Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+</p>
 <textarea
 value={trash}
 onChange={(e) => setTrash(e.target.value)}
@@ -520,21 +521,12 @@ padding: 12,
 )}
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
-<h2 className="text-lg font-extrabold app-title">Informations</h2>
+<h2 style={sectionTitleStyle}>Informations</h2>
 
 <div className="mt-4 grid gap-4">
 <label className="grid gap-1 text-sm font-semibold">
 Titre
-<input
-value={title}
-onChange={(e) => setTitle(e.target.value)}
-style={{
-background: 'white',
-border: '1px solid var(--border)',
-borderRadius: 12,
-padding: 12,
-}}
-/>
+<input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
 </label>
 
 <div className="flex flex-wrap items-end gap-4">
@@ -547,10 +539,7 @@ value={servings}
 onChange={(e) => setServings(Number(e.target.value || 1))}
 style={{
 width: 140,
-background: 'white',
-border: '1px solid var(--border)',
-borderRadius: 12,
-padding: 12,
+...inputStyle,
 }}
 />
 </label>
@@ -560,16 +549,7 @@ padding: 12,
 
 <label className="grid gap-1 text-sm font-semibold">
 Image URL
-<input
-value={imageUrl}
-onChange={(e) => setImageUrl(e.target.value)}
-style={{
-background: 'white',
-border: '1px solid var(--border)',
-borderRadius: 12,
-padding: 12,
-}}
-/>
+<input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} />
 </label>
 
 <label className="grid gap-1 text-sm font-semibold">
@@ -577,12 +557,10 @@ Notes
 <textarea
 value={notes}
 onChange={(e) => setNotes(e.target.value)}
-rows={5}
+rows={7} // ✅ hauteur augmentée
 style={{
-background: 'white',
-border: '1px solid var(--border)',
-borderRadius: 12,
-padding: 12,
+...inputStyle,
+minHeight: 140,
 }}
 />
 </label>
@@ -592,7 +570,7 @@ padding: 12,
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap items-center justify-between gap-12">
 <div>
-<h2 className="text-lg font-extrabold app-title">Ingrédients</h2>
+<h2 style={sectionTitleStyle}>Ingrédients</h2>
 <p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
 </div>
 
@@ -634,7 +612,7 @@ style={{
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 10,
+padding: 11,
 }}
 />
 
@@ -646,7 +624,7 @@ style={{
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 10,
+padding: 11,
 }}
 />
 
@@ -658,7 +636,7 @@ style={{
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 10,
+padding: 11,
 }}
 />
 
@@ -687,7 +665,6 @@ title="Supprimer cette ligne"
 </button>
 </div>
 
-{/* ✅ Message non bloquant si ingrédient introuvable */}
 {isNotFoundLine(ing) && (
 <div
 style={{
@@ -727,7 +704,7 @@ type="button"
 </section>
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
-<h2 className="text-lg font-extrabold app-title">Étapes</h2>
+<h2 style={sectionTitleStyle}>Étapes</h2>
 <p className="mt-2 text-sm app-muted">1 étape = 1 bloc. Garde les phrases courtes.</p>
 
 <div className="mt-4 grid gap-3">
@@ -764,19 +741,25 @@ copy[idx] = e.target.value
 return copy
 })
 }
-rows={2}
+rows={3} // ✅ hauteur augmentée
 style={{
 width: '100%',
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 12,
+padding: 14, // ✅ padding augmenté
+minHeight: 90,
 }}
 />
 </div>
 ))}
 
-<button onClick={() => setSteps((p) => [...p, ''])} className="app-btn-secondary" style={{ width: 220 }} type="button">
+<button
+onClick={() => setSteps((p) => [...p, ''])}
+className="app-btn-secondary"
+style={{ width: 220 }}
+type="button"
+>
 + Ajouter une étape
 </button>
 </div>
@@ -784,7 +767,12 @@ padding: 12,
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap gap-3 items-center">
-<button onClick={save} className="app-btn-primary" type="button">
+<button
+onClick={save}
+className="app-btn-primary"
+style={{ borderRadius: 14 }} // ✅ plus arrondi
+type="button"
+>
 Enregistrer
 </button>
 
