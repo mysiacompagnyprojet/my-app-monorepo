@@ -1,6 +1,7 @@
 // frontend/my-app/src/app/recipes/new/page.tsx
 'use client'
 
+import type React from 'react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
@@ -22,6 +23,9 @@ buyPriceEur?: number | null
 buyLabel?: string | null
 buyRefQty?: number | null
 buyRefUnit?: string | null
+
+// ✅ pour afficher "⚠️ ingrédient non trouvé" / autres infos backend
+note?: string
 }
 
 type Draft = {
@@ -97,6 +101,24 @@ if (!Number.isFinite(n)) return '—'
 return `${n.toFixed(2)} €`
 }
 
+// ✅ décide si on doit afficher "⚠️ ingrédient non trouvé"
+function isNotFoundLine(ing: Line): boolean {
+const nameOk = String(ing?.name || '').trim().length > 0
+if (!nameOk) return false
+
+// Si le backend renvoie explicitement false
+if (ing.priceMatched === false) return true
+
+// Si pas d’airtableId => pas match
+if (!ing.airtableId) return true
+
+// Si note contient "non trouvé" (ou "introuvable")
+const note = String(ing.note || '').toLowerCase()
+if (note.includes('non trouvé') || note.includes('introuvable')) return true
+
+return false
+}
+
 function NewRecipeInner() {
 const router = useRouter()
 const search = useSearchParams()
@@ -126,6 +148,9 @@ const totalProducts = useMemo(() => {
 return ingredients.reduce((acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0), 0)
 }, [ingredients])
 
+// ─────────────────────────────────────────────────────────────
+// 1) Pré-remplissage depuis OCR
+// ─────────────────────────────────────────────────────────────
 useEffect(() => {
 if (!fromOcr) return
 
@@ -167,6 +192,8 @@ buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPric
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
 buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+
+note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
 })
 .filter((x): x is Line => x !== null)
@@ -188,6 +215,9 @@ sessionStorage.removeItem('recipeDraft')
 } catch {}
 }, [fromOcr])
 
+// ─────────────────────────────────────────────────────────────
+// 2) Pré-remplissage générique (prefill=1)
+// ─────────────────────────────────────────────────────────────
 useEffect(() => {
 if (!prefill) return
 
@@ -228,6 +258,8 @@ buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPric
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
 buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+
+note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
 })
 .filter((x): x is Line => x !== null)
@@ -281,10 +313,52 @@ return copy.length ? copy : ['']
 })
 }
 
-async function recalcPrices() {
+// ─────────────────────────────────────────────────────────────
+// ✅ applique enrich-ingredients sans re-écrire les champs de saisie
+// ─────────────────────────────────────────────────────────────
+function applyEnriched(enriched: EnrichIngredientOut[], idxs: number[]) {
+setIngredients((prev) => {
+const copy = [...prev]
+
+for (let k = 0; k < enriched.length; k++) {
+const idx = idxs[k]
+const old = copy[idx]
+const e = enriched[k] as any
+
+const cost =
+typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
+
+copy[idx] = {
+...old,
+
+// ⚠️ On garde name/quantity/unit saisis par l’utilisateur
+quantityRaw: old?.quantityRaw,
+
+costEur: typeof cost === 'number' ? cost : null,
+unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
+priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.airtableId),
+airtableId: e.airtableId ?? null,
+price: e.price ?? old?.price ?? null,
+
+buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
+buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
+buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
+buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
+
+note: typeof e.note === 'string' ? e.note : undefined,
+}
+}
+
+return copy
+})
+}
+
+async function recalcPrices(opts?: { silent?: boolean }) {
+const silent = Boolean(opts?.silent)
+
 try {
 setIsRepricing(true)
-setStatus('⏳ Recalcul des prix…')
+if (!silent) setStatus('⏳ Recalcul des prix…')
 
 const idxs: number[] = []
 const list = ingredients
@@ -301,7 +375,7 @@ unit: String(i.unit || '').trim(),
 .filter(Boolean) as Array<{ name: string; quantity: number; unit: string }>
 
 if (!list.length) {
-setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.')
+if (!silent) setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.')
 return
 }
 
@@ -314,72 +388,58 @@ body: JSON.stringify(payload),
 
 if (!json || (json as any).ok !== true) {
 const msg = (json as any)?.message || (json as any)?.error || 'Erreur inconnue'
-setStatus('❌ Recalcul impossible: ' + msg)
+if (!silent) setStatus('❌ Recalcul impossible: ' + msg)
 return
 }
 
 const enriched = Array.isArray((json as any).ingredients) ? (json as any).ingredients : []
 if (!enriched.length) {
-setStatus('❌ Recalcul impossible: réponse vide.')
+if (!silent) setStatus('❌ Recalcul impossible: réponse vide.')
 return
 }
 
-setIngredients((prev) => {
-const copy = [...prev]
+applyEnriched(enriched, idxs)
 
-for (let k = 0; k < enriched.length; k++) {
-const idx = idxs[k]
-const old = copy[idx]
-const e = enriched[k] as any
-
-const cost =
-typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
-
-copy[idx] = {
-...old,
-name: String(e.name ?? old?.name ?? ''),
-quantity: Number(e.quantity ?? old?.quantity ?? 0) || 0,
-unit: String(e.unit ?? old?.unit ?? ''),
-quantityRaw: old?.quantityRaw,
-
-costEur: typeof cost === 'number' ? cost : null,
-unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
-priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.airtableId),
-airtableId: e.airtableId ?? null,
-price: e.price ?? old?.price ?? null,
-
-buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
-buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
-buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
-buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
-}
-}
-
-return copy
-})
-
-setStatus('✅ Prix recalculés')
+if (!silent) setStatus('✅ Prix recalculés')
 } catch (e: any) {
-setStatus('❌ ' + (e?.message || 'Erreur'))
+if (!silent) setStatus('❌ ' + (e?.message || 'Erreur'))
 } finally {
 setIsRepricing(false)
 }
 }
 
-const autoRepricedRef = useRef(false)
-useEffect(() => {
-if (!fromOcr) return
-if (autoRepricedRef.current) return
+// ─────────────────────────────────────────────────────────────
+// ✅ AUTO-RECALCUL PROPRE (debounce + pas de boucle)
+// Déclenche uniquement si name/quantity/unit changent
+// ─────────────────────────────────────────────────────────────
+const repricingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+const lastSigRef = useRef<string>('')
 
+const ingredientsSig = useMemo(() => {
+return ingredients
+.map((i) => `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`)
+.join('||')
+}, [ingredients])
+
+useEffect(() => {
+if (!ingredients.length) return
 const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
 if (!hasRealIngredient) return
 
-autoRepricedRef.current = true
-setTimeout(() => {
-recalcPrices()
-}, 0)
+if (ingredientsSig === lastSigRef.current) return
+lastSigRef.current = ingredientsSig
+
+if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
+
+repricingTimerRef.current = setTimeout(() => {
+recalcPrices({ silent: true })
+}, 500)
+
+return () => {
+if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
+}
 // eslint-disable-next-line react-hooks/exhaustive-deps
-}, [fromOcr, ingredients])
+}, [ingredientsSig])
 
 async function save() {
 try {
@@ -418,7 +478,6 @@ setStatus('❌ ' + (e?.message || 'Erreur'))
 const statusKind =
 status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
 
-// ✅ Style commun du petit bouton X (ingrédients + étapes)
 const smallXBtnStyle: React.CSSProperties = {
 width: 30,
 height: 30,
@@ -432,22 +491,18 @@ borderRadius: 10,
 
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
-{/* Header */}
 <section className="app-card p-6">
 <h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
 <p className="mt-2 app-muted">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
 </section>
 
-{/* Corbeille */}
 {trash.trim() && (
 <section className="app-card p-5" style={{ marginTop: 16 }}>
 <details>
 <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
 🗑️ Corbeille (texte non-recette détecté)
 </summary>
-<p className="mt-2 text-sm app-muted">
-Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
-</p>
+<p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
 <textarea
 value={trash}
 onChange={(e) => setTrash(e.target.value)}
@@ -464,7 +519,6 @@ padding: 12,
 </section>
 )}
 
-{/* Infos recette */}
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <h2 className="text-lg font-extrabold app-title">Informations</h2>
 
@@ -535,7 +589,6 @@ padding: 12,
 </div>
 </section>
 
-{/* Ingrédients */}
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap items-center justify-between gap-12">
 <div>
@@ -544,7 +597,7 @@ padding: 12,
 </div>
 
 <button
-onClick={recalcPrices}
+onClick={() => recalcPrices({ silent: false })}
 disabled={isRepricing}
 className="app-btn-secondary"
 style={{ minWidth: 240, opacity: isRepricing ? 0.7 : 1 }}
@@ -633,6 +686,24 @@ title="Supprimer cette ligne"
 ✕
 </button>
 </div>
+
+{/* ✅ Message non bloquant si ingrédient introuvable */}
+{isNotFoundLine(ing) && (
+<div
+style={{
+marginTop: 8,
+fontSize: 12,
+fontWeight: 800,
+color: '#b00020',
+background: 'rgba(176,0,32,0.06)',
+border: '1px solid rgba(176,0,32,0.18)',
+borderRadius: 10,
+padding: '8px 10px',
+}}
+>
+⚠️ Ingrédient non trouvé dans Airtable — prix mis à 0,00 € (tu peux quand même enregistrer).
+</div>
+)}
 </div>
 ))}
 
@@ -655,7 +726,6 @@ type="button"
 </div>
 </section>
 
-{/* Étapes */}
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <h2 className="text-lg font-extrabold app-title">Étapes</h2>
 <p className="mt-2 text-sm app-muted">1 étape = 1 bloc. Garde les phrases courtes.</p>
@@ -671,7 +741,6 @@ background: 'rgba(255,255,255,0.7)',
 borderColor: 'var(--border)',
 }}
 >
-{/* ✅ Header étape + petit bouton X */}
 <div className="flex items-center justify-between gap-2 mb-2">
 <span className="app-badge">Étape {idx + 1}</span>
 
@@ -713,7 +782,6 @@ padding: 12,
 </div>
 </section>
 
-{/* Actions */}
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap gap-3 items-center">
 <button onClick={save} className="app-btn-primary" type="button">
