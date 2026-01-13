@@ -1,3 +1,4 @@
+// backend/src/utils/ocrTitle.js
 'use strict';
 
 // Nettoyage léger
@@ -55,23 +56,24 @@ function isAssaisonnementOnly(s) {
 
 // Candidat acceptable ?
 function isValidRecipeTitleCandidate(s) {
-   const t = cleanTitleCandidate(s);
-   
-   // refuse les fragments d'ingrédients qui commencent par "de / d'"
+  const t = cleanTitleCandidate(s);
+  if (!t) return false;
+
+  // refuse les fragments d'ingrédients qui commencent par "de / d'"
   if (/^(de|d['’])\s+/i.test(t)) return false;
 
-   // refuse les titres coupés : "gratin de", "tarte aux", etc.
+  // refuse les titres coupés : "gratin de", "tarte aux", etc.
   if (/\b(de|d['’]|du|des|à|a|au|aux)\s*$/i.test(t)) return false;
 
- // au moins 3 mots pour éviter "gratin de"
-  if (t.split(/\s+/).filter(Boolean).length < 3) return false;
-  if (!t) return false;
+  // longueur réaliste
   if (t.length < 4 || t.length > 90) return false;
+
+  // blacklist UI + assaisonnement + étapes
   if (isUiTitleBlacklisted(t)) return false;
   if (isAssaisonnementOnly(t)) return false;
   if (looksLikeStepSentence(t)) return false;
 
-  // évite les phrases
+  // évite les phrases (ponctuation de phrase)
   if (/[.!?…]/.test(t)) return false;
 
   // évite “Ingrédients”, “Préparation”, etc.
@@ -79,7 +81,20 @@ function isValidRecipeTitleCandidate(s) {
   if (/^pr[ée]paration\b/i.test(t)) return false;
   if (/^temps\s+de\s+(préparation|cuisson)\b/i.test(t)) return false;
 
-  return true;
+  // ✅ assouplissement :
+  // - 2+ mots : OK
+  // - 1 mot : OK seulement si c'est "title-like" (commence par une majuscule et assez long)
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length >= 2) return true;
+
+  if (words.length === 1) {
+    // ex: "Crevettes", "Tiramisu"
+    if (t.length < 6) return false;
+    if (!/^[A-ZÀ-ÖØ-Þ]/.test(t)) return false;
+    return true;
+  }
+
+  return false;
 }
 
 // Score pour départager plusieurs titres valides

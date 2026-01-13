@@ -1029,10 +1029,18 @@ function sanitizePickedTitle(title) {
 }
 
 function isGenericSiteTitle(t) {
-  const s = normSpaces(t).toLowerCase();
-  if (s === 'recettes délice' || s === 'recettes delice') return true;
-  if (/^recettes?\b/.test(s) && s.length <= 30) return true;
-  return false;
+  const s = normSpaces(t).toLowerCase();
+  if (!s) return true;
+
+  // Cas déjà gérés
+  if (s === 'recettes délice' || s === 'recettes delice') return true;
+  if (/^recettes?\b/.test(s) && s.length <= 30) return true;
+
+  // ✅ Nouveaux : noms de sites fréquents qui polluent le titre
+  // Ex: "yumrecette", "yum recette", OCR foireux "vum reccette", etc.
+  if (/\b(yum\s*recette|yumrecette|vum\s*recette|vum\s*reccette)\b/i.test(s)) return true;
+
+  return false;
 }
 
 function fabricateTitleFromIngredients(lines) {
@@ -1192,10 +1200,44 @@ function looksTruncatedTitle(t) {
 
 function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   const scan = lines.slice(0, maxScan).map(normSpaces).filter(Boolean);
+
   const candidates = [];
+  let sawTitleCandidate = false;
 
   for (let i = 0; i < scan.length; i++) {
     const raw = scan[i];
+    if (!raw) continue;
+
+    // Ignore "Recette" / "Recettes"
+    if (/^recettes?$/i.test(raw)) continue;
+
+    // Ignore auteur : "de Wendy", "de Marine", etc.
+    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(raw)) continue;
+
+    const low = normSpaces(raw).toLowerCase();
+
+    // Stop "fort" dès qu'on arrive aux vraies sections
+    if (
+      /^étape\b/.test(low) ||
+      /^etape\b/.test(low) ||
+      /^ingr[ée]dients?\b/.test(low) ||
+      /^préparation\b/.test(low) ||
+      /^preparation\b/.test(low)
+    ) {
+      break;
+    }
+
+    // Stop "soft" : on coupe sur Temps/Cuisson/etc. SEULEMENT si on a déjà un titre plausible
+    if (
+      sawTitleCandidate &&
+      (/^temps\b/.test(low) ||
+        /^cuisson\b/.test(low) ||
+        /^difficult[ée]\b/.test(low) ||
+        /^portions?\b/.test(low) ||
+        /^calories?\b/.test(low))
+    ) {
+      break;
+    }
 
     const t0 = cleanTitleCandidate(raw);
     const t = sanitizePickedTitle(t0);
@@ -1226,15 +1268,14 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     const capsBonus = isMostlyUppercaseTitle(t) ? 80 : 0;
 
     const isTrunc = looksTruncatedTitle(t);
-
-    // candidat simple (1 ligne)
     const truncPenalty = isTrunc ? -25 : 0;
 
+    // candidat simple (1 ligne)
     candidates.push({
-    t,
-    score: capsBonus + (hasUpper ? 10 : 0) + (maxScan - i) + truncPenalty,
+      t,
+      score: capsBonus + (hasUpper ? 10 : 0) + (maxScan - i) + truncPenalty,
     });
-
+    sawTitleCandidate = true;
 
     // candidats fusionnés (2-3 lignes)
     const merged = buildMergedTitleCandidate(scan, i, 3);
@@ -1246,8 +1287,9 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
         t: merged,
         score: mergedCapsBonus + (mergedUpper ? 10 : 0) + (maxScan - i) + 12,
       });
+      sawTitleCandidate = true;
     }
-  } // ✅ <-- fermeture du for AU BON ENDROIT
+  }
 
   if (candidates.length === 0) return null;
 
@@ -1290,6 +1332,11 @@ const BAD_TITLE_WORDS = [
   'source',
   'recette',
   'yumrecette',
+  'yum recette',
+  'vumrecette',
+  'vum recette',
+  'site',
+  'www',
   'primeal',
   'vinegar',
 ];
@@ -1302,6 +1349,8 @@ const EMOTIONAL_TITLE_PATTERNS = [
   /comment vous dire/i,
   /ce plat m'?a/i,
   /remonté[e]? le moral/i,
+  /c['’]est\s+pas\s+comme/i,
+  /\bet\s+maintenant\b/i,
 ];
 
 function isBadTitleCandidate(s) {
@@ -1391,15 +1440,16 @@ function guessTitleFromLines(lines) {
   }
 
   const ingredientLikeCount = head.filter((l) => {
-    const t = normSpaces(l);
-    if (/^[-•*·]\s+/.test(t)) return true;
-    if (/^(un peu de|selon goût|au goût)\b/i.test(t)) return true;
-    return !!parseOcrIngredient(t);
-  }).length;
+  const t = normSpaces(l);
+  if (/^[-•*·]\s+/.test(t)) return true;
+  if (/^(un peu de|selon goût|au goût)\b/i.test(t)) return true;
+  return !!parseOcrIngredient(t);
+}).length;
 
-  if (ingredientLikeCount >= 3) {
-    return DEFAULT_TITLE;
-  }
+// ⚠️ Avant on faisait un "return DEFAULT_TITLE" ici.
+// Problème : certaines recettes commencent par une liste "- ...", mais ont quand même un vrai titre (ex: "Butter Chicken Express").
+// Donc on ne sort plus tout de suite : on laisse la suite du scoring essayer de trouver un titre.
+const hasIngredientListAtTop = ingredientLikeCount >= 3;
 
   let prev = '';
   for (const l of head) {
@@ -1430,7 +1480,7 @@ function guessTitleFromLines(lines) {
 
     prev = l;
   }
-
+  if (hasIngredientListAtTop)
   return DEFAULT_TITLE;
 }
 

@@ -53,9 +53,17 @@ function normSpaces(s) {
 }
 
 function looksTruncatedTitle(t) {
-  const s = normSpaces(String(t || ''));
+  // ✅ rend robuste aux accents "combinés" (ex: "a\u0300" au lieu de "à")
+  const s = normSpaces(String(t || ''))
+    .normalize('NFD') // sépare lettre + accent
+    .replace(/[\u0300-\u036f]/g, '') // enlève les accents
+    .trim()
+    .toLowerCase();
+
   if (!s) return false;
-  return /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(s);
+
+  // finissant par un connecteur => souvent titre coupé
+  return /\b(et|de|d['’]|du|des|a)\s*$/.test(s);
 }
 
 function normalizeTitleJoinPiece(s) {
@@ -101,6 +109,16 @@ function canJoinTitleLines(prev, next) {
   return false;
 }
 
+function isTitleNoiseLabel(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  // Un seul "mot" tout en majuscules, court => souvent un label déco (FARINE, SUCRE, LEVURE...)
+  if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
+
+  return false;
+}
+
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   let out = normalizeTitleJoinPiece(scan[startIdx]);
   if (!out) return null;
@@ -108,8 +126,15 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   let used = 1;
 
   for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
+    if (isTitleNoiseLabel(scan[k])) continue;
+
     const next = normalizeTitleJoinPiece(scan[k]);
     if (!next) break;
+
+    // ✅ NEW: si la ligne est déjà contenue dans le titre (doublon), on la saute
+    const outLow = out.toLowerCase();
+    const nextLow = next.toLowerCase();
+    if (outLow.includes(nextLow)) continue;
 
     if (!canJoinTitleLines(out, next)) break;
 
@@ -617,19 +642,28 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
 
-    if (bestVisionTitle && looksTruncatedTitle(bestVisionTitle)) {
-      const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
+    if (bestVisionTitle) {
+  // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
+  bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
 
-      const target = normalizeTitleJoinPiece(bestVisionTitle);
-      let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
-      if (idx < 0) idx = 0;
+  const trunc = looksTruncatedTitle(bestVisionTitle);
 
-      const merged = buildMergedTitleCandidate(scan, idx, 3);
+  if (trunc) {
+    const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
 
-      if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
-        bestVisionTitle = merged;
-      }
+    // on cherche l'index de la ligne la plus proche du titre
+    const target = normalizeTitleJoinPiece(bestVisionTitle);
+    let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
+    if (idx < 0) idx = 0;
+
+    const merged = buildMergedTitleCandidate(scan, idx, 4);
+
+    if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
+      bestVisionTitle = merged;
     }
+    bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
+  }
+}
 
     let lines = removeSocialHeaderLines(filtered.lines);
     let split = splitIngredientsAndSteps(lines);
@@ -761,6 +795,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       guessTitleFromLines(safeLinesForTitle) ||
       inferTitleFromContent(ingredients, steps) ||
       'Recette importée';
+
+      title = normalizeTitleCandidate(title);
 
     if (looksLikeEmotionalHookTitle(title)) {
       title = inferTitleFromContent(ingredients, steps) || fabricateTitleFromIngredientsRows(ingredients) || 'Recette importée';
