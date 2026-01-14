@@ -1157,6 +1157,11 @@ function isTitleNoiseLabel(line) {
   if (!t) return false;
   // 1 seul mot, tout en majuscules, court => typique label déco
   if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
+  // "Recette" / "Recettes"
+  if (/^recettes?$/i.test(t)) return true;
+
+  // "de Wendy", "de Marine", etc. (auteur)
+  if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) return true;
   return false;
 }
 
@@ -1207,14 +1212,14 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   for (let i = 0; i < scan.length; i++) {
     const raw = scan[i];
     if (!raw) continue;
+    
+    const low = normSpaces(raw).toLowerCase();
 
     // Ignore "Recette" / "Recettes"
-    if (/^recettes?$/i.test(raw)) continue;
+    if (/^recettes?$/i.test(low)) continue;
 
     // Ignore auteur : "de Wendy", "de Marine", etc.
-    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(raw)) continue;
-
-    const low = normSpaces(raw).toLowerCase();
+    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(low)) continue;
 
     // Stop "fort" dès qu'on arrive aux vraies sections
     if (
@@ -1242,6 +1247,25 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     const t0 = cleanTitleCandidate(raw);
     const t = sanitizePickedTitle(t0);
     if (!t) continue;
+    // ❌ Ignore les “auteurs” et petits labels (évite "de Marine", "de Wendy ...")
+    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) continue;
+    if (/^recettes?$/i.test(t)) continue;
+
+    // ❌ Évite les titres qui commencent par "de " (souvent auteur collé)
+    // (ex: "de Wendy Pizzas fleurettes")
+    if (/^de\s+/i.test(t)) continue;
+
+    // ❌ Si la ligne ressemble à un complément ("à l'ancienne", "au four", etc.)
+    // et qu'on a une ligne avant, on évite de la prendre seule.
+    // On préfère que la fusion (merged) fasse le boulot.
+    if (i > 0 && /^(à|au|aux|en|du|de|des)\b/i.test(t) && t.length <= 25) {
+      // Si la ligne précédente n'est pas un header (ingrédients/étapes/temps…)
+      const prev = sanitizePickedTitle(cleanTitleCandidate(scan[i - 1] || ''));
+      if (prev && !/^recettes?$/i.test(prev) && !/^de\s+/i.test(prev)) {
+     // On ne garde pas ce candidat simple, on laisse le merged le récupérer
+       continue;
+     }
+    }
 
     if (isGenericSiteTitle(t)) continue;
 
