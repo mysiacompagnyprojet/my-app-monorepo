@@ -26,22 +26,18 @@ function looksLikeBookRefNoise(line) {
 // Exemple: "Préparation : 45 min ... 304"
 function stripTrailingPageNumber(line) {
   let t = normSpaces(line);
-
   // retire un numéro final si le texte contient un marqueur de temps
   if (/\b(préparation|preparation|cuisson|min)\b/i.test(t)) {
     t = t.replace(/\s+\d{2,4}\s*$/g, '');
   }
-
   return normSpaces(t);
 }
 
 function looksLikeStatusBarNoise(line) {
   const t = normSpaces(line);
-
   if (/^\d{1,2}:\d{2}$/.test(t)) return true;
   if (/\b(4g|5g|lte|wifi|wi-fi)\b/i.test(t) && /\b\d{1,3}\b/.test(t)) return true;
   if (/^\d{1,3}%$/.test(t)) return true;
-
   return false;
 }
 
@@ -49,11 +45,9 @@ function looksLikeStatusBarNoise(line) {
 function looksLikeDateNoise(line) {
   const t = normSpaces(line).toLowerCase();
   if (!t) return false;
-
   const months =
     '(janv\\.?|janvier|fevr\\.?|févr\\.?|février|mars|avr\\.?|avril|mai|juin|juil\\.?|juillet|aout\\.?|août\\.?|sept\\.?|septembre|oct\\.?|octobre|nov\\.?|novembre|dec\\.?|déc\\.?|décembre)';
   const re = new RegExp(`^\\d{1,2}\\s+${months}(?:\\s+\\d{4})?\\b`, 'i');
-
   return re.test(t);
 }
 
@@ -248,6 +242,31 @@ function looksLikePlausibleTitleLine(line) {
   if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return false;
 
   return true;
+}
+
+// Détecte une phrase d'action OCR qui ressemble à une étape,
+// même si elle n'est pas numérotée et même si le verbe est au présent ("mélange", pas "mélangez").
+function looksLikeLooseActionStep(line) {
+  const t = normSpaces(String(line || ''));
+  if (!t) return false;
+
+  const low = t.toLowerCase();
+
+  // 1) Pattern ultra fréquent dans les recettes : "Dans un saladier, ..."
+  // => c'est une étape (pas un titre).
+  if (/^dans\s+(un|une|le|la|les)\b/i.test(low)) return true;
+
+  // 2) Verbes d'action très fréquents au présent (sans "z")
+  // (liste volontairement courte = patch minimal)
+  if (
+    /\b(mélange|ajoute|incorpore|verse|fouette|préchauffe|répartis|enfourne|dépose|dessine|finis)\b/i.test(
+      low
+    )
+  ) {
+    return true;
+  }
+
+  return false;
 }
 
 // ✅ helper unités seules (évite que "g" parte à la corbeille)
@@ -479,6 +498,59 @@ function looksLikeTimeInfoLine(line) {
   const hasDuration = /\b\d+\s*(min|mn|mns|minute|minutes|h|heure|heures)\b/i.test(t);
 
   return hasDuration;
+}
+
+// Détecte les lignes "meta" qui ne doivent JAMAIS être des titres.
+// Exemples : "Temps de préparation : 25mn", "Cuisson : 25 mn", "Difficulté: Très facile", "Portions", "Calories"
+function isMetaInfoLineForTitle(line) {
+  // On normalise les espaces (ex: espaces multiples -> 1 seul espace)
+  const t = normSpaces(String(line || '')) ;
+  // Si vide -> pas meta (mais ça ne sera pas un titre non plus)
+  if (!t) return false;
+
+  // On passe en minuscule pour comparer sans se soucier des majuscules
+  const low = t.toLowerCase();
+
+  return (
+    /^temps\b.*s/i.test(low) ||
+    /^cuisson\b.*s/i.test(low) ||
+    /^difficult[eé]?\b/i.test(low) ||
+    /^portions?\b/i.test(low) ||
+    /^calories?\b/i.test(low)
+  );
+}
+
+function isTitleNoiseLabel(line) {
+  const t = normSpaces(String(line || ''));
+  if (!t) return false;
+
+  const low = t.toLowerCase();
+  if (
+    /^[a-zà-öø-ÿ'-]{3,12}$/i.test(t) &&
+  [
+    'farine', 
+    'sucre', 
+    'levure', 
+    'beurre', 
+    'sel', 
+    'poivre', 
+    'huile', 
+    'lait', 
+    'oeufs', 
+    'Œufs',
+  ].includes(low)
+  ) {
+        return true;
+  }
+
+  // 1 seul mot, tout en majuscules, court => typique label déco
+  if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
+  // "Recette" / "Recettes"
+  if (/^recettes?$/i.test(t)) return true;
+
+  // "de Wendy", "de Marine", etc. (auteur)
+  if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) return true;
+  return false;
 }
 
 /* =========================
@@ -1152,38 +1224,36 @@ function canJoinTitleLines(prev, next) {
   return false;
 }
 
-function isTitleNoiseLabel(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-  // 1 seul mot, tout en majuscules, court => typique label déco
-  if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
-  // "Recette" / "Recettes"
-  if (/^recettes?$/i.test(t)) return true;
-
-  // "de Wendy", "de Marine", etc. (auteur)
-  if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) return true;
-  return false;
-}
 
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   let out = normalizeTitleJoinPiece(scan[startIdx]);
   if (!out) return null;
 
+  //si la premiére ligne est une ligne meta, on refuse de construire un titre fusionné
+  if (isMetaInfoLineForTitle(out)) return null;
+  if (isTitleNoiseLabel(out)) return null;
+
   let used = 1;
 
   for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
-  // ✅ saute labels genre "LEVURE", "FARINE"
-  if (isTitleNoiseLabel(scan[k])) continue;
+    // ✅ saute labels genre "LEVURE", "FARINE"
+    if (isTitleNoiseLabel(scan[k])) continue;
 
-  const next = normalizeTitleJoinPiece(scan[k]);
-  if (!next) break;
+    //on normalise la ligne suivante (supprime espaces/bizarreries OCR, etc...)  
+    const next = normalizeTitleJoinPiece(scan[k]);
+    //si aprs normalisation c'st vide -> on stoppe la fusion (plus rien d'utile)
+    if (!next) break;
 
-  // si la ligne suivante n'est pas plausible, stop
-  if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
-  if (!canJoinTitleLines(out, next)) break;
+    // si la ligne suivante est une ligne meta (temps/cuisson/difficulté/portions/calories),
+    // on la saute (continue = on passe à la ligne suivante de la boucle)
+    if (isMetaInfoLineForTitle(next)) continue;
 
-  out = normSpaces(`${out} ${next}`);
-  used++;
+    // si la ligne suivante n'est pas plausible, stop
+    if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
+    if (!canJoinTitleLines(out, next)) break;
+
+    out = normSpaces(`${out} ${next}`);
+    used++;
   }
 
 
@@ -1191,6 +1261,7 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   if (out.length < 6 || out.length > 90) return null;
   if (/\d/.test(out)) return null;
   if (isBadTitleCandidate(out)) return null;
+  if (isTitleNoiseLabel(out)) return null;
 
   return out;
 }
@@ -1203,70 +1274,74 @@ function looksTruncatedTitle(t) {
   return /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(s);
 }
 
+// fonction trouver le titre explicite dans les premières lignes
 function findExplicitTitleInFirstLines(lines, maxScan = 60) {
+  // On prend les maxScan premières lignes, on normalise les espaces, on enlève les lignes vides
   const scan = lines.slice(0, maxScan).map(normSpaces).filter(Boolean);
 
+  // Liste des titres candidats qu'on va scorer puis trier
   const candidates = [];
+
+  // Sert à savoir si on a déjà vu un candidat de titre plausible
+  // (utile pour certaines logiques de "stop soft" si tu les gardes)
   let sawTitleCandidate = false;
 
+  // On parcourt les premières lignes OCR
   for (let i = 0; i < scan.length; i++) {
     const raw = scan[i];
     if (!raw) continue;
-    
-    const low = normSpaces(raw).toLowerCase();
+
+    // Version minuscule/normalisée pour faire des tests simples
+    const lowRaw = normSpaces(raw).toLowerCase();
+
+    if (isMetaInfoLineForTitle(lowRaw)) continue;
+
+    if (isTitleNoiseLabel(raw)) continue;
 
     // Ignore "Recette" / "Recettes"
-    if (/^recettes?$/i.test(low)) continue;
+    if (/^recettes?$/i.test(lowRaw)) continue;
 
     // Ignore auteur : "de Wendy", "de Marine", etc.
-    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(low)) continue;
+    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(lowRaw)) continue;
 
-    // Stop "fort" dès qu'on arrive aux vraies sections
+    // Stop "fort" : dès qu'on arrive aux vraies sections (étapes/ingrédients/préparation)
+    // -> IMPORTANT : on met des "||"
     if (
-      /^étape\b/.test(low) ||
-      /^etape\b/.test(low) ||
-      /^ingr[ée]dients?\b/.test(low) ||
-      /^préparation\b/.test(low) ||
-      /^preparation\b/.test(low)
+      /^étape\b/.test(lowRaw) ||
+      /^etape\b/.test(lowRaw) ||
+      /^ingr[ée]dients?\b/.test(lowRaw) ||
+      /^préparation\b/.test(lowRaw) ||
+      /^preparation\b/.test(lowRaw)
     ) {
       break;
     }
 
-    // Stop "soft" : on coupe sur Temps/Cuisson/etc. SEULEMENT si on a déjà un titre plausible
-    if (
-      sawTitleCandidate &&
-      (/^temps\b/.test(low) ||
-        /^cuisson\b/.test(low) ||
-        /^difficult[ée]\b/.test(low) ||
-        /^portions?\b/.test(low) ||
-        /^calories?\b/.test(low))
-    ) {
+    // Stop "soft" : sur Temps/Cuisson/etc. SEULEMENT si on a déjà un titre plausible
+    // ⚠️ Ici, tu avais des tests sans "||" -> corrigé
+    // ⚠️ MAIS : comme on "continue" déjà sur meta au-dessus, ce bloc ne déclenchera presque jamais.
+    // Je le laisse quand même (sans casser), au cas où tu changes plus tard l'ordre des filtres.
+    if (sawTitleCandidate && isMetaInfoLineForTitle(lowRaw)) {
       break;
     }
 
+    // Nettoyage de la ligne (ponctuation, espaces, etc.)
     const t0 = cleanTitleCandidate(raw);
+
+    // Nettoyage complémentaire (retire “afficher la suite”, etc.)
     const t = sanitizePickedTitle(t0);
+    // Si vide après le nettoyage -> on passe à la ligne suivante
     if (!t) continue;
-    // ❌ Ignore les “auteurs” et petits labels (évite "de Marine", "de Wendy ...")
-    if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) continue;
-    if (/^recettes?$/i.test(t)) continue;
+
+    if (looksLikeLooseActionStep(t) || looksLikeLooseActionStep(raw)) continue;
 
     // ❌ Évite les titres qui commencent par "de " (souvent auteur collé)
-    // (ex: "de Wendy Pizzas fleurettes")
+    // ex: "de Wendy Pizzas fleurettes"
     if (/^de\s+/i.test(t)) continue;
 
-    // ❌ Si la ligne ressemble à un complément ("à l'ancienne", "au four", etc.)
-    // et qu'on a une ligne avant, on évite de la prendre seule.
-    // On préfère que la fusion (merged) fasse le boulot.
-    if (i > 0 && /^(à|au|aux|en|du|de|des)\b/i.test(t) && t.length <= 25) {
-      // Si la ligne précédente n'est pas un header (ingrédients/étapes/temps…)
-      const prev = sanitizePickedTitle(cleanTitleCandidate(scan[i - 1] || ''));
-      if (prev && !/^recettes?$/i.test(prev) && !/^de\s+/i.test(prev)) {
-     // On ne garde pas ce candidat simple, on laisse le merged le récupérer
-       continue;
-     }
-    }
+    if (isTitleNoiseLabel(t)) continue;
 
+
+    // Filtres existants (bruit / titres génériques / réseaux sociaux / etc.)
     if (isGenericSiteTitle(t)) continue;
 
     if (looksLikeStatusBarNoise(t)) continue;
@@ -1285,42 +1360,58 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) continue;
     if (/^(temps|notes?)\b/i.test(t)) continue;
 
+    // Longueur raisonnable
     if (t.length < 6 || t.length > 80) continue;
+
+    // Pas de chiffres dans le titre (sinon ça prend des temps / calories / etc.)
     if (/\d/.test(t)) continue;
 
+    // Bonus si le titre contient des majuscules (souvent vrai pour un titre)
     const hasUpper = /[A-ZÀ-ÖØ-Þ]/.test(t);
+
+    // Bonus si c'est "presque tout en majuscule" (souvent titre de livre/recette)
     const capsBonus = isMostlyUppercaseTitle(t) ? 80 : 0;
 
+    // Pénalité si ça ressemble à un titre tronqué (ex: finit par "à", "de", etc.)
     const isTrunc = looksTruncatedTitle(t);
     const truncPenalty = isTrunc ? -25 : 0;
 
-    // candidat simple (1 ligne)
+    // ✅ candidat simple (1 ligne)
     candidates.push({
       t,
       score: capsBonus + (hasUpper ? 10 : 0) + (maxScan - i) + truncPenalty,
     });
     sawTitleCandidate = true;
 
-    // candidats fusionnés (2-3 lignes)
+    // ✅ candidats fusionnés (2-3 lignes)
     const merged = buildMergedTitleCandidate(scan, i, 3);
-    if (merged && merged !== t) {
-      const mergedUpper = /[A-ZÀ-ÖØ-Þ]/.test(merged);
-      const mergedCapsBonus = isMostlyUppercaseTitle(merged) ? 80 : 0;
 
-      candidates.push({
-        t: merged,
-        score: mergedCapsBonus + (mergedUpper ? 10 : 0) + (maxScan - i) + 12,
-      });
-      sawTitleCandidate = true;
+    // Sécurité : si merged existe et est différent, on l’ajoute aussi
+    if (merged && merged !== t) {
+      //securite: refuse un titre fusionné qui fint being meta/label
+      if (isMetaInfoLineForTitle(merged) || isTitleNoiseLabel(merged)) {
+      } else {  
+      // (Optionnel mais sûr) : si la fusion commence par une meta, on refuse
+        const mergedUpper = /[A-ZÀ-ÖØ-Þ]/.test(merged);
+        const mergedCapsBonus = isMostlyUppercaseTitle(merged) ? 80 : 0;
+
+        candidates.push({
+          t: merged,
+          score: mergedCapsBonus + (mergedUpper ? 10 : 0) + (maxScan - i) + 12,
+        });
+        sawTitleCandidate = true;
+      }
     }
   }
-
+  // Si aucun candidat -> pas de titre explicite trouvé
   if (candidates.length === 0) return null;
 
+  // On trie par score décroissant
   candidates.sort((a, b) => b.score - a.score);
+
+  // On renvoie le meilleur candidat
   return candidates[0].t;
 }
-
 
 function extractTitleFromStepHeader(lines) {
   const scan = (lines || []).slice(0, 80).map(normSpaces).filter(Boolean);
@@ -1381,6 +1472,16 @@ function isBadTitleCandidate(s) {
   if (!s) return true;
   const t = String(s).trim().toLowerCase();
   if (!t) return true;
+
+  // ❌ Si le titre commence par une info meta ("temps:", "cuisson:", "difficulté:", etc.)
+  // -> ce n'est pas un titre de recette
+  // ^ = début de la chaîne
+  // \b = limite de mot (évite des faux positifs)
+  // \s* = espaces optionnels
+  // [:–—-]? = ponctuation possible après le mot
+  if (/^(temps|cuisson|difficult[ée]|difficulte|portions?|calories?)\b\s*[:–—-]/i.test(t)) {
+  return true;
+  }
 
   // domaine / site
   if (t.includes('.com') || t.includes('.fr')) return true;
