@@ -17,6 +17,32 @@ function cleanTitleCandidate(s) {
   return norm(t);
 }
 
+function looksLikeIngredientFragmentTitleForTitle(line) {
+  const t = String(line || '').replace(/\u00A0/g, ' ').replace(/[ \t]+/g, ' ').trim();
+  if (!t) return false;
+
+  const low = t
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+
+  // "PUREE DE", "SAUCE DE", "CONCENTRE DE", etc.
+  if (/^(puree|puree|puree|purée|pate|pâte|concentre|concentré|sauce|coulis)\s+(de|d['’])\b/.test(low)) {
+    return true;
+  }
+
+  // Infographie / liste compacte type "en poudre I pincée I c.à.s ..."
+  if (/\s\|\s/.test(t)) return true;
+  if (/\sI\s/.test(t)) return true;
+
+  // Fragments finissant par qualificatifs ingrédient
+  if (/\b(en poudre|hach[eé]e?s?|tres\s+fin[s]?|tr[eè]s\s+fin[s]?|r[aâ]p[eé]e?s?)\b/.test(low)) {
+    return true;
+  }
+
+  return false;
+}
+
 // Faux titres UI / réseaux
 function isUiTitleBlacklisted(s) {
   const t = cleanTitleCandidate(s).toLowerCase();
@@ -161,4 +187,5 @@ module.exports = {
   scoreTitleCandidate,
   pickBestTitle,
   tryMergeSplitTitle,
+  looksLikeIngredientFragmentTitleForTitle,
 };

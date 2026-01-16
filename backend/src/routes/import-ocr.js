@@ -4,7 +4,7 @@
 const express = require('express');
 const multer = require('multer');
 
-const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle } = require('../utils/ocrTitle');
+const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 
 // ✅ Airtable service
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
@@ -39,6 +39,7 @@ function stripBulletPrefix(s) {
 function normalizeTitleCandidate(s) {
   return String(s || '')
     .replace(/\u00A0/g, ' ')
+    .replace(/\s*\n+\s*/g, ' ')
     .replace(/[ \t]+/g, ' ')
     .trim();
 }
@@ -221,6 +222,33 @@ function looksLikeStepTitle(t) {
   return /^[-•*]?\s*(hacher|hachez|eplucher|epluchez|éplucher|épluchez|égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger)\b/i.test(
     s
   );
+}
+
+function looksLikeLooseActionStep(line) {
+  const t = String(line || '').trim();
+  if (!t) return false;
+
+  const low = stripDiacritics(t).toLowerCase();
+
+  //1)debut ultra typique d'étape: "dans un saladier/bol/casseroles..."
+  if (/^dans\s+(un|une|le|la|les|du|de la|des)\b/.test(low)) return true;
+
+  //2)verbes d'action fréquents (présent , pas forcément "z")
+  if (/^(ajouter|ajoute|melanger|mélanger|mélange|melange|verser|verse|cuire|faire|chauffer|cahuffe|preparer|prepare|prépare|préparer|hacher|hache|egoutter|egoutte|égoutter|égoutte|laver|lave|couper|coupe|fouetter|fouette|battre|incorporer|incorpore|remuer|remue|peler|éplucher|epluche|eplucher|mixer|mixe|cuire|cuit|découper|decouper|découpe|decoupe)\b/.test(low)) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeIngredientOnlyTitle(line) {
+  const t = String(line || '');
+  if (!t) return false;
+  const low = stripDiacritics(t).toLowerCase();
+  //"du thym", "de la farine", "des oeufs"
+  if (/^(de|du|des)\s+(le|la|les|l')?\s*[a-z]{3,}$/.test(low) && low.length <= 18) {
+    return true;
+  }
+  return false;
 }
 
 function inferTitleFromContent(ingredientsRows, stepsArr) {
@@ -604,8 +632,33 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
       if (out?.text) texts.push(out.text);
 
-      const pt = out?.debug?.pickedTitle ? String(out.debug.pickedTitle).trim() : '';
-      if (pt) pickedTitles.push(pt);
+      let pt = out?.debug?.pickedTitle ? String(out.debug.pickedTitle).trim() : ''; // pt = picked title (titre choisi)
+
+      if (pt) {
+        pt = normalizeTitleCandidate(pt); // normalise espaces/ponctuation
+
+        // ❌ Ne jamais garder une ligne d'étape comme titre Vision
+        if (looksLikeLooseActionStep(pt) || looksLikeStepTitle(pt)) {
+          pt = '';
+        }
+
+        // ❌ Ne jamais garder un mini-ingrédient comme titre ("Du thym", etc.)
+        if (pt && looksLikeIngredientOnlyTitle(pt)) {
+          pt = '';
+        }
+
+        if (pt && looksLikeIngredientFragmentTitleForTitle(pt)) {
+          pt = '';
+        }
+
+        // ❌ Blacklist UI / émotionnel (comme tu fais déjà après, mais ici on nettoie dès la source)
+        if (pt && (isBlacklistedUiTitle(pt) || looksLikeEmotionalHookTitle(pt))) {
+          pt = '';
+        }
+
+        // ✅ Push seulement si vraiment utile
+        if (pt) pickedTitles.push(pt);
+      }
 
       if (isDebug) {
         visionDebugByImage.push({
@@ -633,7 +686,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       isValidRecipeTitleCandidate(bestVisionTitleRaw) &&
       !isBlacklistedUiTitle(bestVisionTitleRaw) &&
       !looksLikeEmotionalHookTitle(bestVisionTitleRaw) &&
-      !looksLikeStepTitle(bestVisionTitleRaw)
+      !looksLikeStepTitle(bestVisionTitleRaw) &&
+      !looksLikeIngredientFragmentTitleForTitle(bestVisionTitleRaw)
         ? String(bestVisionTitleRaw).trim()
         : null;
 
@@ -646,17 +700,42 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
   // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
   bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
 
-  const trunc = looksTruncatedTitle(bestVisionTitle);
+  const truncEnd = looksTruncatedTitle(bestVisionTitle);
+  const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
 
-  if (trunc) {
+  if (bestVisionTitle && truncStart) {
+   const idx = firstLines.findIndex(l =>
+    normalizeTitleJoinPiece(l).toLowerCase() === normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
+   );
+
+   if (idx > 0) {
+     const prev = sanitizePickedTitle(firstLines[idx - 1]);
+     const merged = [prev, bestVisionTitle].join(' ').trim();
+
+     if (
+      isValidRecipeTitleCandidate(merged) &&
+      !looksLikeIngredientFragmentTitleForTitle(merged)
+     ) {
+       bestVisionTitle = merged;
+       }
+    }
+  }
+
+  if (truncEnd || truncStart) {
     const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
 
     // on cherche l'index de la ligne la plus proche du titre
     const target = normalizeTitleJoinPiece(bestVisionTitle);
     let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
-    if (idx < 0) idx = 0;
+    if (idx < 0) {
+      const targetLow = target.toLowerCase ()
+      idx = scan.findIndex((l) => normalizeTitleJoinPiece(l).toLowerCase().includes(targetLow));
+    }
+    if (idx < 0) idx = 0;  
 
-    const merged = buildMergedTitleCandidate(scan, idx, 4);
+    const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
+
+    const merged = buildMergedTitleCandidate(scan, idxStart, 4);
 
     if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
       bestVisionTitle = merged;

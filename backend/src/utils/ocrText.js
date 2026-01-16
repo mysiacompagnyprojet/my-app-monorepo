@@ -1,6 +1,8 @@
 // backend/src/utils/ocrText.js
 'use strict';
 
+const {looksLikeIngredientFragmentTitleForTitle} = require('./ocrTitle');
+
 function normSpaces(s) {
   return String(s || '')
     .replace(/\u00A0/g, ' ')
@@ -1332,6 +1334,8 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     // Si vide après le nettoyage -> on passe à la ligne suivante
     if (!t) continue;
 
+    if (looksLikeIngredientFragmentTitleForTitle(t)) continue;
+
     if (looksLikeLooseActionStep(t) || looksLikeLooseActionStep(raw)) continue;
 
     // ❌ Évite les titres qui commencent par "de " (souvent auteur collé)
@@ -1469,17 +1473,14 @@ const EMOTIONAL_TITLE_PATTERNS = [
 ];
 
 function isBadTitleCandidate(s) {
-  if (!s) return true;
-  const t = String(s).trim().toLowerCase();
-  if (!t) return true;
-
-  // ❌ Si le titre commence par une info meta ("temps:", "cuisson:", "difficulté:", etc.)
-  // -> ce n'est pas un titre de recette
-  // ^ = début de la chaîne
-  // \b = limite de mot (évite des faux positifs)
-  // \s* = espaces optionnels
-  // [:–—-]? = ponctuation possible après le mot
-  if (/^(temps|cuisson|difficult[ée]|difficulte|portions?|calories?)\b\s*[:–—-]/i.test(t)) {
+   if (!s) return true;
+   const t = String(s).trim().toLowerCase();
+   if (!t) return true;
+   if (/^sauce\s+/i.test(t)) return false;
+  // ❌ Si le titre commence par une info meta ("temps:", "cuisson:", "difficulté:", etc.) -> ce n'est pas un titre de recette
+  // ^ = début de la chaîne \b = limite de mot (évite des faux positifs) \s* = espaces optionnels [:–—-]? = ponctuation possible après le mot
+  if (/^(temps|cuisson|difficult[ée]|difficulte|portions?|calories?)\b\s*[:–—-]/i.test(t)) 
+  {
   return true;
   }
 
@@ -1597,10 +1598,12 @@ const hasIngredientListAtTop = ingredientLikeCount >= 3;
     if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) { prev = l; continue; }
     if (looksLikeStepLine(t)) { prev = l; continue; }
     if (/^(temps|notes?)\b/i.test(t)) { prev = l; continue; }
+    if (looksLikeIngredientFragmentTitleForTitle(t)) { prev = l; continue; }
 
     if (t.length >= 6 && t.length <= 80 && !/\d/.test(t)) {
       const cleaned = sanitizePickedTitle(t);
-      if (cleaned && !isBadTitleCandidate(cleaned)) return cleaned;
+      if (cleaned && !isBadTitleCandidate(cleaned)) 
+  return cleaned;
     }
 
     prev = l;
