@@ -605,6 +605,43 @@ async function priceIngredients(ingredients) {
 }
 // jusqu'ici Airtable pricing (v1)
 
+function looksLikeHookOrLongSentenceTitle(t) {
+  const s = normalizeTitleCandidate(t);
+  if (!s) return false;
+
+  const low = stripDiacritics(s).toLowerCase();
+
+  // typique "phrase Instagram" / accroche
+  if (s.includes('?')) return true;
+  if (low.includes('pas de')) return true;
+  if (low.includes('tu peux')) return true;
+
+  // trop long => souvent pas un vrai titre
+  if (s.length > 45) return true;
+
+  return false;
+}
+
+function looksLikeMeasureLineTitle(t) {
+  const s = normalizeTitleCandidate(t);
+  if (!s) return false;
+
+  const low = stripDiacritics(s).toLowerCase();
+
+  // commence par quantité/mesure/puce
+  if (/^[-•*]?\s*\d/.test(s)) return true;
+  if (/^[-•*]\s*/.test(s)) return true;
+
+  // contient unités classiques
+  if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(low)) return true;
+  if (/\b(c\.?a\.?s|c\.?à\.?s|c\.?a\.?c|c\.?à\.?c)\b/.test(low)) return true;
+
+  // ex: "I pincée", "1/2 c.à.c ..."
+  if (/\b(pinc[ée]e|pincée)\b/.test(low)) return true;
+
+  return false;
+}
+
 // ---------------- Router ----------------
 
 const router = express.Router();
@@ -869,20 +906,36 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const notes = baseNotes.join('\n');
 
     // ---------- TITRE FINAL ----------
+    const guessedFromLines = guessTitleFromLines(safeLinesForTitle);
+    
     let title =
       bestVisionTitle ||
-      guessTitleFromLines(safeLinesForTitle) ||
+      guessedFromLines ||
       inferTitleFromContent(ingredients, steps) ||
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
-
+    if (!bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
+    
+      if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+     title =
+      inferTitleFromContent(ingredients, steps) ||
+      fabricateTitleFromIngredientsRows(ingredients) ||
+      title;
+     }
+    }
     if (looksLikeEmotionalHookTitle(title)) {
-      title = inferTitleFromContent(ingredients, steps) || fabricateTitleFromIngredientsRows(ingredients) || 'Recette importée';
+     title =
+     inferTitleFromContent(ingredients, steps) ||
+     fabricateTitleFromIngredientsRows(ingredients) ||
+     title;
     }
 
     if (looksLikeStepTitle(title)) {
-      title = inferTitleFromContent(ingredients, steps) || fabricateTitleFromIngredientsRows(ingredients) || 'Recette importée';
+     title =
+     inferTitleFromContent(ingredients, steps) ||
+     fabricateTitleFromIngredientsRows(ingredients) ||
+     title;
     }
 
     // ✅ IMPORTANT : draft est déclaré AVANT d’être utilisé (sinon: cannot access draft before initialization)
