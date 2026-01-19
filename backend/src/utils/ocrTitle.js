@@ -26,21 +26,44 @@ function looksLikeIngredientFragmentTitleForTitle(line) {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase();
 
-  // "PUREE DE", "SAUCE DE", "CONCENTRE DE", etc.
-  if (/^(puree|puree|puree|purée|pate|pâte|concentre|concentré|sauce|coulis)\s+(de|d['’])\b/.test(low)) {
+    // Exception : titres de type "Sauce Big Mac", "Sauce César", etc.
+    // On bloque uniquement "sauce de / sauce d’" (ingrédient), pas "sauce + nom" - A ALISSER
+    if (low.startsWith('sauce ') && !/\bsauce\s+(de|d['’])\b/.test(low)) {
+    return false;
+    }
+
+   // "PUREE DE", "SAUCE DE", "CONCENTRE DE", etc. - A LAISSER
+   if (/^(puree|puree|puree|purée|pate|pâte|concentre|concentré|sauce|coulis)\s+(de|d['’])\b/.test(low)) {
     return true;
-  }
+   }
 
-  // Infographie / liste compacte type "en poudre I pincée I c.à.s ..."
-  if (/\s\|\s/.test(t)) return true;
-  if (/\sI\s/.test(t)) return true;
+   // mesures très typiques des ingrédients - A LAISSER
+   const hasMeasureToken =
+   /\b(c\.?\s*à\.?\s*s|c\.?\s*à\.?\s*c|cas|cac)\b/.test(low) ||
+   /\b(pincee|pincees|cuillere|cuilleres|)\b/.test(low);
 
-  // Fragments finissant par qualificatifs ingrédient
-  if (/\b(en poudre|hach[eé]e?s?|tres\s+fin[s]?|tr[eè]s\s+fin[s]?|r[aâ]p[eé]e?s?)\b/.test(low)) {
-    return true;
-  }
+   const hasIngredientGrammer =
+   /^(?:\d|i)\b/.test(low) ||
+   /\b(de|d[''])\b/.test(low);
 
-  return false;
+   // fragments très “ingrédients” - A LAISSER
+   const hasIngredientFragment =
+   /\b(en poudre|hach(e|es|ee|ees)|tres fins|finement|rape|rapee)\b/.test(low);
+
+   if (hasMeasureToken && hasIngredientGrammer && hasIngredientFragment) return true;
+
+   
+
+   // Infographie / liste compacte type "en poudre I pincée I c.à.s ..." - A LAISSER
+   if (/\s\|\s/.test(t)) return true;
+   if (/\sI\s/.test(t)) return true;
+
+   // Fragments finissant par qualificatifs ingrédient
+   //if (/\b(en poudre|hach[eé]e?s?|tres\s+fin[s]?|tr[eè]s\s+fin[s]?|r[aâ]p[eé]e?s?)\b/.test(low)) {
+   //return true;
+   //}
+
+   return false;
 }
 
 // Faux titres UI / réseaux

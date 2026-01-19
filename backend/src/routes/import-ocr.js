@@ -907,7 +907,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     // ---------- TITRE FINAL ----------
     const guessedFromLines = guessTitleFromLines(safeLinesForTitle);
-    
+    //const head = safeLinesForTitle.slice(0, 16);
     let title =
       bestVisionTitle ||
       guessedFromLines ||
@@ -915,15 +915,46 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
-    if (!bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
+      //ajout du 19/01/26 14h25 =  pour recette 6
+      function normalizeLoose(s) {
+       return String(s || '')
+       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+       .toLowerCase()
+       .replace(/\s+/g, ' ')
+       .trim();
+      }
+
+      function visionLooksLikeSuffix(v) {
+       if (!v) return false;
+       if (v.length > 22) return false;
+       return (
+        /^a\s+l['’]/.test(v) ||
+        /^a\s+la\b/.test(v) ||
+        /^a\s+aux\b/.test(v) ||
+        /^express\b/.test(v) ||
+        /^maison\b/.test(v) ||
+        /^facile\b/.test(v) ||
+        /^rapide\b/.test(v)
+       );
+      }
+
+      if (!bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
+
+        //ajout du 19/01/26 14:29
+         const v = normalizeLoose(bestVisionTitle);
+         const g = normalizeLoose(guessedFromLines);
+        //ajout du 19/01/26 14:30 Si Vision n'est qu'un suffixe court contenu dans guessed, on préfère guessed
+        if (visionLooksLikeSuffix(v) && g.length >= v.length + 6 && g.includes(v)) {
+         title = normalizeTitleCandidate(guessedFromLines);
+        }
     
-      if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
-     title =
-      inferTitleFromContent(ingredients, steps) ||
-      fabricateTitleFromIngredientsRows(ingredients) ||
-      title;
-     }
-    }
+       if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+         title =
+          inferTitleFromContent(ingredients, steps) ||
+          fabricateTitleFromIngredientsRows(ingredients) ||
+          title;
+        }
+      }
     if (looksLikeEmotionalHookTitle(title)) {
      title =
      inferTitleFromContent(ingredients, steps) ||
@@ -965,6 +996,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           cleanedPickedTitles,
           mergedFromVision: mergedFromVision || null,
           bestVisionTitle: bestVisionTitle || null,
+          guessedFromLines,
+          //headForTitle: head,
           finalTitle: title,
           firstLines: safeLinesForTitle.slice(0, 40),
           byImage: visionDebugByImage,
@@ -984,6 +1017,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             pickedTitles,
             mergedFromVision: mergedFromVision || null,
             bestVisionTitle: bestVisionTitle || null,
+            guessedFromLines,
             byImage: visionDebugByImage,
           },
           firstLines: safeLinesForTitle.slice(0, 60),

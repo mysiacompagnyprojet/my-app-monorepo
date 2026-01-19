@@ -1548,114 +1548,166 @@ function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6)
 }
 
 function guessTitleFromLines(lines) {
-  const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
+  const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
 
-  const explicit = findExplicitTitleInFirstLines(lines, 60);
-  if (explicit) {
-    const cleaned = sanitizePickedTitle(explicit);
-    if (cleaned && !isBadTitleCandidate(cleaned)) return cleaned;
-  }
-
-  const fromStepHeader = extractTitleFromStepHeader(lines);
-  if (fromStepHeader && !isBadTitleCandidate(fromStepHeader)) return fromStepHeader;
-
-  if (head.some((l) => extractServingsFromLine(l) || isIngredientsHeader(l))) {
-  const beforeIng = findTitleJustBeforeIngredientsHeader(lines, 40, 6);
-  if (beforeIng) return beforeIng;
-  return DEFAULT_TITLE;
-  }
-
-  const ingredientLikeCount = head.filter((l) => {
-  const t = normSpaces(l);
-  if (/^[-•*·]\s+/.test(t)) return true;
-  if (/^(un peu de|selon goût|au goût)\b/i.test(t)) return true;
-  return !!parseOcrIngredient(t);
-}).length;
-
-// ⚠️ Avant on faisait un "return DEFAULT_TITLE" ici.
-// Problème : certaines recettes commencent par une liste "- ...", mais ont quand même un vrai titre (ex: "Butter Chicken Express").
-// Donc on ne sort plus tout de suite : on laisse la suite du scoring essayer de trouver un titre.
-const hasIngredientListAtTop = ingredientLikeCount >= 3;
-
-  let prev = '';
-  for (let i = 0; i < head.length; i++) {
-  const raw0 = normSpaces(head[i] || '');
-  if (!raw0) continue;
-
-  // 1) Récupère un titre collé à l'heure (ex: "13:18 Sauce Big Mac")
-  let raw = raw0.replace(/^\d{1,2}:\d{2}\s+/g, '');
-
-  // 2) Si OCR met un bullet devant, on enlève le bullet pour tester le titre
-  //    (mais on ne veut pas prendre un ingrédient => on garde ensuite tes filtres)
-  raw = raw.replace(/^[-•*·]\s+/g, '');
-
-  let t = cleanTitleCandidate(raw);
-  t = sanitizePickedTitle(t);
-  if (!t) { prev = raw0; continue; }
-
-  if (isGenericSiteTitle(t)) { prev = raw0; continue; }
-  if (looksLikeStatusBarNoise(t)) { prev = raw0; continue; }
-  if (looksLikeDateNoise(t)) { prev = raw0; continue; }
-  if (looksLikeCountersNoise(t)) { prev = raw0; continue; }
-  if (looksLikeSocialNoise(t)) { prev = raw0; continue; }
-  if (isIngredientsHeader(t)) { prev = raw0; continue; }
-  if (isPreparationHeader(t)) { prev = raw0; continue; }
-  if (extractServingsFromLine(t)) { prev = raw0; continue; }
-  if (looksLikeStepContinuation(prev, t)) { prev = raw0; continue; }
-  if (/^(un peu de|selon goût|au goût)\b/i.test(t)) { prev = raw0; continue; }
-  if (parseOcrIngredient(t)) { prev = raw0; continue; }
-  if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) { prev = raw0; continue; }
-  if (looksLikeStepLine(t)) { prev = raw0; continue; }
-  if (/^(temps|notes?)\b/i.test(t)) { prev = raw0; continue; }
-  if (looksLikeIngredientFragmentTitleForTitle(t)) { prev = raw0; continue; }
-
-  // candidat "titre"
-  if (t.length >= 6 && t.length <= 80 && !/\d/.test(t)) {
-    const cleaned = sanitizePickedTitle(t);
-    if (cleaned && !isBadTitleCandidate(cleaned)) {
-
-      // 3) Join d’un suffixe court de titre (ex: "à l'ancienne", "express", "maison", etc.)
-      const next0 = normSpaces(head[i + 1] || '');
-      const next = sanitizePickedTitle(
-        cleanTitleCandidate(
-          next0.replace(/^\d{1,2}:\d{2}\s+/g, '').replace(/^[-•*·]\s+/g, '')
-        )
-      );
-
-      const nextLow = (next || '')
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase();
-
-      const isTitleSuffix =
-        !!next &&
-        next.length <= 22 &&
-        (
-          /^a\s+l['’]/i.test(nextLow) ||
-          /^a\s+la\b/i.test(nextLow) ||
-          /^a\s+aux\b/i.test(nextLow) ||
-          /^express\b/i.test(nextLow) ||
-          /^maison\b/i.test(nextLow) ||
-          /^facile\b/i.test(nextLow) ||
-          /^rapide\b/i.test(nextLow)
-        ) &&
-        !parseOcrIngredient(next) &&
-        !looksLikeStepLine(next) &&
-        !looksLikeIngredientFragmentTitleForTitle(next);
-
-      if (isTitleSuffix) {
-        const merged = normSpaces(`${cleaned} ${next}`);
-        if (merged.length <= 90 && !isBadTitleCandidate(merged)) return merged;
-      }
-
-      return cleaned;
-    }
+  // 1) "Title: ..." ou variantes explicites
+  const explicit = findExplicitTitleInFirstLines(lines, 60);
+  if (explicit) {
+    const cleaned = sanitizePickedTitle(explicit);
+    if (cleaned && !isBadTitleCandidate(cleaned)) return cleaned;
   }
-  prev = raw0;
+
+  // 2) Titre récupéré depuis un en-tête d'étapes
+  const fromStepHeader = extractTitleFromStepHeader(lines);
+  if (fromStepHeader && !isBadTitleCandidate(fromStepHeader)) return fromStepHeader;
+
+  // 3) Si on voit rapidement "Ingrédients" / portions, on tente le titre juste avant
+  if (head.some((l) => extractServingsFromLine(l) || isIngredientsHeader(l))) {
+    const beforeIng = findTitleJustBeforeIngredientsHeader(lines, 40, 6);
+    if (beforeIng) return beforeIng;
+    return DEFAULT_TITLE;
+  }
+
+  // 4) Détecte si les premières lignes ressemblent à une liste d'ingrédients
+  const ingredientLikeCount = head
+    .filter((l) => {
+      const t = normSpaces(l);
+      if (/^[-•*·]\s+/.test(t)) return true;
+      if (/^(un peu de|selon goût|au goût)\b/i.test(t)) return true;
+      return !!parseOcrIngredient(t);
+    })
+    .length;
+
+  // On n'abandonne pas tout de suite : certaines recettes commencent par "- ..." puis ont un vrai titre
+  const hasIngredientListAtTop = ingredientLikeCount >= 3;
+
+  // 5) Scoring simple sur les premières lignes (avec protections anti-bruit)
+  let prev = '';
+  for (let i = 0; i < head.length; i++) {
+    const raw0 = normSpaces(head[i] || '');
+    if (!raw0) continue;
+
+    // "13:18 Sauce Big Mac" -> "Sauce Big Mac"
+    let raw = raw0.replace(/^\d{1,2}:\d{2}\s+/g, '');
+
+    // "- Butter Chicken Express" -> "Butter Chicken Express"
+    raw = raw.replace(/^[-•*·]\s+/g, '');
+
+    let t = cleanTitleCandidate(raw);
+    t = sanitizePickedTitle(t);
+    if (!t) {
+      prev = raw0;
+      continue;
+    }
+
+    if (isGenericSiteTitle(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeStatusBarNoise(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeDateNoise(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeCountersNoise(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeSocialNoise(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (isIngredientsHeader(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (isPreparationHeader(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (extractServingsFromLine(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeStepContinuation(prev, t)) {
+      prev = raw0;
+      continue;
+    }
+    if (/^(un peu de|selon goût|au goût)\b/i.test(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (parseOcrIngredient(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (/^(sel|poivre|sel\s*&\s*poivre)\b/i.test(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeStepLine(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (/^(temps|notes?)\b/i.test(t)) {
+      prev = raw0;
+      continue;
+    }
+    if (looksLikeIngredientFragmentTitleForTitle(t)) {
+      prev = raw0;
+      continue;
+    }
+
+    // candidat titre
+    if (t.length >= 6 && t.length <= 80 && !/\d/.test(t)) {
+      const cleaned = sanitizePickedTitle(t);
+      if (cleaned && !isBadTitleCandidate(cleaned)) {
+        // Join d’un suffixe court (ex: "à l'ancienne", "express", etc.)
+        const next0 = normSpaces(head[i + 1] || '');
+        const next = sanitizePickedTitle(
+          cleanTitleCandidate(next0.replace(/^\d{1,2}:\d{2}\s+/g, '').replace(/^[-•*·]\s+/g, ''))
+        );
+
+        const nextLow = (next || '')
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .toLowerCase();
+
+        const isTitleSuffix =
+          !!next &&
+          next.length <= 22 &&
+          (/^a\s+l['’]/i.test(nextLow) ||
+            /^a\s+la\b/i.test(nextLow) ||
+            /^a\s+aux\b/i.test(nextLow) ||
+            /^express\b/i.test(nextLow) ||
+            /^maison\b/i.test(nextLow) ||
+            /^facile\b/i.test(nextLow) ||
+            /^rapide\b/i.test(nextLow)) &&
+          !parseOcrIngredient(next) &&
+          !looksLikeStepLine(next) &&
+          !looksLikeIngredientFragmentTitleForTitle(next);
+
+        if (isTitleSuffix) {
+          const merged = normSpaces(`${cleaned} ${next}`);
+          if (merged.length <= 90 && !isBadTitleCandidate(merged)) return merged;
+        }
+
+        return cleaned;
+      }
+    }
+
+    prev = raw0;
+  }
+
+  // Si ça ressemble vraiment à une liste d'ingrédients et qu'on n'a rien trouvé : fallback
+  if (hasIngredientListAtTop) return DEFAULT_TITLE;
+
+  return DEFAULT_TITLE;
 }
-if (hasIngredientListAtTop) return DEFAULT_TITLE;
-  if (hasIngredientListAtTop)
-  return DEFAULT_TITLE;
-}
+
 
 /* =========================
    (tout le reste splitIngredientsAndSteps / miniReflow est identique à ton fichier)
