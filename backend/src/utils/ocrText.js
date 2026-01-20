@@ -3,6 +3,7 @@
 
 const { looksLikeIngredientFragmentTitleForTitle } = require('./ocrTitle');
 
+
 function normSpaces(s) {
   return String(s || '')
     .replace(/\u00A0/g, ' ')
@@ -1111,6 +1112,7 @@ function sanitizePickedTitle(title) {
 
   t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
   t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
+  t = t.replace(/\b(temps|portions?|calories)\b\s*$/i, '').trim();//ajoute le 20/01
 
   return normSpaces(t);
 }
@@ -1261,6 +1263,10 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
     const next = normalizeTitleJoinPiece(scan[k]);
 
     if (/\sI\s/.test(scan[k]) || /\s\|\s/.test(scan[k])) return null;
+    //ajoute le 20/01
+    // 🚫 ne pas fusionner un sous-titre "tags" avec slash (ex: AIL/PAPRIKA/PARMESAN)
+    const rawNext = String(scan[k] || '');
+    if (/[A-ZÀ-ÖØ-Þ]{2,}\/[A-ZÀ-ÖØ-Þ]{2,}/.test(rawNext) && rawNext.length <= 35) break;
 
     //si aprs normalisation c'st vide -> on stoppe la fusion (plus rien d'utile)
     if (!next) break;
@@ -1273,10 +1279,14 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
     if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
     if (!canJoinTitleLines(out, next)) break;
 
+    // ajoute le 20/01 - ✅ éviter les doublons : si next est déjà contenu dans out, on saute
+    const outLow = out.toLowerCase();
+    const nextLow = next.toLowerCase();
+    if (outLow.includes(nextLow)) continue;
+
     out = normSpaces(`${out} ${next}`);
     used++;
   }
-
   // garde-fous
   if (out.length < 6 || out.length > 90) return null;
   if (/\d/.test(out)) return null;
@@ -1287,6 +1297,8 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
 
   return out;
 }
+
+
 
 function looksTruncatedTitle(t) {
   const s = normSpaces(String(t || ''));
@@ -1514,8 +1526,14 @@ function isBadTitleCandidate(s) {
   // commence par un chiffre
   if (/^\d/.test(t)) return true;
 
+  //ajoute le 20/01 - rejete si le titre est uniquement une unité
+  if (/^(ml|cl|dl|l|g|gr|kg)$/i.test(t.trim())) return true;
+
+  // commence par quantité + unité
+  if (/^\d+([.,]\d+)?\s*(g|gr|kg|ml|cl|dl|l)\b/i.test(t)) return true;
+
   // contient une unité -> souvent un ingrédient / bruit
-  if (/\b(g|gr|kg|ml|cl)\b/i.test(t)) return true;
+  //remplacer par le if du dessus le 20/01 - if (/\b(g|gr|kg|ml|cl)\b/i.test(t)) return true;
 
   // accroches émotionnelles
   return EMOTIONAL_TITLE_PATTERNS.some((r) => r.test(t));
@@ -1590,12 +1608,88 @@ function guessTitleFromLines(lines) {
   const fromStepHeader = extractTitleFromStepHeader(lines);
   if (fromStepHeader && !isBadTitleCandidate(fromStepHeader)) return fromStepHeader;
 
+  //Ajout d'ici au 20/01 - pour ajouter une regle prioritaire sur gros titre
+ function isAllCapsTitleCandidate(s) {
+  const t = sanitizePickedTitle(cleanTitleCandidate(s));
+  if (!t) return false;
+    // ignore meta
+  if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
+  if (extractServingsFromLine(t)) return false;
+  if (/^(portions?|temps|calories|remarques?)\b/i.test(t)) return false;
+
+  // ignore domaine / UI
+  if (/\b\w+\.(com|fr|net|org)\b/i.test(t)) return false;
+  if (isGenericSiteTitle(t) || isBlacklistedUiTitle(t)) return false;
+
+  // ignore ingrédients/mesures
+  if (parseOcrIngredient(t)) return false;
+  if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
+
+  // titre “fort” : majuscules, assez long
+  const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
+  if (letters < 10) return false;
+
+  const upperLetters = (t.match(/[A-ZÀ-ÖØ-Þ]/g) || []).length;
+  if (upperLetters / letters < 0.75) return false;
+
+  if (t.length < 10 || t.length > 80) return false;
+  return true;
+ }
+ // ✅ Priorité: si on trouve un “gros titre” en majuscules dans le head, on le prend
+ for (let i = 0; i < Math.min(head.length, 8); i++) {
+  if (isAllCapsTitleCandidate(head[i])) {
+    return sanitizePickedTitle(cleanTitleCandidate(head[i]));
+  }
+ } // A ici au 20/01
+  
+  //ajout d'ici à.. le 20/01 - si une ligne ressemble à un vrai titre au millieu
+  //d'une liste à ingredients
+ function isLikelyStandaloneTitleLine(s) {
+  const t = sanitizePickedTitle(cleanTitleCandidate(s));
+  if (!t) return false;
+
+  // doit être assez long, sans chiffres, 2+ mots  
+  if (t.length < 10 || t.length > 80) return false;
+  if (/\d/.test(t)) return false;
+  if (t.split(/\s+/).length < 2) return false;
+
+  // rejets
+  if (parseOcrIngredient(t)) return false;
+  if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
+  if (looksLikeStepTitle(t) || looksLikeLooseActionStep(t)) return false;
+  if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
+  if (looksLikeEmotionalHookTitle(t) || isBlacklistedUiTitle(t)) return false;
+  if (/\btu\b/i.test(t) || /\bpeux\b/i.test(t) || /\bajouter\b/i.test(t)) return false;
+  if (/\bgo[uû]t\b/i.test(t) && /\bproche\b/i.test(t)) return false;
+
+  return true;
+ }
+
+  // ✅ Si le head contient une ligne "titre" au milieu d'une liste, on la prend
+ for (let i = 0; i < Math.min(head.length, 10); i++) {
+  const raw = head[i];
+  if (/^[-•*·]\s*/.test(raw)) continue;
+
+  if (isLikelyStandaloneTitleLine(raw)) {
+    return sanitizePickedTitle(cleanTitleCandidate(raw));
+  }
+ } // a ici le 20/01
+
+
   // 3) Si on voit rapidement "Ingrédients" / portions, on tente le titre juste avant
   if (head.some((l) => extractServingsFromLine(l) || isIngredientsHeader(l))) {
     const beforeIng = findTitleJustBeforeIngredientsHeader(lines, 40, 6);
-    if (beforeIng) return beforeIng;
-    return DEFAULT_TITLE;
-  }
+
+    // ✅ Ne jamais accepter un "titre" qui ressemble à un ingrédient
+    if (beforeIng &&
+      !parseOcrIngredient(beforeIng) && //ajout le 20/01 pour recette
+      !looksLikeIngredientFragmentTitleForTitle(beforeIng) && //ajout le 20/01
+      !isBadTitleCandidate(beforeIng) // ajout le 20/01
+    ) {
+       return beforeIng;
+    // fait le 20/01 - ne pas return ici, on laisse le scoring essayer - return DEFAULT_TITLE;
+      }
+    }    
 
   // 4) Détecte si les premières lignes ressemblent à une liste d'ingrédients
   const ingredientLikeCount = head
@@ -1689,6 +1783,29 @@ function guessTitleFromLines(lines) {
       prev = raw0;
       continue;
     }
+    if (/\btu\b/i.test(t) || /\bpeux\b/i.test(t) || /\bajouter\b/i.test(t)) { 
+      prev = raw0; 
+      continue; 
+    }//ajouter le 20/01 - rejeter les phrases “conseil” avant de les considérer comme titre.
+    if (/\bgo[uû]t\b/i.test(t) && /\bproche\b/i.test(t)) { 
+      prev = raw0; 
+      continue; 
+    }//ajouter la 20/01 - rejeter les phrases “conseil” avant de les considérer comme titre.
+    
+    // ❌ conseils / alternatives (ex: "Pas de pâte de curry ? Mélange...")
+    if (/\bpas de\b/i.test(t) && /\?/.test(t)) { 
+      prev = raw0; 
+      continue; 
+    }//ajouter la 20/01
+    if (/\bm[eé]lange\b/i.test(t)) { 
+      prev = raw0; 
+      continue; 
+    }//ajouter la 20/01
+    if (/\bsimplement\b/i.test(t)) { 
+      prev = raw0; 
+      continue; 
+    }//ajouter la 20/01
+
 
     // candidat titre
     if (t.length >= 6 && t.length <= 80 && !/\d/.test(t)) {

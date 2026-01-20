@@ -80,7 +80,9 @@ function isBadTitleCandidateLocal(s) {
   if (!t) return true;
   if (t.includes('.com') || t.includes('.fr')) return true;
   if (/^\d/.test(t)) return true;
-  if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
+  //remplacer par ci dessous le 20/01 - if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
+  if (/^\d+([.,]\d+)?\s*(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
+  if (/^(ml|cl|dl|l|g|gr|kg)$/.test(t.trim())) return true;
 
   if (isBlacklistedUiTitle(t)) return true;
   if (looksLikeEmotionalHookTitle(t)) return true;
@@ -123,29 +125,58 @@ function isTitleNoiseLabel(line) {
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   let out = normalizeTitleJoinPiece(scan[startIdx]);
   if (!out) return null;
+  //Ce guard évite de démarrer un merge sur "en poudre", "de sel", etc. (même si ça n’a pas I).
+  const firstRaw = scan[startIdx];
+  if (looksLikeIngredientFragmentTitleForTitle(firstRaw)) return null;
+  if (parseOcrIngredient(firstRaw)) return null;
+
+  //si la premiére ligne est une ligne meta, on refuse de construire un titre fusionné
+  if (isMetaInfoLineForTitle(out)) return null;
+  if (isTitleNoiseLabel(out)) return null;
 
   let used = 1;
 
   for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
+    // ✅ saute labels genre "LEVURE", "FARINE"
     if (isTitleNoiseLabel(scan[k])) continue;
 
+    //on normalise la ligne suivante (supprime espaces/bizarreries OCR, etc...)
     const next = normalizeTitleJoinPiece(scan[k]);
+
+    if (/\sI\s/.test(scan[k]) || /\s\|\s/.test(scan[k])) return null;
+
+    //ajoute le 20/01
+    // 🚫 ne pas fusionner un sous-titre "tags" avec slash (ex: AIL/PAPRIKA/PARMESAN)
+    const rawNext = String(scan[k] || '');
+    
+    if (/[A-ZÀ-ÖØ-Þ]{2,}\/[A-ZÀ-ÖØ-Þ]{2,}/.test(rawNext) && rawNext.length <= 35) break;
+    //si aprs normalisation c'st vide -> on stoppe la fusion (plus rien d'utile)
     if (!next) break;
 
-    // ✅ NEW: si la ligne est déjà contenue dans le titre (doublon), on la saute
+    // si la ligne suivante est une ligne meta (temps/cuisson/difficulté/portions/calories),
+    // on la saute (continue = on passe à la ligne suivante de la boucle)
+    if (isMetaInfoLineForTitle(next)) continue;
+
+    // si la ligne suivante n'est pas plausible, stop
+    if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
+    if (!canJoinTitleLines(out, next)) break;
+
+    // ajoute le 20/01 - ✅ éviter les doublons : si next est déjà contenu dans out, on saute
     const outLow = out.toLowerCase();
     const nextLow = next.toLowerCase();
     if (outLow.includes(nextLow)) continue;
 
-    if (!canJoinTitleLines(out, next)) break;
 
     out = normSpaces(`${out} ${next}`);
     used++;
   }
-
+  // garde-fous
   if (out.length < 6 || out.length > 90) return null;
   if (/\d/.test(out)) return null;
-  if (isBadTitleCandidateLocal(out)) return null;
+  if (isBadTitleCandidate(out)) return null;
+  if (isTitleNoiseLabel(out)) return null;
+  // 🚫 listes compactes type "en poudre I pincée I c.à.s ..." LAISSER POUR SAUCE BIG MAC C'EST INDISPENSABLE
+  if (/\sI\s/.test(out) || /\s\|\s/.test(out)) return null;
 
   return out;
 }
@@ -911,6 +942,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     // ---------- TITRE FINAL ----------
     const guessedFromLines = guessTitleFromLines(safeLinesForTitle);
+    console.log('[BUTTER_DEBUG] guessedFromLines=', guessedFromLines);
+
     //const head = safeLinesForTitle.slice(0, 16);
     let title =
       bestVisionTitle ||
@@ -919,9 +952,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
-      // a supprimer c'est pour tester
-      console.log('[TITLE_FLOW] A after pick+normalize:', JSON.stringify({ bestVisionTitle, guessedFromLines, title }));
-
+      
       //ajout du 19/01/26 14h25 =  pour recette 6
       function normalizeLoose(s) {
        return String(s || '')
@@ -959,11 +990,31 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       }
 
       if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
-                
-        title =
-        inferTitleFromContent(ingredients, steps) ||
-        fabricateTitleFromIngredientsRows(ingredients) ||
-        title;
+        const alt =
+         inferTitleFromContent(ingredients, steps) ||
+         fabricateTitleFromIngredientsRows(ingredients) ||
+         '';
+
+        const altNorm = normalizeTitleCandidate(alt);
+
+        // Ne jamais remplacer par unité seule / ingrédient
+        const altLow = stripDiacritics(altNorm).toLowerCase().trim();
+
+        if (
+          altNorm &&
+          !/^(ml|cl|dl|l|g|gr|kg)$/.test(altLow) &&
+          !looksLikeIngredientOnlyTitle(altNorm) &&
+          !looksLikeIngredientFragmentTitleForTitle(altNorm) &&
+          !parseOcrIngredient(altNorm)
+        ) {
+         title = altNorm;
+        }  
+
+        //remplacer par ce qui est dessus le 20/01/26 pour eviter les 
+        //title =
+        //inferTitleFromContent(ingredients, steps) ||
+        //fabricateTitleFromIngredientsRows(ingredients) ||
+        //title;
       }
     
       if (looksLikeEmotionalHookTitle(title)) {
