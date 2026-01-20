@@ -4,12 +4,7 @@
 const express = require('express');
 const multer = require('multer');
 
-const {
-  pickBestTitle,
-  isValidRecipeTitleCandidate,
-  tryMergeSplitTitle,
-  looksLikeIngredientFragmentTitleForTitle,
-} = require('../utils/ocrTitle');
+const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 
 // ✅ Airtable service
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
@@ -224,7 +219,6 @@ function looksLikeEmotionalHookTitle(raw) {
 function looksLikeStepTitle(t) {
   const s = String(t || '').trim();
   if (!s) return false;
-
   return /^[-•*]?\s*(hacher|hachez|eplucher|epluchez|éplucher|épluchez|égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger)\b/i.test(
     s
   );
@@ -236,32 +230,24 @@ function looksLikeLooseActionStep(line) {
 
   const low = stripDiacritics(t).toLowerCase();
 
-  // 1) debut ultra typique d'étape: "dans un saladier/bol/casseroles..."
+  //1)debut ultra typique d'étape: "dans un saladier/bol/casseroles..."
   if (/^dans\s+(un|une|le|la|les|du|de la|des)\b/.test(low)) return true;
 
-  // 2) verbes d'action fréquents (présent , pas forcément "z")
-  if (
-    /^(ajouter|ajoute|melanger|mélanger|mélange|melange|verser|verse|cuire|faire|chauffer|cahuffe|preparer|prepare|prépare|préparer|hacher|hache|egoutter|egoutte|égoutter|égoutte|laver|lave|couper|coupe|fouetter|fouette|battre|incorporer|incorpore|remuer|remue|peler|éplucher|epluche|eplucher|mixer|mixe|cuire|cuit|découper|decouper|découpe|decoupe)\b/.test(
-      low
-    )
-  ) {
+  //2)verbes d'action fréquents (présent , pas forcément "z")
+  if (/^(ajouter|ajoute|melanger|mélanger|mélange|melange|verser|verse|cuire|faire|chauffer|cahuffe|preparer|prepare|prépare|préparer|hacher|hache|egoutter|egoutte|égoutter|égoutte|laver|lave|couper|coupe|fouetter|fouette|battre|incorporer|incorpore|remuer|remue|peler|éplucher|epluche|eplucher|mixer|mixe|cuire|cuit|découper|decouper|découpe|decoupe)\b/.test(low)) {
     return true;
   }
-
   return false;
 }
 
 function looksLikeIngredientOnlyTitle(line) {
   const t = String(line || '');
   if (!t) return false;
-
   const low = stripDiacritics(t).toLowerCase();
-
-  // "du thym", "de la farine", "des oeufs"
+  //"du thym", "de la farine", "des oeufs"
   if (/^(de|du|des)\s+(le|la|les|l')?\s*[a-z]{3,}$/.test(low) && low.length <= 18) {
     return true;
   }
-
   return false;
 }
 
@@ -334,17 +320,7 @@ function splitCommaSeparatedNoQty(line) {
 }
 
 function fabricateTitleFromIngredientsRows(ingredientsRows) {
-  const stop = new Set([
-    'sel',
-    'poivre',
-    'eau',
-    "eau d'orange",
-    "eau d’orange",
-    'huile',
-    "huile d'olive",
-    "huile d’olive",
-    'beurre',
-  ]);
+  const stop = new Set(['sel', 'poivre', 'eau', "eau d'orange", "eau d’orange", 'huile', "huile d'olive", "huile d’olive", 'beurre']);
 
   const rows = Array.isArray(ingredientsRows) ? ingredientsRows : [];
 
@@ -359,7 +335,6 @@ function fabricateTitleFromIngredientsRows(ingredientsRows) {
     if (low.startsWith('huile')) continue;
 
     const qty = Number(r?.quantity || 0);
-
     if (!best) best = { name, qty };
     else if (Number.isFinite(qty) && qty > best.qty) best = { name, qty };
   }
@@ -397,18 +372,14 @@ function joinWrappedLinesForIngredients(lines) {
       i += 2;
 
       const nameParts = [];
-
       while (i < src.length) {
         const x = src[i];
-
         if (!x) {
           i++;
           continue;
         }
-
         if (/^\d+$/.test(x)) break;
         if (isUnitOnlyLine(x)) break;
-
         nameParts.push(x);
         i++;
 
@@ -438,18 +409,14 @@ function joinWrappedLinesForIngredients(lines) {
 function uniqLines(arr) {
   const seen = new Set();
   const out = [];
-
   for (const x of arr || []) {
     const s = String(x || '').replace(/\s+/g, ' ').trim();
     if (!s) continue;
-
     const key = s.toLowerCase();
     if (seen.has(key)) continue;
-
     seen.add(key);
     out.push(s);
   }
-
   return out;
 }
 
@@ -515,7 +482,7 @@ function splitMergedIngredientLine(line, trash) {
   return [s];
 }
 
-// Airtable pricing (v1)
+//Airtable pricing (v1)
 function roundMoney(n) {
   if (!Number.isFinite(n)) return null;
   return Math.round(n * 100) / 100;
@@ -523,7 +490,7 @@ function roundMoney(n) {
 
 function spoonToMl(unit) {
   const u = String(unit || '').toLowerCase().trim();
-  if (u === 'càc' || u === 'cac' || u === 'cc') return 5; // 1 càc ≈ 5 ml
+  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
   if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
   return null;
 }
@@ -537,8 +504,7 @@ function computeIngredientCostEur(ing, priceRow) {
   if (!priceRow || !Number.isFinite(priceRow.pricePerUnit)) {
     return { price: null, costEur: 0, matched: false };
   }
-
-  // si pas de quantité exploitable => on ne calcule pas le coût, mais on affiche le prix unitaire
+  //si pas de quantité exploitable => on ne calcule pas le coût, mais on affiche le prix unitaire
   const qty = Number(ing?.quantity || 0);
   if (!Number.isFinite(qty) || qty <= 0) {
     return {
@@ -561,10 +527,8 @@ function computeIngredientCostEur(ing, priceRow) {
         matched: true,
       };
     }
-
     const totalMl = qty * mlPerSpoon;
     const cost = totalMl * Number(priceRow.pricePerUnit || 0);
-
     return {
       price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
       costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
@@ -586,7 +550,6 @@ function computeIngredientCostEur(ing, priceRow) {
   }
 
   const cost = baseQty * Number(priceRow.pricePerUnit || 0);
-
   return {
     price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
     costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
@@ -611,7 +574,6 @@ async function priceIngredients(ingredients) {
             airtableId: null,
           };
         }
-
         const priceRow = await getIngredientPriceByName(ing.name, ing.unit);
         const { price, costEur, matched } = computeIngredientCostEur(ing, priceRow);
 
@@ -621,9 +583,9 @@ async function priceIngredients(ingredients) {
 
         return {
           ...ing,
-          price, // { eurPer, perUnit } | null
-          costEur, // number | null
-          priceMatched: matched, // boolean
+          price,                          // { eurPer, perUnit } | null
+          costEur,                        // number | null
+          priceMatched: matched,          // boolean
           airtableId: priceRow?.airtableId || null,
         };
       } catch (e) {
@@ -696,6 +658,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     }
 
     const texts = [];
+
     const pickedTitles = [];
     const visionDebugByImage = [];
 
@@ -725,7 +688,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           pt = '';
         }
 
-        // ❌ Blacklist UI / émotionnel
+        // ❌ Blacklist UI / émotionnel (comme tu fais déjà après, mais ici on nettoie dès la source)
         if (pt && (isBlacklistedUiTitle(pt) || looksLikeEmotionalHookTitle(pt))) {
           pt = '';
         }
@@ -771,54 +734,52 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
 
     if (bestVisionTitle) {
-      // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
-      bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
+  // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
+  bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
 
-      const truncEnd = looksTruncatedTitle(bestVisionTitle);
-      const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
+  const truncEnd = looksTruncatedTitle(bestVisionTitle);
+  const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
 
-      if (bestVisionTitle && truncStart) {
-        const idx = firstLines.findIndex(
-          (l) =>
-            normalizeTitleJoinPiece(l).toLowerCase() ===
-            normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
-        );
+  if (bestVisionTitle && truncStart) {
+   const idx = firstLines.findIndex(l =>
+    normalizeTitleJoinPiece(l).toLowerCase() === normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
+   );
 
-        if (idx > 0) {
-          const prev = sanitizePickedTitle(firstLines[idx - 1]);
-          const merged = [prev, bestVisionTitle].join(' ').trim();
+   if (idx > 0) {
+     const prev = sanitizePickedTitle(firstLines[idx - 1]);
+     const merged = [prev, bestVisionTitle].join(' ').trim();
 
-          if (isValidRecipeTitleCandidate(merged) && !looksLikeIngredientFragmentTitleForTitle(merged)) {
-            bestVisionTitle = merged;
-          }
-        }
-      }
-
-      if (truncEnd || truncStart) {
-        const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
-
-        // on cherche l'index de la ligne la plus proche du titre
-        const target = normalizeTitleJoinPiece(bestVisionTitle);
-        let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
-
-        if (idx < 0) {
-          const targetLow = target.toLowerCase();
-          idx = scan.findIndex((l) => normalizeTitleJoinPiece(l).toLowerCase().includes(targetLow));
-        }
-
-        if (idx < 0) idx = 0;
-
-        const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
-
-        const merged = buildMergedTitleCandidate(scan, idxStart, 4);
-
-        if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
-          bestVisionTitle = merged;
-        }
-
-        bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
-      }
+     if (
+      isValidRecipeTitleCandidate(merged) &&
+      !looksLikeIngredientFragmentTitleForTitle(merged)
+     ) {
+       bestVisionTitle = merged;
+       }
     }
+  }
+
+  if (truncEnd || truncStart) {
+    const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
+
+    // on cherche l'index de la ligne la plus proche du titre
+    const target = normalizeTitleJoinPiece(bestVisionTitle);
+    let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
+    if (idx < 0) {
+      const targetLow = target.toLowerCase ()
+      idx = scan.findIndex((l) => normalizeTitleJoinPiece(l).toLowerCase().includes(targetLow));
+    }
+    if (idx < 0) idx = 0;  
+
+    const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
+
+    const merged = buildMergedTitleCandidate(scan, idxStart, 4);
+
+    if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
+      bestVisionTitle = merged;
+    }
+    bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
+  }
+}
 
     let lines = removeSocialHeaderLines(filtered.lines);
     let split = splitIngredientsAndSteps(lines);
@@ -842,14 +803,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
           l = l.replace(/^[.■]+/g, '').trim();
 
-          if (
-            /^(source|portions?|temps|calories?|remarques?|ingr[eé]dients?\s*:|[eé]tapes?\s+de\s+cuisson\s*:)\b/i.test(
-              l
-            )
-          ) {
+          if (/^(source|portions?|temps|calories?|remarques?|ingr[eé]dients?\s*:|[eé]tapes?\s+de\s+cuisson\s*:)\b/i.test(l))
             return null;
-          }
-
           if (/\b\w+\.(com|fr|net|org)\b/i.test(l)) return null;
           if (/^\d+\s*(heure|heures|min|minutes)\b/i.test(l)) return null;
 
@@ -867,9 +822,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             meta === 'preparation' ||
             meta === 'ingredients:' ||
             meta === 'ingredients'
-          ) {
+          )
             return null;
-          }
 
           l = l.replace(/cuill[eè]res?\s+à\s+soupe/gi, 'càs');
           l = l.replace(/\b(c\s*\.?\s*a\s*\.?\s*s\s*\.?|c\s*\.?\s*à\s*\.?\s*s\s*\.?|cas)\b/gi, 'càs');
@@ -953,29 +907,27 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     // ---------- TITRE FINAL ----------
     const guessedFromLines = guessTitleFromLines(safeLinesForTitle);
-
+    //const head = safeLinesForTitle.slice(0, 16);
     let title =
       bestVisionTitle ||
       guessedFromLines ||
       inferTitleFromContent(ingredients, steps) ||
       'Recette importée';
 
-    title = normalizeTitleCandidate(title);
+      title = normalizeTitleCandidate(title);
+      //ajout du 19/01/26 14h25 =  pour recette 6
+      function normalizeLoose(s) {
+       return String(s || '')
+       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+       .toLowerCase()
+       .replace(/\s+/g, ' ')
+       .trim();
+      }
 
-    // ajout du 19/01/26 14h25 =  pour recette 6
-    function normalizeLoose(s) {
-      return String(s || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/\s+/g, ' ')
-        .trim();
-    }
-
-    function visionLooksLikeSuffix(v) {
-      if (!v) return false;
-      if (v.length > 22) return false;
-      return (
+      function visionLooksLikeSuffix(v) {
+       if (!v) return false;
+       if (v.length > 22) return false;
+       return (
         /^a\s+l['’]/.test(v) ||
         /^a\s+la\b/.test(v) ||
         /^a\s+aux\b/.test(v) ||
@@ -983,40 +935,38 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         /^maison\b/.test(v) ||
         /^facile\b/.test(v) ||
         /^rapide\b/.test(v)
-      );
-    }
-
-    if (!bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
-      // ajout du 19/01/26 14:29
-      const v = normalizeLoose(bestVisionTitle);
-      const g = normalizeLoose(guessedFromLines);
-
-      // ajout du 19/01/26 14:30
-      // Si Vision n'est qu'un suffixe court contenu dans guessed, on préfère guessed
-      if (visionLooksLikeSuffix(v) && g.length >= v.length + 6 && g.includes(v)) {
-        title = normalizeTitleCandidate(guessedFromLines);
+       );
       }
 
-      if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
-        title =
+      if (bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
+
+        //ajout du 19/01/26 14:29
+         const v = normalizeLoose(bestVisionTitle);
+         const g = normalizeLoose(guessedFromLines);
+        //ajout du 19/01/26 14:30 Si Vision n'est qu'un suffixe court contenu dans guessed, on préfère guessed
+        if (visionLooksLikeSuffix(v) && g.length >= v.length + 6 && g.includes(v)) {
+         title = normalizeTitleCandidate(guessedFromLines);
+        }
+    
+       if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+         title =
           inferTitleFromContent(ingredients, steps) ||
           fabricateTitleFromIngredientsRows(ingredients) ||
           title;
+        }
       }
-    }
-
     if (looksLikeEmotionalHookTitle(title)) {
-      title =
-        inferTitleFromContent(ingredients, steps) ||
-        fabricateTitleFromIngredientsRows(ingredients) ||
-        title;
+     title =
+     inferTitleFromContent(ingredients, steps) ||
+     fabricateTitleFromIngredientsRows(ingredients) ||
+     title;
     }
 
     if (looksLikeStepTitle(title)) {
-      title =
-        inferTitleFromContent(ingredients, steps) ||
-        fabricateTitleFromIngredientsRows(ingredients) ||
-        title;
+     title =
+     inferTitleFromContent(ingredients, steps) ||
+     fabricateTitleFromIngredientsRows(ingredients) ||
+     title;
     }
 
     // ✅ IMPORTANT : draft est déclaré AVANT d’être utilisé (sinon: cannot access draft before initialization)
@@ -1031,10 +981,10 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       totalCostEur: null,
     };
 
-    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer)
-    const priced = await priceIngredients(draft.ingredients);
-    draft.ingredients = priced.ingredients;
-    draft.totalCostEur = priced.totalCostEur;
+    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer) 
+    const priced = await priceIngredients(draft.ingredients); 
+    draft.ingredients = priced.ingredients; 
+    draft.totalCostEur = priced.totalCostEur; 
 
     // ✅ debug=title : renvoie seulement infos titres
     if (debugMode === 'title') {
@@ -1047,6 +997,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           mergedFromVision: mergedFromVision || null,
           bestVisionTitle: bestVisionTitle || null,
           guessedFromLines,
+          //headForTitle: head,
           finalTitle: title,
           firstLines: safeLinesForTitle.slice(0, 40),
           byImage: visionDebugByImage,

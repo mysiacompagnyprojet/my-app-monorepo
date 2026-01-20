@@ -851,6 +851,7 @@ const QTY_USED =
 
 const CUILL_RE = 'cuill(?:e|è)re(?:s)?';
 
+
 function postProcessIngredientName(name) {
   let n = normSpaces(name);
 
@@ -1081,6 +1082,7 @@ function cleanTitleCandidate(t) {
   return normSpaces(s);
 }
 
+
 // (le reste de ton fichier title + split etc. est inchangé)
 //function cleanTitleCandidate(t) {
 //  let s = normSpaces(t);
@@ -1240,6 +1242,10 @@ function canJoinTitleLines(prev, next) {
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   let out = normalizeTitleJoinPiece(scan[startIdx]);
   if (!out) return null;
+  //Ce guard évite de démarrer un merge sur "en poudre", "de sel", etc. (même si ça n’a pas I).
+  const firstRaw = scan[startIdx];
+  if (looksLikeIngredientFragmentTitleForTitle(firstRaw)) return null;
+  if (parseOcrIngredient(firstRaw)) return null;
 
   //si la premiére ligne est une ligne meta, on refuse de construire un titre fusionné
   if (isMetaInfoLineForTitle(out)) return null;
@@ -1253,6 +1259,9 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
 
     //on normalise la ligne suivante (supprime espaces/bizarreries OCR, etc...)
     const next = normalizeTitleJoinPiece(scan[k]);
+
+    if (/\sI\s/.test(scan[k]) || /\s\|\s/.test(scan[k])) return null;
+
     //si aprs normalisation c'st vide -> on stoppe la fusion (plus rien d'utile)
     if (!next) break;
 
@@ -1273,6 +1282,8 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   if (/\d/.test(out)) return null;
   if (isBadTitleCandidate(out)) return null;
   if (isTitleNoiseLabel(out)) return null;
+  // 🚫 listes compactes type "en poudre I pincée I c.à.s ..." LAISSER POUR SAUCE BIG MAC C'EST INDISPENSABLE
+  if (/\sI\s/.test(out) || /\s\|\s/.test(out)) return null;
 
   return out;
 }
@@ -2233,3 +2244,4 @@ module.exports = {
   extractServingsFromLine,
   miniReflow,
 };
+
