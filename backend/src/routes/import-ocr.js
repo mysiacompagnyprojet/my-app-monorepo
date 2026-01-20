@@ -626,7 +626,11 @@ function looksLikeMeasureLineTitle(t) {
   const s = normalizeTitleCandidate(t);
   if (!s) return false;
 
-  const low = stripDiacritics(s).toLowerCase();
+  const low = stripDiacritics(String(t || '')).toLowerCase();// changer le 20/01/26 : (s).toLowerCase();
+
+  // Un vrai titre (2+ mots) sans chiffres ne doit pas être classé "measure line"
+  //NE PAS ENLEVER POUR RECETTE 6
+  if (!/\d/.test(low) && low.split(/\s+/).length >= 3) return false;
 
   // commence par quantité/mesure/puce
   if (/^[-•*]?\s*\d/.test(s)) return true;
@@ -915,10 +919,15 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
+      // a supprimer c'est pour tester
+      console.log('[TITLE_FLOW] A after pick+normalize:', JSON.stringify({ bestVisionTitle, guessedFromLines, title }));
+
       //ajout du 19/01/26 14h25 =  pour recette 6
       function normalizeLoose(s) {
        return String(s || '')
-       .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+       .replace(/[’]/g, "'")
+       .normalize('NFD')
+       .replace(/[\u0300-\u036f]/g, '')
        .toLowerCase()
        .replace(/\s+/g, ' ')
        .trim();
@@ -937,8 +946,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         /^rapide\b/.test(v)
        );
       }
-
-      if (bestVisionTitle && guessedFromLines && title === normalizeTitleCandidate(guessedFromLines)) {
+      //                                                                           bestVisionTiltle à la place de guessedFromLines
+      if (bestVisionTitle && guessedFromLines) {//&& title === normalizeTitleCandidate(bestVisionTitle)) {
 
         //ajout du 19/01/26 14:29
          const v = normalizeLoose(bestVisionTitle);
@@ -947,27 +956,29 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         if (visionLooksLikeSuffix(v) && g.length >= v.length + 6 && g.includes(v)) {
          title = normalizeTitleCandidate(guessedFromLines);
         }
-    
-       if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
-         title =
-          inferTitleFromContent(ingredients, steps) ||
-          fabricateTitleFromIngredientsRows(ingredients) ||
-          title;
-        }
       }
-    if (looksLikeEmotionalHookTitle(title)) {
-     title =
-     inferTitleFromContent(ingredients, steps) ||
-     fabricateTitleFromIngredientsRows(ingredients) ||
-     title;
-    }
 
-    if (looksLikeStepTitle(title)) {
-     title =
-     inferTitleFromContent(ingredients, steps) ||
-     fabricateTitleFromIngredientsRows(ingredients) ||
-     title;
-    }
+      if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+                
+        title =
+        inferTitleFromContent(ingredients, steps) ||
+        fabricateTitleFromIngredientsRows(ingredients) ||
+        title;
+      }
+    
+      if (looksLikeEmotionalHookTitle(title)) {
+       title =
+       inferTitleFromContent(ingredients, steps) ||
+       fabricateTitleFromIngredientsRows(ingredients) ||
+       title;
+      }
+
+      if (looksLikeStepTitle(title)) {
+       title =
+       inferTitleFromContent(ingredients, steps) ||
+       fabricateTitleFromIngredientsRows(ingredients) ||
+       title;
+      }
 
     // ✅ IMPORTANT : draft est déclaré AVANT d’être utilisé (sinon: cannot access draft before initialization)
     const draft = {
