@@ -304,6 +304,8 @@ function looksLikeStepVerbLine(line) {
 
 
 module.export = {
+    QTY_USED,
+    CUILL_RE,
     fixCommonOcrQuantityUnitBugs,
     isIngredientsHeader,
     isPreparationHeader,
