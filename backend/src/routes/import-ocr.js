@@ -10,11 +10,17 @@ const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLik
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
 
 const { ocrFromBufferWithDebug } = require('../services/vision');
+const { buildMergedTitleCandidate} = require('../utils/titleMerge');
+const {
+    normalizeTitleJoinPiece,
+    normSpaces,
+    isBadTitleCandidate,
+} = require('.titleUtils');
+const { parseOcrIngredient} = require('../utils/ingredientParser');
 const {
   smartFilterWithTrashFromText,
   splitIngredientsAndSteps,
   joinWrappedLinesForSteps,
-  parseOcrIngredient,
   beautifyIngredients,
   guessTitleFromLines,
   miniReflow,
@@ -46,13 +52,6 @@ function normalizeTitleCandidate(s) {
 
 // ---------------- CAT-03.1.2 Helpers (local) ----------------
 
-function normSpaces(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
-
 function looksTruncatedTitle(t) {
   // ✅ rend robuste aux accents "combinés" (ex: "a\u0300" au lieu de "à")
   const s = normSpaces(String(t || ''))
@@ -67,20 +66,12 @@ function looksTruncatedTitle(t) {
   return /\b(et|de|d['’]|du|des|a)\s*$/.test(s);
 }
 
-function normalizeTitleJoinPiece(s) {
-  let t = normSpaces(s);
-  t = t.replace(/\s*\+\s*/g, ' ');
-  t = t.replace(/[⭑★☆✦✧✨]+$/g, '');
-  t = t.replace(/[.!?…]+$/g, '').trim();
-  return normSpaces(t);
-}
-
 function isBadTitleCandidateLocal(s) {
   const t = normSpaces(s).toLowerCase();
   if (!t) return true;
   if (t.includes('.com') || t.includes('.fr')) return true;
   if (/^\d/.test(t)) return true;
-  //remplacer par ci dessous le 20/01 - if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
+  // 1 - NOTES.md
   if (/^\d+([.,]\d+)?\s*(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
   if (/^(ml|cl|dl|l|g|gr|kg)$/.test(t.trim())) return true;
 
@@ -91,113 +82,6 @@ function isBadTitleCandidateLocal(s) {
   return false;
 }
 
-function canJoinTitleLines(prev, next) {
-  const a = normSpaces(prev);
-  const b = normSpaces(next);
-  if (!a || !b) return false;
-
-  if (/^ingr[ée]dients?\b/i.test(b)) return false;
-  if (/^(préparation|preparation|instructions?)\b/i.test(b)) return false;
-  if (/\b(temps|cuisson|portions?|calories?)\b/i.test(b)) return false;
-
-  if (parseOcrIngredient(b)) return false;
-  if (looksLikeStepTitle(b)) return false;
-
-  const aEndsOpen = /[,/&+–—-]\s*$/.test(a) || /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(a);
-  const bLooksContinuation = /^[A-ZÀ-ÖØ-Þa-zà-öø-ÿ]/.test(b) && !/^\d/.test(b) && b.length <= 60;
-
-  if (aEndsOpen) return true;
-  if (a.length <= 40 && bLooksContinuation) return true;
-
-  return false;
-}
-
-function isTitleNoiseLabel(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-
-  // Un seul "mot" tout en majuscules, court => souvent un label déco (FARINE, SUCRE, LEVURE...)
-  if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
-
-  return false;
-}
-
-function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
-  let out = normalizeTitleJoinPiece(scan[startIdx]);
-  if (!out) return null;
-  //Ce guard évite de démarrer un merge sur "en poudre", "de sel", etc. (même si ça n’a pas I).
-  const firstRaw = scan[startIdx];
-  if (looksLikeIngredientFragmentTitleForTitle(firstRaw)) return null;
-  if (parseOcrIngredient(firstRaw)) return null;
-
-  //si la premiére ligne est une ligne meta, on refuse de construire un titre fusionné
-  if (isMetaInfoLineForTitle(out)) return null;
-  if (isTitleNoiseLabel(out)) return null;
-
-  let used = 1;
-
-  for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
-    // ✅ saute labels genre "LEVURE", "FARINE"
-    if (isTitleNoiseLabel(scan[k])) continue;
-
-    //on normalise la ligne suivante (supprime espaces/bizarreries OCR, etc...)
-    const next = normalizeTitleJoinPiece(scan[k]);
-
-    if (/\sI\s/.test(scan[k]) || /\s\|\s/.test(scan[k])) return null;
-
-    //ajoute le 20/01
-    // 🚫 ne pas fusionner un sous-titre "tags" avec slash (ex: AIL/PAPRIKA/PARMESAN)
-    const rawNext = String(scan[k] || '');
-    
-    if (/[A-ZÀ-ÖØ-Þ]{2,}\/[A-ZÀ-ÖØ-Þ]{2,}/.test(rawNext) && rawNext.length <= 35) break;
-    //si aprs normalisation c'st vide -> on stoppe la fusion (plus rien d'utile)
-    if (!next) break;
-
-    // si la ligne suivante est une ligne meta (temps/cuisson/difficulté/portions/calories),
-    // on la saute (continue = on passe à la ligne suivante de la boucle)
-    if (isMetaInfoLineForTitle(next)) continue;
-
-    // si la ligne suivante n'est pas plausible, stop
-    if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
-    if (!canJoinTitleLines(out, next)) break;
-
-    // ajoute le 20/01 - ✅ éviter les doublons : si next est déjà contenu dans out, on saute
-    const outLow = out.toLowerCase();
-    const nextLow = next.toLowerCase();
-    if (outLow.includes(nextLow)) continue;
-
-
-    out = normSpaces(`${out} ${next}`);
-    used++;
-  }
-  // garde-fous
-  if (out.length < 6 || out.length > 90) return null;
-  if (/\d/.test(out)) return null;
-  if (isBadTitleCandidate(out)) return null;
-  if (isTitleNoiseLabel(out)) return null;
-  // 🚫 listes compactes type "en poudre I pincée I c.à.s ..." LAISSER POUR SAUCE BIG MAC C'EST INDISPENSABLE
-  if (/\sI\s/.test(out) || /\s\|\s/.test(out)) return null;
-
-  return out;
-}
-
-function isBlacklistedUiTitle(s) {
-  const t = normalizeTitleCandidate(s).toLowerCase();
-  if (!t) return true;
-
-  if (/→\s*suivre$/i.test(t)) return true;
-  if (/\bsuivre$/i.test(t) && t.includes('→')) return true;
-
-  if (t === 'toutes les publications' || t === 'toute les publications') return true;
-  if (t === 'enregistré' || t === 'enregistree' || t === 'enregistrée') return true;
-
-  if (t === 'recettes délice' || t === 'recettes delice') return true;
-  if (t === 'recettes et délices' || t === 'recettes et delices') return true;
-
-  if (t.startsWith('publication de')) return true;
-
-  return false;
-}
 
 function stripDiacritics(s) {
   return String(s || '')
