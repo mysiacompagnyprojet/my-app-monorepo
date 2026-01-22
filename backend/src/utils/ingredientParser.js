@@ -1,3 +1,6 @@
+//backend/src/utils/ingredientParsers
+
+const { normSpaces } = require('../utils/textUtils')
 const {
     fixCommonOcrQuantityUnitBugs,
     isIngredientsHeader,
@@ -121,6 +124,6 @@ function parseOcrIngredient(line) {
 
   return null;
 }
-module.export = {
+module.exports = {
     parseOcrIngredient,
 }

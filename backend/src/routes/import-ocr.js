@@ -3,29 +3,20 @@
 
 const express = require('express');
 const multer = require('multer');
-
+//ocrTitle
 const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
-
+//textUtils
+const { normSpaces, normalizeLoose, normalizeTitleCandidate, normalizeTitleJoinPiece, stripDiacritics, stripBulletPrefix, splitStepsFromLines } = require('../utils/textUtils')
 // ✅ Airtable service
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
-
 const { ocrFromBufferWithDebug } = require('../services/vision');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
-const {
-    normalizeTitleJoinPiece,
-    normSpaces,
-    isBadTitleCandidate,
-} = require('.titleUtils');
+//titleUtils
+const { sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix } = require('../utils/titleUtils');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
-const {
-  smartFilterWithTrashFromText,
-  splitIngredientsAndSteps,
-  joinWrappedLinesForSteps,
-  beautifyIngredients,
-  guessTitleFromLines,
-  miniReflow,
-} = require('../utils/ocrText');
-
+//ocrText
+const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
+const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 let parseRawLine = null;
 try {
   parseRawLine = require('../utils/ingredients')?.parseRawLine || null;
@@ -33,138 +24,8 @@ try {
   parseRawLine = null;
 }
 
-// ---------------- Helpers ----------------
-
-function stripBulletPrefix(s) {
-  return String(s || '')
-    .trim()
-    .replace(/^[•·⚫●○◦\-\*]+\s*/g, '')
-    .trim();
-}
-
-function normalizeTitleCandidate(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s*\n+\s*/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
 
 // ---------------- CAT-03.1.2 Helpers (local) ----------------
-
-function looksTruncatedTitle(t) {
-  // ✅ rend robuste aux accents "combinés" (ex: "a\u0300" au lieu de "à")
-  const s = normSpaces(String(t || ''))
-    .normalize('NFD') // sépare lettre + accent
-    .replace(/[\u0300-\u036f]/g, '') // enlève les accents
-    .trim()
-    .toLowerCase();
-
-  if (!s) return false;
-
-  // finissant par un connecteur => souvent titre coupé
-  return /\b(et|de|d['’]|du|des|a)\s*$/.test(s);
-}
-
-function isBadTitleCandidateLocal(s) {
-  const t = normSpaces(s).toLowerCase();
-  if (!t) return true;
-  if (t.includes('.com') || t.includes('.fr')) return true;
-  if (/^\d/.test(t)) return true;
-  // 1 - NOTES.md
-  if (/^\d+([.,]\d+)?\s*(g|gr|kg|ml|cl|dl|l)\b/.test(t)) return true;
-  if (/^(ml|cl|dl|l|g|gr|kg)$/.test(t.trim())) return true;
-
-  if (isBlacklistedUiTitle(t)) return true;
-  if (looksLikeEmotionalHookTitle(t)) return true;
-  if (looksLikeStepTitle(t)) return true;
-
-  return false;
-}
-
-
-function stripDiacritics(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function looksLikeEmotionalHookTitle(raw) {
-  const s0 = String(raw || '').trim();
-  if (!s0) return false;
-
-  const s = stripDiacritics(s0).toLowerCase();
-
-  if (
-    s.length > 60 &&
-    !/\b(recette|gateau|gâteau|soupe|salade|pates?|pâtes?|riz|poulet|boeuf|bœuf|porc|poisson)\b/.test(s)
-  ) {
-    return true;
-  }
-
-  if (/[!?]{2,}/.test(s)) return true;
-  if (/\bahah\b/.test(s)) return true;
-  if (/\bpersonne\b/.test(s)) return true;
-
-  if (/\b(j['’]ai|j[’']?|je|m['’]a|mon|ma|mes|moi)\b/.test(s)) return true;
-
-  const hooks = [
-    'comment vous dire',
-    'vous allez adorer',
-    'incroyable recette',
-    'trop bonne',
-    'trop bon',
-    'un delice',
-    'c est une tuerie',
-    'vous devez absolument',
-    'on raffole',
-    'ca m a remonte le moral',
-    'remonte le moral',
-    'je signale toute copie',
-    'protege par des droits d auteur',
-  ];
-
-  if (hooks.some((h) => s.includes(h))) return true;
-
-  if (s.length > 45 && /\b(dit|mangeait|voici|ajoute|ajoutee|comment|dire|remonte)\b/.test(s)) return true;
-
-  return false;
-}
-
-function looksLikeStepTitle(t) {
-  const s = String(t || '').trim();
-  if (!s) return false;
-  return /^[-•*]?\s*(hacher|hachez|eplucher|epluchez|éplucher|épluchez|égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger)\b/i.test(
-    s
-  );
-}
-
-function looksLikeLooseActionStep(line) {
-  const t = String(line || '').trim();
-  if (!t) return false;
-
-  const low = stripDiacritics(t).toLowerCase();
-
-  //1)debut ultra typique d'étape: "dans un saladier/bol/casseroles..."
-  if (/^dans\s+(un|une|le|la|les|du|de la|des)\b/.test(low)) return true;
-
-  //2)verbes d'action fréquents (présent , pas forcément "z")
-  if (/^(ajouter|ajoute|melanger|mélanger|mélange|melange|verser|verse|cuire|faire|chauffer|cahuffe|preparer|prepare|prépare|préparer|hacher|hache|egoutter|egoutte|égoutter|égoutte|laver|lave|couper|coupe|fouetter|fouette|battre|incorporer|incorpore|remuer|remue|peler|éplucher|epluche|eplucher|mixer|mixe|cuire|cuit|découper|decouper|découpe|decoupe)\b/.test(low)) {
-    return true;
-  }
-  return false;
-}
-
-function looksLikeIngredientOnlyTitle(line) {
-  const t = String(line || '');
-  if (!t) return false;
-  const low = stripDiacritics(t).toLowerCase();
-  //"du thym", "de la farine", "des oeufs"
-  if (/^(de|du|des)\s+(le|la|les|l')?\s*[a-z]{3,}$/.test(low) && low.length <= 18) {
-    return true;
-  }
-  return false;
-}
 
 function inferTitleFromContent(ingredientsRows, stepsArr) {
   const names = (ingredientsRows || [])
@@ -268,57 +129,6 @@ function fabricateTitleFromIngredientsRows(ingredientsRows) {
 function isUnitOnlyLine(s) {
   const l = String(s || '').trim().toLowerCase();
   return l === 'g' || l === 'kg' || l === 'ml' || l === 'cl' || l === 'l';
-}
-
-function joinWrappedLinesForIngredients(lines) {
-  const src = (lines || [])
-    .map((x) => String(x || '').replace(/\s+/g, ' ').trim())
-    .filter(Boolean);
-
-  const out = [];
-  let i = 0;
-
-  while (i < src.length) {
-    const cur = src[i];
-
-    if (/^\d+$/.test(cur) && i + 1 < src.length && isUnitOnlyLine(src[i + 1])) {
-      const qty = cur;
-      const unit = src[i + 1].trim();
-      i += 2;
-
-      const nameParts = [];
-      while (i < src.length) {
-        const x = src[i];
-        if (!x) {
-          i++;
-          continue;
-        }
-        if (/^\d+$/.test(x)) break;
-        if (isUnitOnlyLine(x)) break;
-        nameParts.push(x);
-        i++;
-
-        if (i < src.length && /^\d+/.test(src[i])) break;
-      }
-
-      const merged = `${qty} ${unit} ${nameParts.join(' ')}`.replace(/\s+/g, ' ').trim();
-      if (merged && merged !== `${qty} ${unit}`) out.push(merged);
-      continue;
-    }
-
-    if (isUnitOnlyLine(cur)) {
-      if (out.length > 0 && /\b\d+$/.test(out[out.length - 1])) {
-        out[out.length - 1] = `${out[out.length - 1]} ${cur}`.replace(/\s+/g, ' ').trim();
-      }
-      i++;
-      continue;
-    }
-
-    out.push(cur);
-    i++;
-  }
-
-  return out;
 }
 
 function uniqLines(arr) {
@@ -520,47 +330,6 @@ async function priceIngredients(ingredients) {
 }
 // jusqu'ici Airtable pricing (v1)
 
-function looksLikeHookOrLongSentenceTitle(t) {
-  const s = normalizeTitleCandidate(t);
-  if (!s) return false;
-
-  const low = stripDiacritics(s).toLowerCase();
-
-  // typique "phrase Instagram" / accroche
-  if (s.includes('?')) return true;
-  if (low.includes('pas de')) return true;
-  if (low.includes('tu peux')) return true;
-
-  // trop long => souvent pas un vrai titre
-  if (s.length > 45) return true;
-
-  return false;
-}
-
-function looksLikeMeasureLineTitle(t) {
-  const s = normalizeTitleCandidate(t);
-  if (!s) return false;
-
-  const low = stripDiacritics(String(t || '')).toLowerCase();// changer le 20/01/26 : (s).toLowerCase();
-
-  // Un vrai titre (2+ mots) sans chiffres ne doit pas être classé "measure line"
-  //NE PAS ENLEVER POUR RECETTE 6
-  if (!/\d/.test(low) && low.split(/\s+/).length >= 3) return false;
-
-  // commence par quantité/mesure/puce
-  if (/^[-•*]?\s*\d/.test(s)) return true;
-  if (/^[-•*]\s*/.test(s)) return true;
-
-  // contient unités classiques
-  if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(low)) return true;
-  if (/\b(c\.?a\.?s|c\.?à\.?s|c\.?a\.?c|c\.?à\.?c)\b/.test(low)) return true;
-
-  // ex: "I pincée", "1/2 c.à.c ..."
-  if (/\b(pinc[ée]e|pincée)\b/.test(low)) return true;
-
-  return false;
-}
-
 // ---------------- Router ----------------
 
 const router = express.Router();
@@ -658,7 +427,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
   const truncEnd = looksTruncatedTitle(bestVisionTitle);
   const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
-
+  const firstLines = safeLinesForTitle.slice(0, 60);
   if (bestVisionTitle && truncStart) {
    const idx = firstLines.findIndex(l =>
     normalizeTitleJoinPiece(l).toLowerCase() === normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
@@ -693,7 +462,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const merged = buildMergedTitleCandidate(scan, idxStart, 4);
 
-    if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidateLocal(merged)) {
+    if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidate(merged)) {
       bestVisionTitle = merged;
     }
     bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
@@ -783,38 +552,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     // ---------- STEPS ----------
     const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
-
-    function cleanStepPrefix(s) {
-      return String(s || '')
-        .replace(/^[\s•·\u2022\-*]+/g, '')
-        .replace(/^\d{1,3}\s*$/g, '')
-        .replace(/^\d{1,3}\s+(?=[A-ZÀ-ÖØ-Þ])/g, '')
-        .replace(/^\d{1,3}\s*[.)\-:]\s*/g, '')
-        .trim();
-    }
-
-    function splitStepsSmart(arr) {
-      const out = [];
-      for (const s0 of arr || []) {
-        let s = String(s0 || '').replace(/\s+/g, ' ').trim();
-        if (!s) continue;
-        if (/^\d{1,3}$/.test(s)) continue;
-
-        s = cleanStepPrefix(s);
-        if (!s) continue;
-
-        const parts = s
-          .split(/(?<=\.)\s+/g)
-          .map((x) => cleanStepPrefix(x))
-          .filter(Boolean);
-
-        if (parts.length >= 2 && (s.length >= 90 || parts.length >= 3)) out.push(...parts);
-        else out.push(s);
-      }
-      return out;
-    }
-
-    const steps = splitStepsSmart(rawSteps)
+    const steps = splitStepsFromLines(rawSteps)
       .map((s) => s.trim())
       .filter(Boolean)
       .filter((s) => s !== '•' && s !== '.' && s !== '·')
@@ -836,31 +574,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
-      
-      //ajout du 19/01/26 14h25 =  pour recette 6
-      function normalizeLoose(s) {
-       return String(s || '')
-       .replace(/[’]/g, "'")
-       .normalize('NFD')
-       .replace(/[\u0300-\u036f]/g, '')
-       .toLowerCase()
-       .replace(/\s+/g, ' ')
-       .trim();
-      }
 
-      function visionLooksLikeSuffix(v) {
-       if (!v) return false;
-       if (v.length > 22) return false;
-       return (
-        /^a\s+l['’]/.test(v) ||
-        /^a\s+la\b/.test(v) ||
-        /^a\s+aux\b/.test(v) ||
-        /^express\b/.test(v) ||
-        /^maison\b/.test(v) ||
-        /^facile\b/.test(v) ||
-        /^rapide\b/.test(v)
-       );
-      }
       //                                                                           bestVisionTiltle à la place de guessedFromLines
       if (bestVisionTitle && guessedFromLines) {//&& title === normalizeTitleCandidate(bestVisionTitle)) {
 

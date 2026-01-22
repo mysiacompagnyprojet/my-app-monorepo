@@ -1,21 +1,9 @@
 // backend/src/utils/ocrTitle.js
 'use strict';
-
+const { cleanTitleCandidate } = require('../utils/titleUtils')
+const { normSpaces } = require('../utils/textUtils')
 // Nettoyage léger
-function norm(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
 
-function cleanTitleCandidate(s) {
-  let t = norm(s);
-  // retire ponctuation “bord”
-  t = t.replace(/^[\s·•\-\–—\*\.,;:(){}[\]"“”'’]+/g, '');
-  t = t.replace(/[\s·•\-\–—\*\.,;:(){}[\]"“”'’]+$/g, '');
-  return norm(t);
-}
 
 function looksLikeIngredientFragmentTitleForTitle(line) {
   const t = String(line || '').replace(/\u00A0/g, ' ').replace(/[ \t]+/g, ' ').trim();

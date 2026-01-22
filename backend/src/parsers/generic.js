@@ -1,5 +1,6 @@
 // backend/src/parsers/generic.js
 const { parseRawLine } = require('../utils/ingredients');
+const { splitStepsFromText } = require('../utils/textUtils')
 
 // ───────────────── Helpers communs ─────────────────
 
@@ -246,49 +247,13 @@ function extractFallbackSteps($) {
   pSteps.slice(0, 20).forEach((p) => {
     if (p.length > 120) {
       // gros bloc → split intelligent
-      splitStepsSmart(p).forEach((s) => out.push(s));
+      splitStepsFromText(p).forEach((s) => out.push(s));
     } else {
       out.push(p);
     }
   });
 
   return out;
-}
-
-// Découpage intelligent d'un gros paragraphe en étapes
-function splitStepsSmart(text) {
-  if (!text) return [];
-
-  // Séparer par ". " mais en gardant les phrases complètes
-  const rawParts = text
-    .split(/(?<=[.!?])\s+(?=[A-ZÉÈÊÎÏÔÛÀÂÇ])/)
-    .map((t) => t.trim())
-    .filter(Boolean);
-
-  const verbs = [
-    'mettre', 'ajouter', 'préchauffer', 'melanger', 'mélanger',
-    'verser', 'hacher', 'couper', 'faire revenir', 'faire cuire',
-    'cuire', 'assaisonner', 'répartir', 'mixer', 'transvaser',
-    'râper', 'déglacer', 'enfourner', 'réserver'
-  ];
-
-  const steps = [];
-
-  for (let part of rawParts) {
-    const lower = part.toLowerCase();
-
-    // Si la phrase commence clairement par un verbe → nouvelle étape
-    const isStepStart = verbs.some((v) => lower.startsWith(v));
-
-    if (isStepStart || steps.length === 0) {
-      steps.push(part);
-    } else {
-      // sinon on fusionne dans l'étape précédente
-      steps[steps.length - 1] += ' ' + part;
-    }
-  }
-
-  return steps;
 }
 
 // ───────────────── Export principal ─────────────────
@@ -329,12 +294,12 @@ module.exports = async function parseGeneric($, url) {
         .map((i) => (typeof i === 'string' ? i : i?.text || ''))
         .filter(Boolean)
         .flatMap((s) => {
-          if (s.length > 120) return splitStepsSmart(s);
+          if (s.length > 120) return splitStepsFromText(s);
           return [s];
         });
     } else if (typeof recipeJson.recipeInstructions === 'string') {
       const s = recipeJson.recipeInstructions.trim();
-      steps = s.length > 120 ? splitStepsSmart(s) : [s];
+      steps = s.length > 120 ? splitStepsFromText(s) : [s];
     }
 
     const prep = formatIsoDuration(recipeJson.prepTime);

@@ -1,35 +1,15 @@
 // backend/src/utils/ocrText.js
 'use strict';
 
-const { looksLikeIngredientFragmentTitleForTitle } = require('./ocrTitle');
+const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
-const {
-    isMetaInfoLineForTitle,
-    isTitleNoiseLabel,
-    looksLikePlausibleTitleLine,
-    normSpaces,
-    isBadTitleCandidate,
-    BAD_TITLE_WORDS,
-    EMOTIONAL_TITLE_PATTERNS,
-} = require('.titleUtils');
-
-const {
-    isIngredientsHeader,
-    isPreparationHeader,
-    looksLikeDateNoise,
-    looksLikeCountersNoise,
-    looksLikeSocialNoise,
-    looksLikeStepLine,
-    looksLikeActionSentence,
-    looksLikeStepVerbLine,
-} = require('.ingredientUtils');
-
-function stripWeird(s) {
-  return String(s || '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\r/g, '');
-}
+//'../utils/textUtils'
+const { normSpaces, stripWeird, normalizeForDedup, extractServingsFromLine, looksLikeTimeInfoLine, looksLikeListBullet, looksLikeStepContinuation } = require('../utils/textUtils')
+//'../utils/titleUtils'
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate, sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils');
+//'../utils/ingredientUtils'
+const { isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 
 /* =========================
    TRASH / NOISE (iPhone + Social)
@@ -57,7 +37,6 @@ function looksLikeStatusBarNoise(line) {
   if (/^\d{1,3}%$/.test(t)) return true;
   return false;
 }
-
 
 function looksLikeEditorialNoise(line) {
   const t = normSpaces(line).toLowerCase();
@@ -125,37 +104,6 @@ function stripSocialHeaderPrefix(line) {
   // return normSpaces(t);
 //}
 
-// Détecte une phrase d'action OCR qui ressemble à une étape,
-// même si elle n'est pas numérotée et même si le verbe est au présent ("mélange", pas "mélangez").
-function looksLikeLooseActionStep(line) {
-  const t = normSpaces(String(line || ''));
-  if (!t) return false;
-
-  const low = t.toLowerCase();
-
-  // 1) Pattern ultra fréquent dans les recettes : "Dans un saladier, ..."
-  // => c'est une étape (pas un titre).
-  if (/^dans\s+(un|une|le|la|les)\b/i.test(low)) return true;
-
-  // 2) Verbes d'action très fréquents au présent (sans "z")
-  // (liste volontairement courte = patch minimal)
-  if (
-    /\b(mélange|ajoute|incorpore|verse|fouette|préchauffe|répartis|enfourne|dépose|dessine|finis)\b/i.test(
-      low
-    )
-  ) {
-    return true;
-  }
-
-  return false;
-}
-
-// ✅ helper unités seules (évite que "g" parte à la corbeille)
-function isUnitToken(line) {
-  const t = normSpaces(line);
-  return /^(g|kg|mg|ml|cl|dl|l)$/i.test(t);
-}
-
 // ✅ bruit "page seule" (ex: "304")
 function looksLikePageNumberOnly(line) {
   const t = normSpaces(line);
@@ -181,16 +129,6 @@ function isMostlyNoise(line) {
 /* =========================
    DEDUP (cross-captures)
 ========================= */
-
-function normalizeForDedup(line) {
-  return normSpaces(line)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^\w\s]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
 
 function dedupeLines(lines) {
   const seen = new Set();
@@ -323,97 +261,6 @@ function smartFilterWithTrashFromText(rawText) {
     lines: dedupeLines(lines),
     trash: dedupeLines(trash),
   };
-}
-
-
-/* =========================
-   SERVINGS / HEADERS
-========================= */
-
-function extractServingsFromLine(line) {
-  const t = normSpaces(line).toLowerCase();
-
-  let m = t.match(/ingr[ée]dients?\s+pour\s+(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = t.match(/\bpour\s+(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = t.match(/\bpour\s+(\d+)\s*(?:-|à|a)\s*(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
-
-  m = t.match(/\bpour\s+(\d+)\s*personnes?\b.*\bil\b.*\bfaut\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  // ✅ Facebook: "Portions : Environ 16 mini croques"
-  m = t.match(/\bportions?\s*[:\-–—]?\s*(?:environ\s*)?(\d+)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  return null;
-}
-
-function isIngredientsHeader(line) {
-  const t = normSpaces(line).toLowerCase();
-  if (/^ingr[ée]dients?\b/.test(t)) return true;
-  if (/^ingr[ée]dients?\s+pour\s+\d+\s*/.test(t)) return true;
-  if (/^pour\s+\d+\s*personnes?\b.*\bil\b.*\bfaut\b/.test(t)) return true;
-  return false;
-}
-
-
-
-function looksLikeTimeInfoLine(line) {
-  const t = normSpaces(line).toLowerCase();
-  if (!t) return false;
-
-  // Exemples acceptés :
-  // "Préparation : 45 min" / "preparation 45 min"
-  // "Cuisson : 20 minutes"
-  // "Temps de préparation 15 minutes"
-  const hasKeyword = /\b(préparation|preparation|cuisson|temps\s+de\s+préparation|temps\s+de\s+cuisson)\b/i.test(t);
-  if (!hasKeyword) return false;
-
-  // ✅ PATCH: accepte "minute(s)" en plus de "min"
-  const hasDuration = /\b\d+\s*(min|mn|mns|minute|minutes|h|heure|heures)\b/i.test(t);
-
-  return hasDuration;
-}
-
-
-
-/* =========================
-   STEP / INGREDIENT HEURISTICS
-========================= */
-
-function looksLikeListBullet(line) {
-  const t = normSpaces(line);
-  return /^[-•*]\s+/.test(t);
-}
-
-function looksLikeStepNumberedLine(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-  if (/^\s*(étape|step)\s*\d+/i.test(t)) return true;
-  if (/^\s*\d{1,2}\s*[\)\.\-:]/.test(t)) return true;
-  return false;
-}
-
-
-
-function looksLikeStepContinuation(prevLine, line) {
-  const prev = normSpaces(prevLine);
-  const cur = normSpaces(line);
-  if (!prev || !cur) return false;
-
-  if (!looksLikeStepNumberedLine(prev)) return false;
-
-  // ✅ continuation classique
-  if (/^(le|la|les|l['’]|un|une|des|du|de|d['’]|au|aux|et|puis|ensuite|à|a)\b/i.test(cur)) return true;
-
-  // ✅ Facebook: "recouverte..." / "immédiatement." après une étape numérotée
-  if (/^[a-zà-öø-ÿ]/.test(cur)) return true;
-
-  return false;
 }
 
 /* =========================
@@ -596,32 +443,6 @@ function beautifyIngredients(items) {
    TITLE (avec fallback sur ingrédients)
 ========================= */
 
-function stripEdgeEmojisAndPunct(s) {
-  let t = normSpaces(s);
-
-  // retire emojis/pictos au début/fin (sans toucher au texte au centre)
-  // (range large emojis + symboles fréquemment OCR)
-  t = t
-    .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
-    .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
-    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '')
-    .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
-
-  return normSpaces(t);
-}
-
-function cleanTitleCandidate(t) {
-  let s = normSpaces(t);
-
-  // ✅ NEW: enlève emojis/pictos en bordure
-  s = stripEdgeEmojisAndPunct(s);
-
-  s = s.replace(/[.!?…]+$/g, '');
-  s = stripEdgeEmojisAndPunct(s);
-
-  return normSpaces(s);
-}
-
 
 // (le reste de ton fichier title + split etc. est inchangé)
 //function cleanTitleCandidate(t) {
@@ -632,7 +453,7 @@ function cleanTitleCandidate(t) {
 //  return normSpaces(s);
 //}
 
-function isMostlyUppercaseTitle(line) {
+function isMostlyUppercaseTitle(line) { //utilisé qu'ici si utilisé ailleurs la mettre dans titleUtils puis l'importé
   const t = normSpaces(line);
   if (!t) return false;
   if (t.length < 6 || t.length > 80) return false;
@@ -645,33 +466,7 @@ function isMostlyUppercaseTitle(line) {
   return upp / letters >= 0.7;
 }
 
-function sanitizePickedTitle(title) {
-  let t = normSpaces(title);
-  if (!t) return '';
-
-  t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
-  t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
-  t = t.replace(/\b(temps|portions?|calories)\b\s*$/i, '').trim();//ajoute le 20/01
-
-  return normSpaces(t);
-}
-
-function isGenericSiteTitle(t) {
-  const s = normSpaces(t).toLowerCase();
-  if (!s) return true;
-
-  // Cas déjà gérés
-  if (s === 'recettes délice' || s === 'recettes delice') return true;
-  if (/^recettes?\b/.test(s) && s.length <= 30) return true;
-
-  // ✅ Nouveaux : noms de sites fréquents qui polluent le titre
-  // Ex: "yumrecette", "yum recette", OCR foireux "vum reccette", etc.
-  if (/\b(yum\s*recette|yumrecette|vum\s*recette|vum\s*reccette)\b/i.test(s)) return true;
-
-  return false;
-}
-
-function fabricateTitleFromIngredients(lines) {
+function fabricateTitleFromIngredients(lines) { //il faut revoir cette fonction qui est aussi dans import ocr
   const L = lines.map(normSpaces).filter(Boolean);
 
   const scan = [];
@@ -742,14 +537,7 @@ function fabricateTitleFromIngredients(lines) {
   return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
-function looksTruncatedTitle(t) {
-  const s = normSpaces(String(t || ''));
-  if (!s) return false;
-  // finit par un mot “connecteur” => souvent titre coupé
-  return /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(s);
-}
-
-// fonction trouver le titre explicite dans les premières lignes
+// fonction trouver le titre explicite dans les premières lignes, elle n'est utilisé qu'ici si ailleurs la mettre dans titleUtils et l'importé
 function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   // On prend les maxScan premières lignes, on normalise les espaces, on enlève les lignes vides
   const scan = lines.slice(0, maxScan).map(normSpaces).filter(Boolean);
@@ -890,7 +678,7 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   return candidates[0].t;
 }
 
-function extractTitleFromStepHeader(lines) {
+function extractTitleFromStepHeader(lines) { // si utilisé ailleurs la mettre dns titleUtils et l'importé
   const scan = (lines || []).slice(0, 80).map(normSpaces).filter(Boolean);
 
   for (const l of scan) {
@@ -912,7 +700,7 @@ function extractTitleFromStepHeader(lines) {
   return null;
 }
 //const default title - enlever
-function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6) {
+function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6) { // si utilisé ailleurs la mettre dns titleUtils et l'importé
   const scan = (lines || []).slice(0, maxScan).map(normSpaces).filter(Boolean);
 
   const idx = scan.findIndex((l) => isIngredientsHeader(l) || /^ingredients?\b/i.test(l));
@@ -965,7 +753,8 @@ function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6)
   return null;
 }
 
-function guessTitleFromLines(lines) {
+const DEFAULT_TITLE = 'Recette importée';
+function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
 
   // 1) "Title: ..." ou variantes explicites
@@ -1226,63 +1015,6 @@ function guessTitleFromLines(lines) {
    (tout le reste splitIngredientsAndSteps / miniReflow est identique à ton fichier)
    Je le laisse inchangé pour éviter tout risque.
 ========================= */
-
-// ---- Ton bloc "trailing ingredient block", "split", etc. reste inchangé ----
-// (Je le garde tel quel en bas : il dépend de parseOcrIngredient, qui marche toujours.)
-
-function isIngredientFragmentLine(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-
-  if (looksLikeActionSentence(t) || looksLikeStepVerbLine(t) || looksLikeStepLine(t)) return false;
-
-  if (/^\d{1,4}$/.test(t)) return true;
-  if (/^(de|d['’])\b/i.test(t)) return true;
-  if (/^(kg|g|mg|l|dl|cl|ml)\b/i.test(t)) return true;
-  if (/^(grill[eé]es?|concass[eé]es?)\b/i.test(t)) return true;
-
-  if (t.length <= 20 && /^[a-zà-öø-ÿ'’ -]+$/i.test(t) && !looksLikeStepLine(t)) return true;
-
-  return false;
-}
-
-function joinWrappedLinesForIngredients(lines) {
-  const out = [];
-  let buffer = '';
-
-  const flush = () => {
-    const s = normSpaces(buffer);
-    if (s) out.push(s);
-    buffer = '';
-  };
-
-  for (const raw of lines) {
-    const line = normSpaces(raw);
-    if (!line) continue;
-
-    if (!buffer) {
-      buffer = line;
-      continue;
-    }
-
-    const bufIsNumber = /^\d{1,4}$/.test(buffer);
-    const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
-    const nextStartsDe = /^(de|d['’])\b/i.test(line);
-    const nextIsFragment = isIngredientFragmentLine(line);
-
-    const nextIsUnit = isUnitToken(line);
-
-    if (bufIsNumber || bufEndsDe || nextStartsDe || nextIsFragment || nextIsUnit) {
-      buffer = `${buffer} ${line}`;
-    } else {
-      flush();
-      buffer = line;
-    }
-  }
-
-  flush();
-  return out;
-}
 
 function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
   if (!stepLines || stepLines.length < 3) return { ingredientLines, stepLines };
@@ -1728,7 +1460,6 @@ module.exports = {
   splitLongSteps,
   beautifyIngredients,
   guessTitleFromLines,
-  extractServingsFromLine,
   miniReflow,
 };
 

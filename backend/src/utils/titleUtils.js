@@ -1,5 +1,8 @@
+//backend/src/utils/titleUtils
 
-
+//'../utils/textUtils'
+const { normSpaces, normalizeTitleCandidate, stripDiacritics, extractServingsFromLine, looksLikeTimeInfoLine } = require('../utils/textUtils')
+const { isIngredientsHeader, isPreparationHeader, looksLikeStepLine } = require('../utils/ingredientUtils')
 // ---------------- BAD TITLE (Cat-03) ----------------
 
 const BAD_TITLE_WORDS = [
@@ -35,83 +38,60 @@ const  EMOTIONAL_TITLE_PATTERNS = [
   /\bet\s+maintenant\b/i,
 ];
 
-const DEFAULT_TITLE = 'Recette importée';
 
 
-function normalizeTitleJoinPiece(s) {
-  // Nettoyage léger spécifique "titre"
-  let t = cleanTitleCandidate(s);
-  t = sanitizePickedTitle(t);
-
-  // remplace les "+" OCR qui servent souvent de séparateur
-  t = t.replace(/\s*\+\s*/g, ' ');
-
-  // retire les étoiles/bullets décoratifs en fin (ex: "Cannelle⭑")
-  t = t.replace(/[⭑★☆✦✧✨]+$/g, '');
-
-  return normSpaces(t);
-}
-
-function isMetaInfoLineForTitle(s) {
-  const t = stripDiacritics(normSpaces(s)).toLowerCase();
+function isMetaInfoLineForTitle(line) {
+  const t = stripDiacritics(normSpaces(String(line || ''))).toLowerCase();
   if (!t) return false;
 
-  //labels/meta
-  if (
-    /^(portions?|portion|temps|calories?|cuisson|difficulte|difficulté|prep|prépa|preparation|préparation)\b/.test(t)
-  ) return true;
+  // 1) Labels / entêtes meta (début de ligne)
+  // ex: "Temps", "Temps de préparation", "Cuisson", "Difficulté", "Portions", "Calories", "Prépa", "Prep"
+  if (/^(temps|cuisson|difficulte|difficulté|portions?|calories?|prep|prepa|prépa|preparation|préparation)\b/.test(t)) {
+    return true;
+  }
 
-  // formes "temps:" "portions"
-  if (
-    /^(portions?|temps|calories?|cuisson|difficulte|difficulté)\b\s*[---]/.test(t)
-  ) return true;
+  // 2) Formes type "temps: 25 min" / "cuisson - 10 min" / "portions — 4"
+  if (/^(temps|cuisson|difficulte|difficulté|portions?|calories?)\b\s*[:\-–—]/.test(t)) {
+    return true;
+  }
 
-  // durées isolées
-  if (
-    /^\d+\s*(h|heure|heures|min|mins|minute|minutes)\b/.test(t)
-   
-  ) return true;
+  // 3) Durées isolées (souvent captées en lignes seules)
+  // ex: "25 min", "1 h", "45 minutes"
+  if (/^\d+\s*(h|heure|heures|min|mins|mn|mns|minute|minutes)\b/.test(t)) {
+    return true;
+  }
+
+  // 4) Cas fréquents "Temps de préparation", "Temps cuisson", etc.
+  if (/^temps\s+(de\s+)?(preparation|préparation|cuisson)\b/.test(t)) {
+    return true;
+  }
 
   return false;
 }
 
-// Détecte les lignes "meta" qui ne doivent JAMAIS être des titres.
-// Exemples : "Temps de préparation : 25mn", "Cuisson : 25 mn", "Difficulté: Très facile", "Portions", "Calories"
-function isMetaInfoLineForTitle(line) {
-  // On normalise les espaces (ex: espaces multiples -> 1 seul espace)
-  const t = normSpaces(String(line || ''));
-  // Si vide -> pas meta (mais ça ne sera pas un titre non plus)
-  if (!t) return false;
-
-  // On passe en minuscule pour comparer sans se soucier des majuscules
-  const low = t.toLowerCase();
-
-  return (
-    /^temps\b.*s/i.test(low) ||
-    /^cuisson\b.*s/i.test(low) ||
-    /^difficult[eé]?\b/i.test(low) ||
-    /^portions?\b/i.test(low) ||
-    /^calories?\b/i.test(low)
-  );
-}
 
 function isTitleNoiseLabel(line) {
-  const t = normSpaces(line);
+  const t = normSpaces(String(line || ''));
   if (!t) return false;
 
-  // Un seul "mot" tout en majuscules, court => souvent un label déco (FARINE, SUCRE, LEVURE...)
+  // "Recette" / "Recettes" (souvent un header)
+  if (/^recettes?$/i.test(t)) return true;
+
+  // "de Wendy", "de Marine", etc. (auteur)
+  // (autorise apostrophe droite ou typographique)
+  if (/^de\s+[a-zà-öø-ÿ'’-]{2,}$/i.test(t)) return true;
+
+  // 1 seul mot, tout en MAJUSCULES, court => typique label déco
+  // ex: "FARINE", "SUCRE"
   if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
 
-  return false;
-}
-function isTitleNoiseLabel(line) {
-  const t = normSpaces(String(line || ''));
-  if (!t) return false;
-
+  // 1 seul mot "ingrédient ultra commun" => souvent un faux titre
+  // (même si pas en majuscules)
   const low = t.toLowerCase();
-  if (
-    /^[a-zà-öø-ÿ'-]{3,12}$/i.test(t) &&
-    [
+  const isSingleWord = /^[a-zà-öø-ÿ'’-]{3,20}$/i.test(t);
+
+  if (isSingleWord) {
+    const NOISE_WORDS = new Set([
       'farine',
       'sucre',
       'levure',
@@ -120,25 +100,34 @@ function isTitleNoiseLabel(line) {
       'poivre',
       'huile',
       'lait',
+      'oeuf',
       'oeufs',
-      'Œufs',
-    ].includes(low)
-  ) {
-    return true;
+      'œuf',
+      'œufs',
+    ]);
+    if (NOISE_WORDS.has(low)) return true;
   }
-
-  // 1 seul mot, tout en majuscules, court => typique label déco
-  if (/^[A-ZÀ-ÖØ-Þ]{3,12}$/.test(t)) return true;
-  // "Recette" / "Recettes"
-  if (/^recettes?$/i.test(t)) return true;
-
-  // "de Wendy", "de Marine", etc. (auteur)
-  if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(t)) return true;
 
   return false;
 }
 
-function looksLikePlausibleTitleLine(line) {
+
+function isGenericSiteTitle(t) {
+  const s = normSpaces(t).toLowerCase();
+  if (!s) return true;
+
+  // Cas déjà gérés
+  if (s === 'recettes délice' || s === 'recettes delice') return true;
+  if (/^recettes?\b/.test(s) && s.length <= 30) return true;
+
+  // ✅ Nouveaux : noms de sites fréquents qui polluent le titre
+  // Ex: "yumrecette", "yum recette", OCR foireux "vum reccette", etc.
+  if (/\b(yum\s*recette|yumrecette|vum\s*recette|vum\s*reccette)\b/i.test(s)) return true;
+
+  return false;
+}
+
+function looksLikePlausibleTitleLine(line) { // il faut revoir celle ci vu qu'il y a parseOcrIngredient dedans
   const t = cleanTitleCandidate(line);
   if (!t) return false;
 
@@ -165,92 +154,82 @@ function looksLikePlausibleTitleLine(line) {
   return true;
 }
 
-function canJoinTitleLines(prev, next) {
+function canJoinTitleLines(prev, next) {//celle là aussi
   const a = normSpaces(prev);
   const b = normSpaces(next);
   if (!a || !b) return false;
 
-  // pas de join si l'une des lignes est "meta"
+  // pas de join si la 2e ligne est une section/meta
   if (isIngredientsHeader(b) || isPreparationHeader(b) || extractServingsFromLine(b)) return false;
+
+  // garde-fou si ton isPreparationHeader ne couvre pas "instructions"
+  if (/^instructions?\b/i.test(b)) return false;
+
+  // meta temps/calories/etc.
   if (looksLikeTimeInfoLine(b)) return false;
-  if (looksLikeStepLine(b) || parseOcrIngredient(b)) return false;
 
-  // heuristiques de collage (lignes de titre souvent courtes)
-  const aEndsOpen = /[,/&+–—-]\s*$/.test(a) || /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(a);
+  // pas de join si ça ressemble à step / ingrédient
+  if (looksLikeStepLine(b) || looksLikeStepTitle(b)) return false;
+  if (parseOcrIngredient(b)) return false;
 
-  const bLooksContinuation = /^[A-ZÀ-ÖØ-Þa-zà-öø-ÿ]/.test(b) && !/^\d/.test(b) && b.length <= 60;
+  // heuristiques de collage
+  const aEndsOpen =
+    /[,/&+–—-]\s*$/.test(a) ||
+    /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(a);
+
+  const bLooksContinuation =
+    /^[A-ZÀ-ÖØ-Þa-zà-öø-ÿ]/.test(b) &&
+    !/^\d/.test(b) &&
+    b.length <= 60;
 
   // on colle si :
-  // - la 1ère finit "ouverte" (virgule, &, +, "à", "de", etc.)
-  // - OU la 1ère est courte et la 2e ressemble clairement à une continuation
+  // - la 1ère finit "ouverte"
+  // - ou la 1ère est courte et la 2e ressemble à une continuation
   if (aEndsOpen) return true;
   if (a.length <= 40 && bLooksContinuation) return true;
 
   return false;
-}
-
-function canJoinTitleLines(prev, next) {
-  const a = normSpaces(prev);
-  const b = normSpaces(next);
-  if (!a || !b) return false;
-
-  if (/^ingr[ée]dients?\b/i.test(b)) return false;
-  if (/^(préparation|preparation|instructions?)\b/i.test(b)) return false;
-  if (/\b(temps|cuisson|portions?|calories?)\b/i.test(b)) return false;
-
-  if (parseOcrIngredient(b)) return false;
-  if (looksLikeStepTitle(b)) return false;
-
-  const aEndsOpen = /[,/&+–—-]\s*$/.test(a) || /\b(et|de|d['’]|du|des|à|a)\s*$/i.test(a);
-  const bLooksContinuation = /^[A-ZÀ-ÖØ-Þa-zà-öø-ÿ]/.test(b) && !/^\d/.test(b) && b.length <= 60;
-
-  if (aEndsOpen) return true;
-  if (a.length <= 40 && bLooksContinuation) return true;
-
-  return false;
-}
-
-function normSpaces(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
 }
 
 function isBadTitleCandidate(s) {
-  if (!s) return true;
-  const t = String(s).trim().toLowerCase();
+  const t = normSpaces(s).toLowerCase();
   if (!t) return true;
+
+  // exception explicite
   if (/^sauce\s+/i.test(t)) return false;
 
-  // ❌ Si le titre commence par une info meta ("temps:", "cuisson:", "difficulté:", etc.) -> ce n'est pas un titre de recette
-  // ^ = début de la chaîne \b = limite de mot (évite des faux positifs) \s* = espaces optionnels [:–—-]? = ponctuation possible après le mot
+  // meta en début (temps/cuisson/difficulté/portions/calories)
   if (/^(temps|cuisson|difficult[ée]|difficulte|portions?|calories?)\b\s*[:–—-]/i.test(t)) {
     return true;
   }
 
   // domaine / site
-  if (t.includes('.com') || t.includes('.fr')) return true;
+  if (t.includes('.com') || t.includes('.fr') || /\b\w+\.(com|fr|net|org)\b/i.test(t)) return true;
 
-  // mots exacts bloqués (UI / sections)
-  if (BAD_TITLE_WORDS.includes(t)) return true;
+  // UI / labels blacklistés (boutons, "afficher la suite", etc.)
+  if (isBlacklistedUiTitle(t)) return true;
 
-  // commence par un chiffre
+  // commence par un chiffre (souvent étape, temps, compteur, etc.)
   if (/^\d/.test(t)) return true;
 
-  //ajoute le 20/01 - rejete si le titre est uniquement une unité
-  if (/^(ml|cl|dl|l|g|gr|kg)$/i.test(t.trim())) return true;
+  // unité seule
+  if (/^(ml|cl|dl|l|g|gr|kg)$/.test(t.trim())) return true;
 
-  // commence par quantité + unité
+  // commence par quantité + unité (souvent ingrédient)
   if (/^\d+([.,]\d+)?\s*(g|gr|kg|ml|cl|dl|l)\b/i.test(t)) return true;
 
-  // contient une unité -> souvent un ingrédient / bruit
-  //remplacer par le if du dessus le 20/01 - if (/\b(g|gr|kg|ml|cl)\b/i.test(t)) return true;
+  // step / action
+  if (looksLikeStepTitle(t)) return true;
 
   // accroches émotionnelles
-  return EMOTIONAL_TITLE_PATTERNS.some((r) => r.test(t));
-}
+  if (looksLikeEmotionalHookTitle(t)) return true;
+  if (EMOTIONAL_TITLE_PATTERNS?.some((r) => r.test(t))) return true;
 
+  // mots exacts bloqués (sections, UI, etc.)
+  if (BAD_TITLE_WORDS?.includes(t)) return true;
+
+  return false;
+}
 
 function isBlacklistedUiTitle(s) {
   const t = normalizeTitleCandidate(s).toLowerCase();
@@ -270,18 +249,231 @@ function isBlacklistedUiTitle(s) {
   return false;
 }
 
-module.export = {
+function sanitizePickedTitle(title) {
+  let t = normSpaces(title);
+  if (!t) return '';
+
+  t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
+  t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
+  t = t.replace(/\b(temps|portions?|calories)\b\s*$/i, '').trim();//ajoute le 20/01
+
+  return normSpaces(t);
+}
+
+function looksLikeEmotionalHookTitle(raw) {
+  const s0 = String(raw || '').trim();
+  if (!s0) return false;
+
+  const s = stripDiacritics(s0).toLowerCase();
+
+  if (
+    s.length > 60 &&
+    !/\b(recette|gateau|gâteau|soupe|salade|pates?|pâtes?|riz|poulet|boeuf|bœuf|porc|poisson)\b/.test(s)
+  ) {
+    return true;
+  }
+
+  if (/[!?]{2,}/.test(s)) return true;
+  if (/\bahah\b/.test(s)) return true;
+  if (/\bpersonne\b/.test(s)) return true;
+
+  if (/\b(j['’]ai|j[’']?|je|m['’]a|mon|ma|mes|moi)\b/.test(s)) return true;
+
+  const hooks = [
+    'comment vous dire',
+    'vous allez adorer',
+    'incroyable recette',
+    'trop bonne',
+    'trop bon',
+    'un delice',
+    'c est une tuerie',
+    'vous devez absolument',
+    'on raffole',
+    'ca m a remonte le moral',
+    'remonte le moral',
+    'je signale toute copie',
+    'protege par des droits d auteur',
+  ];
+
+  if (hooks.some((h) => s.includes(h))) return true;
+
+  if (s.length > 45 && /\b(dit|mangeait|voici|ajoute|ajoutee|comment|dire|remonte)\b/.test(s)) return true;
+
+  return false;
+}
+
+function looksLikeStepTitle(t) {
+  const s = String(t || '').trim();
+  if (!s) return false;
+  return /^[-•*]?\s*(hacher|hachez|eplucher|epluchez|éplucher|épluchez|égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger)\b/i.test(
+    s
+  );
+}
+
+//choisir laquelle des deux function looksLikeLooseActionStep
+function looksLikeLooseActionStep(line) {
+  const t = normSpaces(String(line || ''));
+  if (!t) return false;
+
+  const low = stripDiacritics(t).toLowerCase();
+
+  // 1) Début ultra typique d'étape: "Dans un saladier/bol/casserole..."
+  if (/^dans\s+(un|une|le|la|les|du|de la|des)\b/.test(low)) return true;
+
+  // 2) Verbes d'action fréquents (présent / impératif / OCR sans accents)
+  // NB: on teste "startsWith" via regex début de ligne pour éviter de matcher un titre long
+  if (
+    /^(ajouter|ajoute|melanger|melange|verser|verse|cuire|cuit|faire|chauffer|chauffe|prechauffer|preparer|prepare|hacher|hache|egoutter|egoutte|laver|lave|couper|coupe|fouetter|fouette|battre|incorporer|incorpore|remuer|remue|peler|eplucher|mixer|mixe|decouper|decoupe|repartir|repartis|enfourner|enfourne|deposer|depose|finir|finis)\b/.test(
+      low
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function looksLikeIngredientOnlyTitle(line) {
+  const t = String(line || '');
+  if (!t) return false;
+  const low = stripDiacritics(t).toLowerCase();
+  //"du thym", "de la farine", "des oeufs"
+  if (/^(de|du|des)\s+(le|la|les|l')?\s*[a-z]{3,}$/.test(low) && low.length <= 18) {
+    return true;
+  }
+  return false;
+}
+
+function looksLikeHookOrLongSentenceTitle(t) {
+  const s = normalizeTitleCandidate(t);
+  if (!s) return false;
+
+  const low = stripDiacritics(s).toLowerCase();
+
+  // typique "phrase Instagram" / accroche
+  if (s.includes('?')) return true;
+  if (low.includes('pas de')) return true;
+  if (low.includes('tu peux')) return true;
+
+  // trop long => souvent pas un vrai titre
+  if (s.length > 45) return true;
+
+  return false;
+}
+
+function looksLikeMeasureLineTitle(t) {
+  const s = normalizeTitleCandidate(t);
+  if (!s) return false;
+
+  const low = stripDiacritics(String(t || '')).toLowerCase();// changer le 20/01/26 : (s).toLowerCase();
+
+  // Un vrai titre (2+ mots) sans chiffres ne doit pas être classé "measure line"
+  //NE PAS ENLEVER POUR RECETTE 6
+  if (!/\d/.test(low) && low.split(/\s+/).length >= 3) return false;
+
+  // commence par quantité/mesure/puce
+  if (/^[-•*]?\s*\d/.test(s)) return true;
+  if (/^[-•*]\s*/.test(s)) return true;
+
+  // contient unités classiques
+  if (/\b(g|gr|kg|ml|cl|dl|l)\b/.test(low)) return true;
+  if (/\b(c\.?a\.?s|c\.?à\.?s|c\.?a\.?c|c\.?à\.?c)\b/.test(low)) return true;
+
+  // ex: "I pincée", "1/2 c.à.c ..."
+  if (/\b(pinc[ée]e|pincée)\b/.test(low)) return true;
+
+  return false;
+}
+
+function looksTruncatedTitle(t) {
+  // robuste aux accents combinés (ex: "a\u0300")
+  const s = normSpaces(String(t || ''))
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .trim()
+    .toLowerCase();
+
+  if (!s) return false;
+
+  // finit par un connecteur => souvent titre coupé
+  // NB: "à" devient "a" après suppression des accents
+  return /\b(et|de|d['’]|du|des|a)\s*$/.test(s);
+}
+
+
+function visionLooksLikeSuffix(v) {
+       if (!v) return false;
+       if (v.length > 22) return false;
+       return (
+        /^a\s+l['’]/.test(v) ||
+        /^a\s+la\b/.test(v) ||
+        /^a\s+aux\b/.test(v) ||
+        /^express\b/.test(v) ||
+        /^maison\b/.test(v) ||
+        /^facile\b/.test(v) ||
+        /^rapide\b/.test(v)
+       );
+}
+
+function stripEdgeEmojisAndPunct(s) { 
+  let t = normSpaces(s);
+
+  // retire emojis/pictos au début/fin (sans toucher au texte au centre)
+  // (range large emojis + symboles fréquemment OCR)
+  t = t
+  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
+  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '')
+  .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
+  .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '');
+
+  t = t
+  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
+  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
+  return normSpaces(t);
+}
+
+function cleanTitleCandidate(input) {
+  let s = normSpaces(input);
+
+  // 1) nettoyage "bord" large (ponctuation/bullets/quotes)
+  s = s
+    .replace(/^[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+/g, '')
+    .replace(/[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+$/g, '');
+
+  // 2) enlève emojis/pictos en bordure (plus agressif mais safe)
+  s = stripEdgeEmojisAndPunct(s);
+
+  // 3) retire ponctuation de fin type "!!!", "…", "??"
+  s = s.replace(/[.!?…]+$/g, '');
+
+  // 4) re-nettoyage bord (au cas où)
+  s = stripEdgeEmojisAndPunct(s);
+
+  return normSpaces(s);
+}
+
+module.exports = {
     BAD_TITLE_WORDS,
     EMOTIONAL_TITLE_PATTERNS,
-    DEFAULT_TITLE,
-    normalizeTitleJoinPiece,
     isMetaInfoLineForTitle,
     isMetaInfoLineForTitle,
     isTitleNoiseLabel,
     isTitleNoiseLabel,
+    isGenericSiteTitle,
     looksLikePlausibleTitleLine,
     canJoinTitleLines,
     normSpaces,
     isBadTitleCandidate,
     isBlacklistedUiTitle,
+    sanitizePickedTitle,
+    looksLikeEmotionalHookTitle,
+    looksLikeStepTitle,
+    looksLikeLooseActionStep,
+    looksLikeIngredientOnlyTitle,
+    looksLikeHookOrLongSentenceTitle,
+    looksLikeMeasureLineTitle,
+    looksTruncatedTitle,
+    visionLooksLikeSuffix,
+    stripEdgeEmojisAndPunct,
+    cleanTitleCandidate,
 }

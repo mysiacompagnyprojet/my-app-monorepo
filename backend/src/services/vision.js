@@ -4,10 +4,9 @@
 const vision = require('@google-cloud/vision');
 const sharp = require('sharp');
 
-const {
-isValidRecipeTitleCandidate,
-cleanTitleCandidate,
-} = require('../utils/ocrTitle');
+const {isValidRecipeTitleCandidate, cleanTitleCandidate } = require('../utils/ocrTitle');
+const { tripEdgeEmojisAndPunct } = require('../utils/titleUtils')
+const { normSpaces } = require('../utils/textUtils')
 
 // ---------------------------------------------------------
 // ✅ Google credentials (Render / Prod) - robuste
@@ -18,13 +17,6 @@ cleanTitleCandidate,
 // ---------------------------------------------------------
 
 let client = null;
-
-function normSpaces(s) {
-return String(s || '')
-.replace(/\u00A0/g, ' ')
-.replace(/[ \t]+/g, ' ')
-.trim();
-}
 
 function normalizeServiceAccountObject(obj) {
 if (!obj || typeof obj !== 'object') return obj;
@@ -137,22 +129,6 @@ client = new vision.ImageAnnotatorClient();
 return client;
 }
 
-// Retire emojis/pictos au début/fin + ponctuation “bordure”
-function stripEdgeEmojisAndPunct(s) {
-let t = normSpaces(s);
-
-t = t
-.replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
-.replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '')
-.replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
-.replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '');
-
-t = t
-.replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
-.replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
-
-return normSpaces(t);
-}
 
 function cleanTitleLine(s) {
 let t = stripEdgeEmojisAndPunct(s);

@@ -1,5 +1,6 @@
+//backend/src/utils/ingredientUtils
 
-
+const { normSpaces, looksLikeStepNumberedLine } = require('../utils/textUtils')
 const QTY_USED =
   '([0-9]+(?:[.,][0-9]+)?|[0-9]+\\s+[0-9]+\\/[0-9]+|[0-9]+\\/[0-9]+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
 
@@ -302,8 +303,105 @@ function looksLikeStepVerbLine(line) {
 //);
 //}
 
+// ✅ helper unités seules (évite que "g" parte à la corbeille)
+function isUnitToken(line) {
+  const t = normSpaces(line);
+  return /^(g|kg|mg|ml|cl|dl|l)$/i.test(t);
+}
 
-module.export = {
+function isIngredientFragmentLine(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  if (looksLikeActionSentence(t) || looksLikeStepVerbLine(t) || looksLikeStepLine(t)) return false;
+
+  if (/^\d{1,4}$/.test(t)) return true;
+  if (/^(de|d['’])\b/i.test(t)) return true;
+  if (/^(kg|g|mg|l|dl|cl|ml)\b/i.test(t)) return true;
+  if (/^(grill[eé]es?|concass[eé]es?)\b/i.test(t)) return true;
+
+  if (t.length <= 20 && /^[a-zà-öø-ÿ'’ -]+$/i.test(t) && !looksLikeStepLine(t)) return true;
+
+  return false;
+}
+
+function joinWrappedLinesForIngredients(lines) {
+  const src = (lines || []).map((x) => normSpaces(x)).filter(Boolean);
+
+  const out = [];
+  let buffer = '';
+
+  const flush = () => {
+    const s = normSpaces(buffer);
+    if (s) out.push(s);
+    buffer = '';
+  };
+
+  for (let i = 0; i < src.length; i++) {
+    const cur = src[i];
+    const next = i + 1 < src.length ? src[i + 1] : '';
+
+    // 1) Cas fort "nombre seul" suivi d'une unité seule => on commence/continue un bloc
+    // Ex: "200" + "g" + "de farine" ...
+    if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
+      flush(); // on ferme ce qu'on avait avant pour éviter mélange
+      buffer = `${cur} ${next}`;
+      i++; // on consomme l'unité
+      continue;
+    }
+
+    // 2) Unité seule => si buffer finit par un nombre, on colle ; sinon on sort en ligne seule
+    // Ex: ["200", "g"] déjà géré par (1), mais on couvre d'autres variants.
+    if (isUnitToken(cur)) {
+      if (buffer && /\b\d{1,4}\s*$/.test(buffer)) {
+        buffer = `${buffer} ${cur}`;
+        continue;
+      }
+      // si on n'a pas de buffer, on garde l'unité (utile pour certains rescues)
+      flush();
+      out.push(cur);
+      continue;
+    }
+
+    // 3) Si pas de buffer, on démarre
+    if (!buffer) {
+      buffer = cur;
+      continue;
+    }
+
+    // 4) Heuristiques de collage (version "ocrText" + protections "import-ocr")
+    const bufIsNumber = /^\d{1,4}$/.test(buffer);
+    const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
+
+    const nextStartsDe = /^(de|d['’])\b/i.test(cur);
+    const curIsFragment = isIngredientFragmentLine(cur);
+    const curIsUnit = isUnitToken(cur);
+
+    // 4a) Si le buffer se termine par un connecteur ou un nombre, on colle
+    if (bufIsNumber || bufEndsDe) {
+      buffer = `${buffer} ${cur}`;
+      continue;
+    }
+
+    // 4b) Si la ligne courante est un fragment (de / d' / adjectif ingrédient / petit bout), on colle
+    if (nextStartsDe || curIsFragment || curIsUnit) {
+      buffer = `${buffer} ${cur}`;
+      continue;
+    }
+
+    // 4c) Sinon on flush et on redémarre
+    flush();
+    buffer = cur;
+  }
+
+  flush();
+
+  // Nettoyage final : resserre les espaces
+  return out.map((s) => normSpaces(s)).filter(Boolean);
+}
+
+
+module.exports = {
     QTY_USED,
     CUILL_RE,
     fixCommonOcrQuantityUnitBugs,
@@ -319,4 +417,7 @@ module.export = {
     normalizeUnit,
     looksLikeActionSentence,
     looksLikeStepVerbLine,
+    isUnitToken,
+    isIngredientFragmentLine,
+    joinWrappedLinesForIngredients,
 }

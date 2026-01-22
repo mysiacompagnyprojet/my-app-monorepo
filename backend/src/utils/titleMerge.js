@@ -1,16 +1,10 @@
-
+//backend/src/utils/titleMerge
 
 const { looksLikeIngredientFragmentTitleForTitle } = require('./ocrTitle');
 const { parseOcrIngredient} = require('./ingredientParser');
-const {
-    normalizeTitleJoinPiece,
-    isMetaInfoLineForTitle,
-    isTitleNoiseLabel,
-    looksLikePlausibleTitleLine,
-    canJoinTitleLines,
-    normSpaces,
-    isBadTitleCandidate,
-} = require('.titleUtils');
+const { normSpaces, normalizeTitleJoinPiece } = require('../utils/textUtils')
+//'.titleUtils'
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('.titleUtils');
 const { parseOcrIngredient } = require('./ingredientParser')
 
 
