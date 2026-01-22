@@ -127,9 +127,16 @@ function isGenericSiteTitle(t) {
   return false;
 }
 
-function looksLikePlausibleTitleLine(line) { // il faut revoir celle ci vu qu'il y a parseOcrIngredient dedans
+function looksLikePlausibleTitleLine(line, opts = {}) {
   const t = cleanTitleCandidate(line);
   if (!t) return false;
+
+  const isIngredientLine =
+    typeof opts.isIngredientLine === 'function' ? opts.isIngredientLine : null;
+
+  // optionnel : si tu veux surcharger la détection de step depuis ailleurs
+  const isStepLineFn =
+    typeof opts.isStepLine === 'function' ? opts.isStepLine : looksLikeStepLine;
 
   // pas un header/temps/servings
   if (isIngredientsHeader(t)) return false;
@@ -138,8 +145,8 @@ function looksLikePlausibleTitleLine(line) { // il faut revoir celle ci vu qu'il
   if (looksLikeTimeInfoLine(t)) return false;
 
   // pas une étape / pas un ingrédient
-  if (looksLikeStepLine(t)) return false;
-  if (parseOcrIngredient(t)) return false;
+  if (isStepLineFn(t)) return false;
+  if (isIngredientLine && isIngredientLine(t)) return false;
 
   // longueur réaliste, pas de digits
   if (t.length < 6 || t.length > 90) return false;
@@ -154,10 +161,14 @@ function looksLikePlausibleTitleLine(line) { // il faut revoir celle ci vu qu'il
   return true;
 }
 
-function canJoinTitleLines(prev, next) {//celle là aussi
+
+function canJoinTitleLines(prev, next, opts = {}) {
   const a = normSpaces(prev);
   const b = normSpaces(next);
   if (!a || !b) return false;
+
+  const isIngredientLine =
+    typeof opts.isIngredientLine === 'function' ? opts.isIngredientLine : null;
 
   // pas de join si la 2e ligne est une section/meta
   if (isIngredientsHeader(b) || isPreparationHeader(b) || extractServingsFromLine(b)) return false;
@@ -168,9 +179,11 @@ function canJoinTitleLines(prev, next) {//celle là aussi
   // meta temps/calories/etc.
   if (looksLikeTimeInfoLine(b)) return false;
 
-  // pas de join si ça ressemble à step / ingrédient
+  // pas de join si ça ressemble à step
   if (looksLikeStepLine(b) || looksLikeStepTitle(b)) return false;
-  if (parseOcrIngredient(b)) return false;
+
+  // pas de join si ingrédient (si on a le détecteur)
+  if (isIngredientLine && isIngredientLine(b)) return false;
 
   // heuristiques de collage
   const aEndsOpen =
@@ -182,14 +195,12 @@ function canJoinTitleLines(prev, next) {//celle là aussi
     !/^\d/.test(b) &&
     b.length <= 60;
 
-  // on colle si :
-  // - la 1ère finit "ouverte"
-  // - ou la 1ère est courte et la 2e ressemble à une continuation
   if (aEndsOpen) return true;
   if (a.length <= 40 && bLooksContinuation) return true;
 
   return false;
 }
+
 
 function isBadTitleCandidate(s) {
   const t = normSpaces(s).toLowerCase();

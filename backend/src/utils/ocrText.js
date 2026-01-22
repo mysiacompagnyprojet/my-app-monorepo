@@ -227,7 +227,10 @@ function smartFilterWithTrashFromText(rawText) {
     if (looksLikeSocialNoise(l)) {
       if (/^publication\s+de\s+/i.test(l)) {
         const salvaged = stripSocialHeaderPrefix(l);
-        if (looksLikePlausibleTitleLine(salvaged)) {
+        const pausible = looksLikePlausibleTitleLine(salvaged, {
+         isIngredientLine: (s) => !!parseOcrIngredient(s),
+        });
+        if (pausible(salvaged)) {
           lines.push(salvaged);
           continue;
         }

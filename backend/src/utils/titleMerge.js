@@ -43,9 +43,11 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
     // on la saute (continue = on passe à la ligne suivante de la boucle)
     if (isMetaInfoLineForTitle(next)) continue;
 
+    const isIngredientLine = (s) => !!parseOcrIngredient(s);   
+    const pausible = looksLikePlausibleTitleLine(salvaged, { isIngredientLine });
     // si la ligne suivante n'est pas plausible, stop
-    if (!looksLikePlausibleTitleLine(next) && !canJoinTitleLines(out, next)) break;
-    if (!canJoinTitleLines(out, next)) break;
+    if (!pausible && !canJoinTitleLines(out, next, { isIngredient })) break;
+    if (!canJoinTitleLines(out, next, { isIngredientLine })) break;
 
     // ajoute le 20/01 - ✅ éviter les doublons : si next est déjà contenu dans out, on saute
     const outLow = out.toLowerCase();

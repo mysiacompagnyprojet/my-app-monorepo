@@ -1,23 +1,8 @@
 //backend/src/utils/ingredientParsers
 
 const { normSpaces } = require('../utils/textUtils')
-const {
-    fixCommonOcrQuantityUnitBugs,
-    isIngredientsHeader,
-    isPreparationHeader,
-    looksLikeDateNoise,
-    looksLikeCountersNoise,
-    looksLikeSocialNoise,
-    looksLikeStepLine,
-    postProcessIngredientName,
-    normalizeQuantityRawForDisplay,
-    parseQuantityToNumber,
-    normalizeUnit,
-    looksLikeActionSentence,
-    looksLikeStepVerbLine,
-    QTY_USED,
-    CUILL_RE,
-} = require('.ingredientUtils');
+//ingredientUtils
+const { fixCommonOcrQuantityUnitBugs, isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, looksLikeStepLine, postProcessIngredientName, normalizeQuantityRawForDisplay, parseQuantityToNumber, normalizeUnit, looksLikeActionSentence, looksLikeStepVerbLine, QTY_USED, CUILL_RE } = require('../utils/ingredientUtils');
 
 function parseOcrIngredient(line) {
   const raw0 = normSpaces(line);
