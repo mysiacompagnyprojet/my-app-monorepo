@@ -1,7 +1,8 @@
 //backend/src/utils/titleUtils
 
-//'../utils/textUtils'
+//textUtils
 const { normSpaces, normalizeTitleCandidate, stripDiacritics, extractServingsFromLine, looksLikeTimeInfoLine } = require('../utils/textUtils')
+//ingredientUtils
 const { isIngredientsHeader, isPreparationHeader, looksLikeStepLine } = require('../utils/ingredientUtils')
 // ---------------- BAD TITLE (Cat-03) ----------------
 
@@ -321,7 +322,6 @@ function looksLikeStepTitle(t) {
   );
 }
 
-//choisir laquelle des deux function looksLikeLooseActionStep
 function looksLikeLooseActionStep(line) {
   const t = normSpaces(String(line || ''));
   if (!t) return false;
@@ -467,13 +467,10 @@ module.exports = {
     BAD_TITLE_WORDS,
     EMOTIONAL_TITLE_PATTERNS,
     isMetaInfoLineForTitle,
-    isMetaInfoLineForTitle,
-    isTitleNoiseLabel,
     isTitleNoiseLabel,
     isGenericSiteTitle,
     looksLikePlausibleTitleLine,
     canJoinTitleLines,
-    normSpaces,
     isBadTitleCandidate,
     isBlacklistedUiTitle,
     sanitizePickedTitle,

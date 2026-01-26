@@ -1,7 +1,6 @@
 // backend/src/utils/ocrTitle.js
 'use strict';
 const { cleanTitleCandidate } = require('../utils/titleUtils')
-const { normSpaces } = require('../utils/textUtils')
 // Nettoyage léger
 
 
@@ -40,9 +39,6 @@ function looksLikeIngredientFragmentTitleForTitle(line) {
 
    if (hasMeasureToken && hasIngredientGrammar) return true;
    if (hasIngredientFragment && hasIngredientGrammar) return true;
-
-
-   
 
    // Infographie / liste compacte type "en poudre I pincée I c.à.s ..." - A LAISSER
    if (/\s\|\s/.test(t)) return true;
@@ -195,12 +191,14 @@ function tryMergeSplitTitle(linesOrCandidates) {
 }
 
 module.exports = {
-  cleanTitleCandidate,
+  looksLikeIngredientFragmentTitleForTitle,
+  isUiTitleBlacklisted,
+  looksLikeStepSentence,
+  isAssaisonnementOnly,
   isValidRecipeTitleCandidate,
   scoreTitleCandidate,
   pickBestTitle,
   tryMergeSplitTitle,
-  looksLikeIngredientFragmentTitleForTitle,
 };
 
 

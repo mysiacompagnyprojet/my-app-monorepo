@@ -1,7 +1,5 @@
 //backend/src/utils/textUtils
 
-const { normalizeTitleCandidate } = require("./titleUtils");
-
 function normSpaces(s) {
   return String(s || '')
     .replace(/\u00A0/g, ' ')

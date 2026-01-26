@@ -1,11 +1,11 @@
 //backend/src/utils/titleMerge
 
-const { looksLikeIngredientFragmentTitleForTitle } = require('./ocrTitle');
-const { parseOcrIngredient} = require('./ingredientParser');
-const { normSpaces, normalizeTitleJoinPiece } = require('../utils/textUtils')
-//'.titleUtils'
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('.titleUtils');
-const { parseOcrIngredient } = require('./ingredientParser')
+const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
+const { parseOcrIngredient} = require('../utils/ingredientParser');
+const { normSpaces, normalizeTitleJoinPiece } = require('../utils/textUtils');
+//titleUtils
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('../utils/titleUtils');
+
 
 
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {

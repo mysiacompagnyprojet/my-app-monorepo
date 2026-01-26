@@ -1,4 +1,7 @@
 NOTES GENERALES/INFO :
+26/01 -- 
+  TitleUtils :  les fonctions du fichier sont bien déclaré que dans ce fichier, les fonctions importées dans le fichier sont utilisées.
+  ocrTitle : les fonctions du fichier sont déclaré que dans celui-ci, les fonctions utilisées sont bien importées.
 
 
 
