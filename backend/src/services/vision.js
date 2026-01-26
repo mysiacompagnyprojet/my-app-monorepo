@@ -4,9 +4,10 @@
 const vision = require('@google-cloud/vision');
 const sharp = require('sharp');
 
-const {isValidRecipeTitleCandidate, cleanTitleCandidate } = require('../utils/ocrTitle');
-const { tripEdgeEmojisAndPunct } = require('../utils/titleUtils')
-const { normSpaces } = require('../utils/textUtils')
+const { isValidRecipeTitleCandidate } = require('../utils/ocrTitle');
+const { stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils')
+//stringUtils
+const { normSpaces } = require('../utils/stringUtils');
 
 // ---------------------------------------------------------
 // ✅ Google credentials (Render / Prod) - robuste

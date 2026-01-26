@@ -3,10 +3,15 @@
 
 const express = require('express');
 const multer = require('multer');
+//stringUtils
+const { normSpaces, stripBulletPrefix, normalizeLoose, normalizeTitleCandidate } = require('../utils/stringUtils');
 //ocrTitle
 const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 //textUtils
-const { normSpaces, normalizeLoose, normalizeTitleCandidate, normalizeTitleJoinPiece, stripDiacritics, stripBulletPrefix, splitStepsFromLines } = require('../utils/textUtils')
+const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils')
+//stringUtils
+const { stripDiacritics } = require('../utils/stringUtils')
+
 // ✅ Airtable service
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
 const { ocrFromBufferWithDebug } = require('../services/vision');

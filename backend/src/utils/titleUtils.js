@@ -1,9 +1,11 @@
 //backend/src/utils/titleUtils
 
-//textUtils
-const { normSpaces, normalizeTitleCandidate, stripDiacritics, extractServingsFromLine, looksLikeTimeInfoLine } = require('../utils/textUtils')
 //ingredientUtils
 const { isIngredientsHeader, isPreparationHeader, looksLikeStepLine } = require('../utils/ingredientUtils')
+//stringUtils
+const { normSpaces, stripDiacritics, normalizeTitleCandidate, looksLikeTimeInfoLine } = require('../utils/stringUtils');
+//utils
+const { extractServingsFromLine } = require('../utils/units');
 // ---------------- BAD TITLE (Cat-03) ----------------
 
 const BAD_TITLE_WORDS = [

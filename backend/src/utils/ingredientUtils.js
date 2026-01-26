@@ -1,6 +1,8 @@
 //backend/src/utils/ingredientUtils
 
-const { normSpaces, looksLikeStepNumberedLine } = require('../utils/textUtils')
+//stringUtils
+const { normSpaces, looksLikeStepNumberedLine } = require('../utils/stringUtils');
+
 const QTY_USED =
   '([0-9]+(?:[.,][0-9]+)?|[0-9]+\\s+[0-9]+\\/[0-9]+|[0-9]+\\/[0-9]+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
 

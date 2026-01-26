@@ -4,13 +4,16 @@
 const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
-//'../utils/textUtils'
-const { normSpaces, stripWeird, normalizeForDedup, extractServingsFromLine, looksLikeTimeInfoLine, looksLikeListBullet, looksLikeStepContinuation } = require('../utils/textUtils')
-//'../utils/titleUtils'
+//stringUtils
+const { normSpaces, stripWeird, looksLikeTimeInfoLine } = require('../utils/stringUtils');
+//textUtils'
+const { normalizeForDedup, looksLikeListBullet, looksLikeStepContinuation } = require('../utils/textUtils')
+//titleUtils'
 const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate, sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils');
-//'../utils/ingredientUtils'
+//ingredientUtils'
 const { isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
-
+//unit.js
+const { extractServingsFromLine } = require('../utils/units');
 /* =========================
    TRASH / NOISE (iPhone + Social)
 ========================= */
@@ -227,10 +230,10 @@ function smartFilterWithTrashFromText(rawText) {
     if (looksLikeSocialNoise(l)) {
       if (/^publication\s+de\s+/i.test(l)) {
         const salvaged = stripSocialHeaderPrefix(l);
-        const pausible = looksLikePlausibleTitleLine(salvaged, {
+        const plausible = looksLikePlausibleTitleLine(salvaged, {
          isIngredientLine: (s) => !!parseOcrIngredient(s),
         });
-        if (pausible(salvaged)) {
+        if (plausible(salvaged)) {
           lines.push(salvaged);
           continue;
         }

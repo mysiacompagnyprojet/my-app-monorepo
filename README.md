@@ -28,3 +28,7 @@ curl -s -X POST "$SUPABASE_URL/auth/v1/token?grant_type=password" -H "apikey: $S
 
 export TOKEN=
 echo TOKEN
+
+SCRIPT TEST IMPORT OCR :
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@C:/Users/hp/Desktop/Projet avec ChatGPT/Capture test import-ocr/RECETTE16/RECETTE161.PNG" -F "files=@C:/Users/hp/Desktop/Projet avec ChatGPT/Capture test import-ocr/RECETTE16/RECETTE162.PNG" -F "files=@C:/Users/hp/Desktop/Projet avec ChatGPT/Capture test import-ocr/RECETTE16/RECETTE163.PNG"
+

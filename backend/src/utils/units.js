@@ -1,10 +1,36 @@
 // backend/src/utils/units.js
+
+//stringUtils
+const { normSpaces } = require('../utils/stringUtils');
+
+
 function stripAccents(s = '') {
   return String(s)
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '');
 }
 
+function extractServingsFromLine(line) {
+  const t = normSpaces(line).toLowerCase();
+
+  let m = t.match(/ingr[ée]dients?\s+pour\s+(\d+)\s*(personnes|parts|portions)\b/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = t.match(/\bpour\s+(\d+)\s*(personnes|parts|portions)\b/i);
+  if (m) return parseInt(m[1], 10);
+
+  m = t.match(/\bpour\s+(\d+)\s*(?:-|à|a)\s*(\d+)\s*(personnes|parts|portions)\b/i);
+  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
+
+  m = t.match(/\bpour\s+(\d+)\s*personnes?\b.*\bil\b.*\bfaut\b/i);
+  if (m) return parseInt(m[1], 10);
+
+  // ✅ Facebook: "Portions : Environ 16 mini croques"
+  m = t.match(/\bportions?\s*[:\-–—]?\s*(?:environ\s*)?(\d+)\b/i);
+  if (m) return parseInt(m[1], 10);
+
+  return null;
+}
 /**
  * Retourne l'unité canon (chaine courte, ascii):
  *  - poids:  mg, g, kg
@@ -109,6 +135,7 @@ function convertUnitForPricing(name, qty, unitRecipe, unitPrice) {
 
 module.exports = {
   stripAccents,
+  extractServingsFromLine,
   canonUnit,
   normalizeUnit,
   toBaseUnit,

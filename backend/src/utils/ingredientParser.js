@@ -1,6 +1,7 @@
 //backend/src/utils/ingredientParsers
 
-const { normSpaces } = require('../utils/textUtils')
+//stringUtils
+const { normSpaces } = require('../utils/stringUtils');
 //ingredientUtils
 const { fixCommonOcrQuantityUnitBugs, isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, looksLikeStepLine, postProcessIngredientName, normalizeQuantityRawForDisplay, parseQuantityToNumber, normalizeUnit, looksLikeActionSentence, looksLikeStepVerbLine, QTY_USED, CUILL_RE } = require('../utils/ingredientUtils');
 

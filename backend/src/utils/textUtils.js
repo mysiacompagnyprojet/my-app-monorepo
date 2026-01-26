@@ -1,30 +1,6 @@
 //backend/src/utils/textUtils
-
-function normSpaces(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
-}
-
-function stripDiacritics(s) {
-  return String(s || '')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
-}
-
-function stripWeird(s) {
-  return String(s || '')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '')
-    .replace(/\r/g, '');
-}
-
-function stripBulletPrefix(s) {
-  return String(s || '')
-    .trim()
-    .replace(/^[•·⚫●○◦\-\*]+\s*/g, '')
-    .trim();
-}
+const { cleanTitleCandidate, sanitizePickedTitle } = require('../utils/titleUtils');
+const { normSpaces, cleanStepPrefix, looksLikeStepNumberedLine } = require('../utils/stringUtils');
 
 function normalizeForDedup(line) {
   return normSpaces(line)
@@ -33,25 +9,6 @@ function normalizeForDedup(line) {
     .replace(/[\u0300-\u036f]/g, '')
     .replace(/[^\w\s]/g, '')
     .replace(/\s+/g, ' ')
-    .trim();
-}
-
-//ajout du 19/01/26 14h25 =  pour recette 6
-function normalizeLoose(s) {
-  return String(s || '')
-  .replace(/[’]/g, "'")
-  .normalize('NFD')
-  .replace(/[\u0300-\u036f]/g, '')
-  .toLowerCase()
-  .replace(/\s+/g, ' ')
-  .trim();
-}
-
-function normalizeTitleCandidate(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s*\n+\s*/g, ' ')
-    .replace(/[ \t]+/g, ' ')
     .trim();
 }
 
@@ -67,15 +24,6 @@ function normalizeTitleJoinPiece(s) {
   t = t.replace(/[⭑★☆✦✧✨]+$/g, '');
 
   return normSpaces(t);
-}
-
-function cleanStepPrefix(s) {
-      return String(s || '')
-        .replace(/^[\s•·\u2022\-*]+/g, '')
-        .replace(/^\d{1,3}\s*$/g, '')
-        .replace(/^\d{1,3}\s+(?=[A-ZÀ-ÖØ-Þ])/g, '')
-        .replace(/^\d{1,3}\s*[.)\-:]\s*/g, '')
-        .trim();
 }
 
 // pour import ocr
@@ -136,57 +84,9 @@ function splitStepsFromText(text) {
   return steps;
 }
 
-
-function extractServingsFromLine(line) {
-  const t = normSpaces(line).toLowerCase();
-
-  let m = t.match(/ingr[ée]dients?\s+pour\s+(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = t.match(/\bpour\s+(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  m = t.match(/\bpour\s+(\d+)\s*(?:-|à|a)\s*(\d+)\s*(personnes|parts|portions)\b/i);
-  if (m) return Math.max(parseInt(m[1], 10), parseInt(m[2], 10));
-
-  m = t.match(/\bpour\s+(\d+)\s*personnes?\b.*\bil\b.*\bfaut\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  // ✅ Facebook: "Portions : Environ 16 mini croques"
-  m = t.match(/\bportions?\s*[:\-–—]?\s*(?:environ\s*)?(\d+)\b/i);
-  if (m) return parseInt(m[1], 10);
-
-  return null;
-}
-
-function looksLikeTimeInfoLine(line) {
-  const t = normSpaces(line).toLowerCase();
-  if (!t) return false;
-
-  // Exemples acceptés :
-  // "Préparation : 45 min" / "preparation 45 min"
-  // "Cuisson : 20 minutes"
-  // "Temps de préparation 15 minutes"
-  const hasKeyword = /\b(préparation|preparation|cuisson|temps\s+de\s+préparation|temps\s+de\s+cuisson)\b/i.test(t);
-  if (!hasKeyword) return false;
-
-  // ✅ PATCH: accepte "minute(s)" en plus de "min"
-  const hasDuration = /\b\d+\s*(min|mn|mns|minute|minutes|h|heure|heures)\b/i.test(t);
-
-  return hasDuration;
-}
-
 function looksLikeListBullet(line) {
   const t = normSpaces(line);
   return /^[-•*]\s+/.test(t);
-}
-
-function looksLikeStepNumberedLine(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-  if (/^\s*(étape|step)\s*\d+/i.test(t)) return true;
-  if (/^\s*\d{1,2}\s*[\)\.\-:]/.test(t)) return true;
-  return false;
 }
 
 function looksLikeStepContinuation(prevLine, line) {
@@ -208,19 +108,10 @@ function looksLikeStepContinuation(prevLine, line) {
 
 
 module.exports = {
-    normSpaces,
-    stripDiacritics,
-    stripWeird,
-    stripBulletPrefix,
     normalizeForDedup,
-    normalizeLoose,
-    normalizeTitleCandidate,
     normalizeTitleJoinPiece,
-    cleanStepPrefix,
     splitStepsFromLines,
     splitStepsFromText,
-    extractServingsFromLine,
-    looksLikeTimeInfoLine,
     looksLikeListBullet,
     looksLikeStepNumberedLine,
     looksLikeStepContinuation,
