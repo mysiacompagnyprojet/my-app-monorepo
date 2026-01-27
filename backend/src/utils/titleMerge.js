@@ -37,6 +37,15 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   // Ici : une ligne est un ingrédient si parseOcrIngredient retourne quelque chose
   const isIngredientLine = (s) => !!parseOcrIngredient(s);
 
+  // ✅ PATCH: autoriser certains "préfixes plats" comme début de titre
+  // ex: "Tarte rustique" + "Chèvre-miel et noix" => titre complet
+  function isGenericDishPrefix(s) {
+    const t = normSpaces(String(s || '')).toLowerCase();
+    return /^(tarte|tarte rustique|quiche|gratin|soupe|salade|pates|pâtes|cake|muffins?|cookies?|gateau|gâteau)\b/.test(
+      t
+    );
+  }
+
   // Parcours des lignes suivantes pour tenter une fusion
   for (let k = startIdx + 1; k < scan.length && used < maxLines; k++) {
     const rawLine = scan[k];
@@ -49,10 +58,7 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
 
     // ❌ Tags du type "AIL/PAPRIKA/PARMESAN"
     const rawNext = String(rawLine || '');
-    if (
-      /[A-ZÀ-ÖØ-Þ]{2,}\/[A-ZÀ-ÖØ-Þ]{2,}/.test(rawNext) &&
-      rawNext.length <= 35
-    ) {
+    if (/[A-ZÀ-ÖØ-Þ]{2,}\/[A-ZÀ-ÖØ-Þ]{2,}/.test(rawNext) && rawNext.length <= 35) {
       break;
     }
 
@@ -66,19 +72,16 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
     if (isMetaInfoLineForTitle(next)) continue;
 
     // ✅ Vérifie si la ligne ressemble à un vrai titre possible
-    const plausible = looksLikePlausibleTitleLine(next, {
-      isIngredientLine,
-    });
+    const plausible = looksLikePlausibleTitleLine(next, { isIngredientLine });
 
-    // ❌ Si la ligne n’est pas plausible ET qu’on ne peut pas la coller → stop
-    if (!plausible && !canJoinTitleLines(out, next, { isIngredientLine })) {
-      break;
-    }
+    // ✅ PATCH: règle join améliorée
+    // - on garde ta logique existante
+    // - + on autorise un join si "out" est un préfixe plat ET que "next" est plausible
+    const canJoin =
+      canJoinTitleLines(out, next, { isIngredientLine }) || (isGenericDishPrefix(out) && plausible);
 
-    // ❌ Sécurité supplémentaire : si on ne peut pas coller, on stoppe
-    if (!canJoinTitleLines(out, next, { isIngredientLine })) {
-      break;
-    }
+    // ❌ Si on ne peut pas coller → stop
+    if (!canJoin) break;
 
     // ✅ Évite les doublons ("Sauce Big Mac Sauce Big Mac")
     const outLow = out.toLowerCase();
@@ -110,6 +113,7 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   // ✅ Titre fusionné valide
   return out;
 }
+
 
 
 module.exports = {
