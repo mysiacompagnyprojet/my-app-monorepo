@@ -1010,7 +1010,6 @@ function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
 
     prev = raw0;
   }
-
   // Si ça ressemble vraiment à une liste d'ingrédients et qu'on n'a rien trouvé : fallback
   if (hasIngredientListAtTop) return DEFAULT_TITLE;
 
