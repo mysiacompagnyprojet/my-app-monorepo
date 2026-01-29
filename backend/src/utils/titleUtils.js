@@ -460,7 +460,9 @@ function cleanTitleCandidate(input) {
   s = s.replace(/[.!?…]+$/g, '');
 
   // 4) re-nettoyage bord (au cas où)
-  s = stripEdgeEmojisAndPunct(s);
+  //s = stripEdgeEmojisAndPunct(s);
+
+  s = normalizeTitleCandidate(s);
 
   return normSpaces(s);
 }

@@ -159,7 +159,12 @@ function mergeHyphenWrappedLines(lines) {
     const prev = out.length ? out[out.length - 1] : '';
 
     if (prev && /-$/.test(prev) && /^[a-zà-öø-ÿ]/i.test(line)) {
-      out[out.length - 1] = normSpaces(prev.replace(/-$/, '') + line);
+      //ajout des lignes ci-dessous pour titre recette 1 au 29/01
+      const glued = prev.replace(/-s/, '');
+      const shouldNoSpace = /[a-zà-öø-ÿ]$/i.test(glued) && /^[a-zà-öø-ÿ]/i.test(line);
+      out[out.length - 1] = shouldNoSpace// ligne modifier : out[out.length - 1] = normSpaces(prev.replace(/-$/, '') + line);
+      ? normSpaces(glued + line)
+      : normSpaces(glued + ' ' + line);
       continue;
     }
 
@@ -179,9 +184,13 @@ function smartFilterWithTrashFromText(rawText) {
   let rawLines = cleaned
     .split('\n')
     .map((s) => normSpaces(s))
-    .filter(Boolean);
-
+    .filter(Boolean)
+    console.log('[OCR] raw split lines:', cleaned.split('\n').slice(0, 20));
+    
+    
   rawLines = mergeHyphenWrappedLines(rawLines);
+  console.log('[OCR] after mergeHyphenWrappedLines:', rawLines.slice(0, 20));
+  
 
   const lines = [];
   const trash = [];
@@ -656,8 +665,12 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     // ✅ candidats fusionnés (2-3 lignes)
     const merged = buildMergedTitleCandidate(scan, i, 3);
 
+    //console log a effecer
+    console.log('[TITLE] simple candidate', { i, t, score: candidates[candidates.length-1].score });
     // Sécurité : si merged existe et est différent, on l’ajoute aussi
     if (merged && merged !== t) {
+      //console log a supprimer
+      console.log('[TITLE] merged candidate:', { i, merged });
       //securite: refuse un titre fusionné qui fint being meta/label
       if (isMetaInfoLineForTitle(merged) || isTitleNoiseLabel(merged)) {
       } else {
@@ -679,6 +692,13 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
 
   // On trie par score décroissant
   candidates.sort((a, b) => b.score - a.score);
+
+  //console log a effacer
+  console.log('[TITLE] candidates ranked:', candidates
+    .slice()
+    .sort((a,b)=>b.score-a.score)
+    .slice(0, 8)
+  );
 
   // On renvoie le meilleur candidat
   return candidates[0].t;
@@ -1010,8 +1030,7 @@ function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
 
     prev = raw0;
   }
-  // Si ça ressemble vraiment à une liste d'ingrédients et qu'on n'a rien trouvé : fallback
-  if (hasIngredientListAtTop) return DEFAULT_TITLE;
+    if (hasIngredientListAtTop) return DEFAULT_TITLE;
 
   return DEFAULT_TITLE;
 }

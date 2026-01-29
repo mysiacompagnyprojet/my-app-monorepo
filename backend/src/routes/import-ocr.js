@@ -428,52 +428,52 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
 
     if (bestVisionTitle) {
-  // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
-  bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
+      // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
+      bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
 
-  const truncEnd = looksTruncatedTitle(bestVisionTitle);
-  const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
-  const firstLines = safeLinesForTitle.slice(0, 60);
-  if (bestVisionTitle && truncStart) {
-   const idx = firstLines.findIndex(l =>
-    normalizeTitleJoinPiece(l).toLowerCase() === normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
-   );
+      const truncEnd = looksTruncatedTitle(bestVisionTitle);
+      const truncStart = /^(à|a|de|d['’]|du|des)\b/i.test(bestVisionTitle);
+      const firstLines = safeLinesForTitle.slice(0, 60);
+      if (bestVisionTitle && truncStart) {
+        const idx = firstLines.findIndex(l =>
+        normalizeTitleJoinPiece(l).toLowerCase() === normalizeTitleJoinPiece(bestVisionTitle).toLowerCase()
+        );
 
-   if (idx > 0) {
-     const prev = sanitizePickedTitle(firstLines[idx - 1]);
-     const merged = [prev, bestVisionTitle].join(' ').trim();
+        if (idx > 0) {
+          const prev = sanitizePickedTitle(firstLines[idx - 1]);
+          const merged = [prev, bestVisionTitle].join(' ').trim();
 
-     if (
-      isValidRecipeTitleCandidate(merged) &&
-      !looksLikeIngredientFragmentTitleForTitle(merged)
-     ) {
-       bestVisionTitle = merged;
-       }
+          if (
+            isValidRecipeTitleCandidate(merged) &&
+            !looksLikeIngredientFragmentTitleForTitle(merged)
+          ) {
+          bestVisionTitle = merged;
+          }
+        }
+      }
+
+      if (truncEnd || truncStart) {
+        const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
+
+        // on cherche l'index de la ligne la plus proche du titre
+        const target = normalizeTitleJoinPiece(bestVisionTitle);
+        let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
+        if (idx < 0) {
+          const targetLow = target.toLowerCase ()
+          idx = scan.findIndex((l) => normalizeTitleJoinPiece(l).toLowerCase().includes(targetLow));
+        }
+        if (idx < 0) idx = 0;  
+
+        const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
+
+        const merged = buildMergedTitleCandidate(scan, idxStart, 4);
+
+        if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidate(merged)) {
+        bestVisionTitle = merged;
+        }
+        bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
+      }
     }
-  }
-
-  if (truncEnd || truncStart) {
-    const scan = (safeLinesForTitle || []).map(normSpaces).filter(Boolean);
-
-    // on cherche l'index de la ligne la plus proche du titre
-    const target = normalizeTitleJoinPiece(bestVisionTitle);
-    let idx = scan.findIndex((l) => normalizeTitleJoinPiece(l) === target);
-    if (idx < 0) {
-      const targetLow = target.toLowerCase ()
-      idx = scan.findIndex((l) => normalizeTitleJoinPiece(l).toLowerCase().includes(targetLow));
-    }
-    if (idx < 0) idx = 0;  
-
-    const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
-
-    const merged = buildMergedTitleCandidate(scan, idxStart, 4);
-
-    if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidate(merged)) {
-      bestVisionTitle = merged;
-    }
-    bestVisionTitle = normalizeTitleJoinPiece(bestVisionTitle);
-  }
-}
 
     let lines = removeSocialHeaderLines(filtered.lines);
     let split = splitIngredientsAndSteps(lines);
@@ -573,13 +573,15 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     console.log('[BUTTER_DEBUG] guessedFromLines=', guessedFromLines);
 
     //const head = safeLinesForTitle.slice(0, 16);
-    let title =
+     let title =
       bestVisionTitle ||
       guessedFromLines ||
       inferTitleFromContent(ingredients, steps) ||
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
+      //console log a supprimer
+      console.log('[TITLE][AFTER PICK]', { bestVisionTitle, guessedFromLines, title });
 
       //                                                                           bestVisionTiltle à la place de guessedFromLines
       if (bestVisionTitle && guessedFromLines) {//&& title === normalizeTitleCandidate(bestVisionTitle)) {
@@ -591,28 +593,75 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         if (visionLooksLikeSuffix(v) && g.length >= v.length + 6 && g.includes(v)) {
          title = normalizeTitleCandidate(guessedFromLines);
         }
+        //ajouter d'ici le 29/01 pour recette 1
+        const vWords = v.split(' ').filter(Boolean).length;
+        const gWords = g.split(' ').filter(Boolean).length;
+
+        const visionIncludedInGuessed = g.includes(v);
+        const guessedClearlyRicher = g.length >= v.length + 10 && gWords >= vWords + 1;
+        //a ici
+        if (visionIncludedInGuessed && guessedClearlyRicher) {
+          title = normalizeTitleCandidate(guessedFromLines);
+        }
       }
+      //console log a supprimer
+      console.log('[TITLE][CHECK HOOK/MEASURE]', {
+        title,
+        hook: looksLikeHookOrLongSentenceTitle(title),
+        measure: looksLikeMeasureLineTitle(title),
+      });
 
       if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+        //console log a supprimer 
+        console.log('[TITLE][AFTER ALT]', { title });
+
         const alt =
          inferTitleFromContent(ingredients, steps) ||
          fabricateTitleFromIngredientsRows(ingredients) ||
          '';
-
+        
         const altNorm = normalizeTitleCandidate(alt);
-
+       
         // Ne jamais remplacer par unité seule / ingrédient
         const altLow = stripDiacritics(altNorm).toLowerCase().trim();
-
+        
         if (
           altNorm &&
           !/^(ml|cl|dl|l|g|gr|kg)$/.test(altLow) &&
           !looksLikeIngredientOnlyTitle(altNorm) &&
           !looksLikeIngredientFragmentTitleForTitle(altNorm) &&
           !parseOcrIngredient(altNorm)
-        ) {
-         title = altNorm;
-        }  
+        ) { 
+          //ajout d'ici pour recette 1
+          const cur = normalizeTitleCandidate(title);
+          const curWords = cur.split(' ').filter(Boolean).length;
+
+          const altWords = altNorm.split(' ').filter(Boolean).length;
+          const altTooWeak = altWords <= 1 || altNorm.length < 10; // ex: "Potimarron"
+          const curRich = curWords >= 3 && cur.length >= 18;       // ex: "TARTE RUSTIQUE ... NOIX"
+
+          //console log a supprimer
+          console.log('[TITLE][ALT CHECK]', {
+          previousTitle: title,
+          cur,
+          altNorm,
+          curWords,
+          altWords,
+          curRich,
+          altTooWeak,
+          });
+
+          // ✅ garde-fou : ne remplace pas un bon titre par un alt trop faible
+          if (curRich && altTooWeak) {
+            //console log a supprimer
+            console.log('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
+          } else {
+            //console log a supprimer
+            console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
+           // a ici pour recette 1 le 29/01 
+            title = altNorm;
+          }
+        }
 
         //remplacer par ce qui est dessus le 20/01/26 pour eviter les 
         //title =
@@ -651,6 +700,14 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const priced = await priceIngredients(draft.ingredients); 
     draft.ingredients = priced.ingredients; 
     draft.totalCostEur = priced.totalCostEur; 
+
+    //console log a supprimer
+    console.log('[TITLE][PIPELINE]', {
+      guessedFromLines,
+      bestVisionTitle,
+      mergedFromVision,
+      titleBeforeResponse: title,
+    });
 
     // ✅ debug=title : renvoie seulement infos titres
     if (debugMode === 'title') {
@@ -701,7 +758,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         },
       });
     }
-
+    
     return res.json({ ok: true, draft });
   } catch (e) {
     console.error(e);

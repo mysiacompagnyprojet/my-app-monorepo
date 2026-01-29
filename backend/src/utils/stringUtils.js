@@ -38,11 +38,14 @@ function normalizeLoose(s) {
 }
 
 function normalizeTitleCandidate(s) {
-  return String(s || '')
-    .replace(/\u00A0/g, ' ')
-    .replace(/\s*\n+\s*/g, ' ')
-    .replace(/[ \t]+/g, ' ')
-    .trim();
+  let t = normSpaces(String(s || ''));// ajouter la 29/01
+    t = t.replace(/\bpotimarro+on\b/gi, 'POTIMARRON');
+    // ancienne ligne : return String(s || '')
+    //t = t.replace(/\u00A0/g, ' ');
+    t = t.replace(/\s*-\n+\s*/g, '-');
+    //t = t.replace(/[ \t]+/g, ' ');
+    //t = t.trim();
+    return normSpaces(t);
 }
 
 function cleanStepPrefix(s) {
