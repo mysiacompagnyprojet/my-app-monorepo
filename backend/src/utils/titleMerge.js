@@ -79,6 +79,7 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
     // - + on autorise un join si "out" est un préfixe plat ET que "next" est plausible
     const canJoin =
       canJoinTitleLines(out, next, { isIngredientLine }) || (isGenericDishPrefix(out) && plausible);
+      //console log a supprimer
       console.log ('[TITLE][MERGE CHECK]', {
         out,
         next,
