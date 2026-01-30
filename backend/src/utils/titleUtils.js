@@ -170,6 +170,13 @@ function canJoinTitleLines(prev, next, opts = {}) {
   const b = normSpaces(next);
   if (!a || !b) return false;
 
+  // ❌ On ne fusionne jamais des lignes qui contiennent une question (souvent un conseil) ajoute le 30/01
+  if (/\?/.test(a) || /\?/.test(b)) return false;
+
+  // ❌ On ne fusionne jamais des phrases "conseil" ajoute le 30/01
+  if (/^\s*(pas de|tu peux|vous pouvez)\b/i.test(a) || /^\s*(pas de|tu peux|vous pouvez)\b/i.test(b)) return false;
+
+
   const isIngredientLine =
     typeof opts.isIngredientLine === 'function' ? opts.isIngredientLine : null;
 
