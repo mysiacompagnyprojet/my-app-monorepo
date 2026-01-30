@@ -610,6 +610,16 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     // Si vide après le nettoyage -> on passe à la ligne suivante
     if (!t) continue;
 
+    // ❌ Conseils / alternatives (pas un titre) ajouter le 30/01
+    // Ex: "Pas de pâte de curry ? Mélange simplement curry..."
+    if (/\?/.test(t) && /\b(pas de|tu peux|vous pouvez|mélange|melange|ajoute|ajouter|remplace|remplacer|astuce)\b/i.test(t)) {
+    continue;
+    }
+
+    // ❌ Lignes typiques de conseil même sans "?" ajoute le 30/01
+    if (/^\s*(pas de|tu peux|vous pouvez)\b/i.test(t)) continue;
+
+
     if (looksLikeIngredientFragmentTitleForTitle(t)) continue;
 
     if (looksLikeLooseActionStep(t) || looksLikeLooseActionStep(raw)) continue;
@@ -899,8 +909,8 @@ function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
     // "13:18 Sauce Big Mac" -> "Sauce Big Mac"
     let raw = raw0.replace(/^\d{1,2}:\d{2}\s+/g, '');
 
-    // "- Butter Chicken Express" -> "Butter Chicken Express"
-    raw = raw.replace(/^[-•*·]\s+/g, '');
+    // "- Butter Chicken Express" -> "Butter Chicken Express" - ancien code pour recette 4 - enlever le 30/01
+    //raw = raw.replace(/^[-•*·]\s+/g, '');
 
     let t = cleanTitleCandidate(raw);
     t = sanitizePickedTitle(t);

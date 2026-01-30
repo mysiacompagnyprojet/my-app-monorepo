@@ -580,6 +580,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
+      //ajoute du 30/01 - sepecialement pour recette 12 zauce->sauce
+      title = title.replace(/^zauce\b/i, 'sauce');
       //console log a supprimer
       console.log('[TITLE][AFTER PICK]', { bestVisionTitle, guessedFromLines, title });
 
@@ -611,7 +613,18 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         measure: looksLikeMeasureLineTitle(title),
       });
 
-      if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
+      //ajout le 30/01 pour recette 12 - d'ici
+      // ✅ NEW (very targeted): un "titre de sauce" peut contenir "pour accompagner" sans être un hook à remplacer
+      const titleLow = stripDiacritics(normalizeTitleCandidate(title)).toLowerCase();
+      const looksLikeSauceTitle =
+      /^(z?auce|vinaigrette|dressing|marinade)\b/.test(titleLow) &&
+      titleLow.split(/\s+/).filter(Boolean).length >= 3 &&
+      titleLow.split(/\s+/).filter(Boolean).length <= 10 &&
+      !/\b(tu\s+peux|pas\s+de|m[eé]lange|ajoute|astuce)\b/.test(titleLow);
+
+      if (looksLikeSauceTitle) {
+        console.log('[TITLE][ALT BYPASS: sauce-title]', { title });
+      } else if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
         //console log a supprimer 
         console.log('[TITLE][AFTER ALT]', { title });
 
@@ -631,7 +644,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           !looksLikeIngredientOnlyTitle(altNorm) &&
           !looksLikeIngredientFragmentTitleForTitle(altNorm) &&
           !parseOcrIngredient(altNorm)
-        ) { 
+        ) 
+        { 
           //ajout d'ici pour recette 1
           const cur = normalizeTitleCandidate(title);
           const curWords = cur.split(' ').filter(Boolean).length;
@@ -650,6 +664,30 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           curRich,
           altTooWeak,
           });
+
+
+          //ajoute le 30/01 pour recette 12 d'ici
+          // ✅ NEW (safe): empêcher qu'un ingrédient court remplace un vrai titre
+          // Exemple recette 12: altNorm = "Yaourt nature" (ingrédient), alors que le titre "sauce..." est correct.
+          const altIsLikelyIngredientName =
+          altWords <= 2 &&
+          ingredients.some((row) => {
+            const name = normalizeLoose(row?.name || '');
+            const altL = normalizeLoose(altNorm);
+            if (!name || !altL) return false;
+            // match inclusif (yaourt nature ↔ yaourt nature)
+            return name.includes(altL) || altL.includes(name);
+          });
+
+          if (altIsLikelyIngredientName) {
+            console.log('[TITLE][ALT SKIP: ingredient-like]', { kept: cur, rejectedAlt: altNorm });
+          } else if (curRich && altTooWeak) {
+            console.log('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
+          } else {
+            console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
+            title = altNorm;
+          }
+          // a ici
 
           // ✅ garde-fou : ne remplace pas un bon titre par un alt trop faible
           if (curRich && altTooWeak) {

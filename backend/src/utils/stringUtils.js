@@ -40,6 +40,7 @@ function normalizeLoose(s) {
 function normalizeTitleCandidate(s) {
   let t = normSpaces(String(s || ''));// ajouter la 29/01
     t = t.replace(/\bpotimarro+on\b/gi, 'POTIMARRON');
+    
     // ancienne ligne : return String(s || '')
     //t = t.replace(/\u00A0/g, ' ');
     t = t.replace(/\s*-\n+\s*/g, '-');
