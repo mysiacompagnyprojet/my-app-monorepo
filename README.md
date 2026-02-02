@@ -11,6 +11,10 @@ Ce dépôt contient :
 - backend
 - mobile
 
+COMMANDE POUR CHERCHER ET ARRETER TERMINAL EN ECOUTE:
+lsof -i :4000 pour trouver quel .... est ecouter
+kill -9 ... numero de l'ecoute à la place des points
+ 
 SCRIPTS :
 history -s    (pour enregistré une commande)
 code ~/.bashrc  (pour ouvrir le fichier bash)
@@ -35,3 +39,39 @@ curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization
 
 SCRIPT TEST IMPORT OCR MAC : 
 curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE1/RECETTE1.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE2/RECETTE2.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE3/RECETTE3.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE4/RECETTE4.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE5/RECETTE5.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE6/RECETTE6.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE7/RECETTE7.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE8/RECETTE8.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE9/RECETTE9.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE10/RECETTE10.jpg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE11/RECETTE11.jpg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE12/RECETTE12.jpg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE14/RECETTE14.jpg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE15/RECETTE15.jpg"
+
+url -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE161.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE162.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE163.png"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE17/RECETTE17.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE18/RECETTE18.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE19/RECETTE19.jpeg"
+
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE20/RECETTE20.jpeg"

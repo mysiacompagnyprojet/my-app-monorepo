@@ -17,6 +17,8 @@ const importOcrRouter = require('./routes/import-ocr');
 const recipesRouter = require('./routes/recipes');
 const authRouter = require('./routes/auth');
 const shoppingListRouter = require('./routes/shopping-list');
+const ingredientsBase = require('./routes/ingredients-base');
+
 
 
 // 3) Healthcheck (ultra simple et avant tout)
@@ -75,6 +77,9 @@ app.use('/dev', devAirtable);
 
 // 9) Auth globale (remplit req.user pour toutes les routes suivantes)
 app.use(supabaseAuth);
+
+// nouvelle base supabase remplace Airtable
+app.use('/ingredients-base', ingredientsBase);
 
 // 10) Routes métier (ordre lisible)
 app.use('/billing', billing);                // POST /billing/checkout
