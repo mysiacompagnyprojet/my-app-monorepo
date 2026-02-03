@@ -54,7 +54,7 @@ return {
 ...ing,
 
 // On garde les champs existants si déjà présents en DB, sinon on prend l'enrichissement
-airtableId: enriched?.airtableId ?? ing?.airtableId ?? null,
+id: enriched?.id ?? ing?.id ?? null,
 unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
 costRecipe: enriched?.costRecipe ?? ing?.costRecipe ?? null,
 
@@ -98,21 +98,21 @@ const { userId } = req.user
 const recipesRaw = await prisma.recipe.findMany({
 where: { userId },
 orderBy: { createdAt: 'desc' },
-select: {
-id: true,
-title: true,
-servings: true,
-imageUrl: true,
-createdAt: true,
+    select: {
+        id: true,
+        title: true,
+        servings: true,
+        imageUrl: true,
+        createdAt: true,
 ingredients: {
-select: {
-name: true,
-quantity: true,
-unit: true,
-costRecipe: true,
+    select: {
+        name: true,
+        quantity: true,
+        unit: true,
+        costRecipe: true,
 
 // ✅ (facultatif mais utile) si présent en DB
-airtableId: true,
+id: true,
 unitPriceBuy: true,
 },
 },
@@ -162,7 +162,7 @@ unit: String(i?.unit || '').trim(),
 if (!base.name) {
 return {
 ...base,
-airtableId: null,
+id: null,
 unitPriceBuy: null,
 buyPriceEur: null,
 buyRefQty: null,
@@ -182,8 +182,8 @@ name: base.name,
 quantity: base.quantity,
 unit: base.unit,
 
-airtableId: enriched?.airtableId ?? null,
-priceMatched: Boolean(enriched?.airtableId),
+id: enriched?.id ?? null,
+priceMatched: Boolean(enriched?.id),
 
 // €/unité (souvent €/g ou €/ml) — utile pour debug/affichage
 unitPriceBuy: enriched?.unitPriceBuy ?? null,
@@ -220,7 +220,7 @@ unit: String(i?.unit || '').trim(),
 }
 return {
 ...base,
-airtableId: null,
+id: null,
 priceMatched: false,
 unitPriceBuy: null,
 costEur: 0,
@@ -288,7 +288,7 @@ const enriched = await enrichIngredientWithCost(base)
 
 return {
 ...base,
-airtableId: enriched?.airtableId ?? null,
+id: enriched?.id ?? null,
 unitPriceBuy: enriched?.unitPriceBuy ?? null,
 costRecipe: enriched?.costRecipe ?? null,
 }
@@ -297,10 +297,14 @@ costRecipe: enriched?.costRecipe ?? null,
 
 // 3) Garde-fou final
 const ingDataFinal = ingData.map((i) => ({
-...i,
+//...i,
 name: tidyName(i.name),
 quantity: Number(i.quantity || 0),
 unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
+
+airtableId: i.id ?? null,
+unitPriceBuy: i.unitPriceBuy ?? null,
+costRecipe: i.costRecipe ?? null,
 }))
 
 const recipe = await prisma.recipe.create({
@@ -383,7 +387,7 @@ const enriched = await enrichIngredientWithCost(base)
 
 return {
 ...base,
-airtableId: enriched?.airtableId ?? null,
+id: enriched?.id ?? null,
 unitPriceBuy: enriched?.unitPriceBuy ?? null,
 costRecipe: enriched?.costRecipe ?? null,
 }
@@ -392,10 +396,14 @@ costRecipe: enriched?.costRecipe ?? null,
 
 // 3) Garde-fou final
 const ingDataFinal = ingData.map((i) => ({
-...i,
+//...i,
 name: tidyName(i.name),
 quantity: Number(i.quantity || 0),
 unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
+
+airtableId: i.id ?? null,
+unitPriceBuy: i.unitPriceBuy ?? null,
+costRecipe: i.costRecipe ?? null,
 }))
 
 const recipe = await prisma.recipe.create({
@@ -445,7 +453,7 @@ unit: true,
 costRecipe: true,
 
 // ✅ (facultatif mais utile) si présent en DB
-airtableId: true,
+id: true,
 unitPriceBuy: true,
 },
 },

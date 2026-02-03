@@ -12,8 +12,8 @@ const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textU
 //stringUtils
 const { stripDiacritics } = require('../utils/stringUtils')
 
-// ✅ Airtable service
-const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable');
+// ✅ Airtable service remplacer par supabase.js
+const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/supabase');
 const { ocrFromBufferWithDebug } = require('../services/vision');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 //titleUtils
@@ -302,7 +302,7 @@ async function priceIngredients(ingredients) {
             price: null,
             costEur: 0,
             priceMatched: true, // on marque comme "ok" (pas d'alerte)
-            airtableId: null,
+            id: null,
           };
         }
         const priceRow = await getIngredientPriceByName(ing.name, ing.unit);
@@ -317,7 +317,7 @@ async function priceIngredients(ingredients) {
           price,                          // { eurPer, perUnit } | null
           costEur,                        // number | null
           priceMatched: matched,          // boolean
-          airtableId: priceRow?.airtableId || null,
+          id: priceRow?.id|| null,
         };
       } catch (e) {
         // si Airtable plante, on ne bloque pas l’OCR
@@ -326,7 +326,7 @@ async function priceIngredients(ingredients) {
           price: null,
           costEur: 0,
           priceMatched: false,
-          airtableId: null,
+          id: null,
         };
       }
     })

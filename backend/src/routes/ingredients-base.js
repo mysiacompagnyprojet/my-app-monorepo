@@ -10,6 +10,7 @@ router.get('/', async (req, res) => {
         const { data, error } = await supabaseAdmin
             .from('ingredients_base')
             .select([
+                'id',
                 'nom',
                 'unite_g_ml_piece',
                 'type_unite',

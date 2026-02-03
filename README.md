@@ -14,7 +14,41 @@ Ce dépôt contient :
 COMMANDE POUR CHERCHER ET ARRETER TERMINAL EN ECOUTE:
 lsof -i :4000 pour trouver quel .... est ecouter
 kill -9 ... numero de l'ecoute à la place des points
- 
+
+
+1-
+export OCR_JSON=$(curl -s -X POST "http://localhost:4000/import/ocr?debug=1" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE15/RECETTE15.jpg")
+
+echo "$OCR_JSON" | jq '.ok, .draft.title'
+
+2-extraire uniquement le draft en JSON compact
+export DRAFT=$(echo "$OCR_JSON" | jq -c '.draft')
+
+echo "$DRAFT" | jq '.title, (.ingredients|length), (.steps|length)'
+
+3-Creer recipeDraft en DB 
+export DRAFT_ROW=$(curl -s -X POST "http://localhost:4000/recipe-drafts" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" 
+-d "{\"title\": $(echo "$DRAFT" | jq -c '.title'), \"imageUrl\": null, \"sourceUrl\": null }")
+
+echo "$DRAFT_ROW" | jq
+
+4-recuperer ID
+export DRAFT_ID=$(echo "$DRAFT_ROW" | jq -r '.draft.id')
+
+echo "DRAFT_ID=$DRAFT_ID"
+
+5-enregistrer parsed dans ce draft
+curl -s -X PATCH "http://localhost:4000/recipe-drafts/$DRAFT_ID/parsed" -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" 
+-d "$(jq '{ parsed: .draft }' /tmp/ocr.json)"
+
+6-creer la recette depuis le draft
+curl -i -X POST "http://localhost:4000/recipes/from-draft/$DRAFT_ID" -H "Authorization: Bearer $TOKEN"
+
+7-verifier que la recette est bien enregistree
+curl -s -H "Authorization: Bearer $TOKEN" "http://localhost:4000/recipes" | jq '.[0] // .recipes[0]'
+
+
+
 SCRIPTS :
 history -s    (pour enregistré une commande)
 code ~/.bashrc  (pour ouvrir le fichier bash)

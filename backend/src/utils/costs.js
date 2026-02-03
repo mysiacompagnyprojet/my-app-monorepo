@@ -1,5 +1,5 @@
 // backend/src/utils/costs.js
-const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/airtable')
+const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/supabase')
 
 /**
 * Nettoyage “soft” du nom pour maximiser le match Airtable.
@@ -142,7 +142,7 @@ unit: unitRaw,
 if (!name) {
 return {
 ...outBase,
-airtableId: null,
+id: null,
 unitPriceBuy: null,
 buyPriceEur: null,
 buyRefQty: null,
@@ -162,7 +162,7 @@ const pricing = await getIngredientPriceByName(name, unitRaw)
 if (!pricing) {
 return {
 ...outBase,
-airtableId: null,
+id: null,
 unitPriceBuy: null,
 buyPriceEur: null,
 buyRefQty: null,
@@ -172,7 +172,7 @@ costRecipe: 0,
 priceMatched: false,
 priceStatus: 'not_found',
 priceMessage: "Ingrédient non trouvé dans la base",
-note: 'non trouvé dans Airtable',
+note: 'non trouvé dans la base',
 }
 }
 
@@ -199,14 +199,14 @@ pricing?.priceMessage ||
 
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: null,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: 0,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: pricing?.priceStatus === 'missing_price' ? 'missing_price' : 'invalid_price',
 priceMessage: msg,
 note: 'pricePerUnit invalide',
@@ -218,14 +218,14 @@ const base = convertRecipeToPricingUnit(quantity, unitRaw, priceUnit)
 if (!base || !base.unit || !Number.isFinite(base.qty)) {
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: 0,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'conversion_failed',
 priceMessage: "Conversion d’unité impossible",
 note: 'conversion de base impossible',
@@ -236,14 +236,14 @@ note: 'conversion de base impossible',
 if (base.unit === priceUnit) {
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: base.qty * pricePerUnit,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'ok',
 }
 }
@@ -253,14 +253,14 @@ if (base.unit === 'piece' && priceUnit === 'g' && Number.isFinite(gramsPerPiece)
 const qtyG = base.qty * gramsPerPiece
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: qtyG * pricePerUnit,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'ok',
 note: 'conversion piece→g (gramsPerPiece)',
 }
@@ -270,14 +270,14 @@ if (base.unit === 'piece' && priceUnit === 'ml' && Number.isFinite(mlPerPiece) &
 const qtyMl = base.qty * mlPerPiece
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: qtyMl * pricePerUnit,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'ok',
 note: 'conversion piece→ml (mlPerPiece)',
 }
@@ -290,14 +290,14 @@ if (base.unit === 'ml' && priceUnit === 'g') {
 const qtyG = base.qty * density // g = ml * densité
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: qtyG * pricePerUnit,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'ok',
 note: 'conversion densité (ml→g)',
 }
@@ -308,14 +308,14 @@ if (base.unit === 'g' && priceUnit === 'ml') {
 const qtyMl = base.qty / density // ml = g / densité
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: qtyMl * pricePerUnit,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'ok',
 note: 'conversion densité (g→ml)',
 }
@@ -325,14 +325,14 @@ note: 'conversion densité (g→ml)',
 // 5) Sinon: pas de conversion trouvée
 return {
 ...outBase,
-airtableId: pricing.airtableId ?? null,
+id: pricing.id ?? null,
 unitPriceBuy: pricePerUnit,
 buyPriceEur,
 buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: 0,
-priceMatched: Boolean(pricing.airtableId),
+priceMatched: Boolean(pricing.id),
 priceStatus: 'incompatible_unit',
 priceMessage: "Unité incompatible (conversion manquante)",
 note: 'unité incompatible (conversion manquante)',

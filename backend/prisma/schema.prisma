@@ -58,7 +58,7 @@ model Ingredient {
   name         String
   quantity     Float    @default(0)
   unit         String
-  airtableId   String?
+  airtableId   String? 
   unitPriceBuy Float?
   costRecipe   Float?
   createdAt    DateTime @default(now()) @db.Timestamptz(6)

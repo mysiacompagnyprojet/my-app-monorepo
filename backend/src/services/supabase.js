@@ -150,7 +150,7 @@ function computePPUFromRow(row) {
 const unitRaw = row.type_unite ?? row.unite_g_ml_piece;
 const { unit: baseU, factor } = toBaseUnit(unitRaw);
 
-// 1) prix_kg_l_piece (comme Airtable: €/kg, €/L, €/pièce)
+// 1) prix_kg_l_piece (comme anciennement Airtable: €/kg, €/L, €/pièce)
 const ppuNormalized = toNumberLoose(row.prix_kg_l_piece);
 if (Number.isFinite(ppuNormalized) && ppuNormalized > 0) {
 let ppu = ppuNormalized;
@@ -224,7 +224,7 @@ const buyInfo = getBuyPackInfo(row, row.type_unite ?? row.unite_g_ml_piece);
 const density = toNumberLoose(row.densite_g_ml);
 
 candidates.push({
-airtableId: row.id, // on garde la clé "airtableId" pour ne rien casser (tu pourras renommer plus tard)
+id: row.id, // airtableId remplacer par id le 03/02 - on garde la clé "airtableId" pour ne rien casser (tu pourras renommer plus tard)
 name: row.nom ?? raw,
 unit,
 pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
@@ -291,7 +291,7 @@ const buyInfo = getBuyPackInfo(picked, picked.type_unite ?? picked.unite_g_ml_pi
 const density = toNumberLoose(picked.densite_g_ml);
 
 const out = {
-airtableId: picked.id, // idem: compat
+id: picked.id, // idem: compat
 name: picked.nom ?? raw,
 unit,
 pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,

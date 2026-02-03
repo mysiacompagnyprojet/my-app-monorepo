@@ -18,7 +18,7 @@ price?: { eurPer: number; perUnit: string } | null
 costEur?: number | null
 unitPriceBuy?: number | null
 priceMatched?: boolean
-airtableId?: string | null
+id?: string | null
 
 buyPriceEur?: number | null
 buyLabel?: string | null
@@ -108,7 +108,7 @@ const nameOk = String(ing?.name || '').trim().length > 0
 if (!nameOk) return false
 
 if (ing.priceMatched === false) return true
-if (!ing.airtableId) return true
+if (!ing.id) return true
 
 const note = String(ing.note || '').toLowerCase()
 if (note.includes('non trouvé') || note.includes('introuvable')) return true
@@ -183,7 +183,7 @@ price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
 unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
-airtableId: row.airtableId ?? null,
+id: row.id ?? null,
 
 buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
@@ -249,7 +249,7 @@ price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : null,
 unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: row.priceMatched ?? false,
-airtableId: row.airtableId ?? null,
+id: row.id ?? null,
 
 buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
@@ -325,8 +325,8 @@ copy[idx] = {
 quantityRaw: old?.quantityRaw,
 costEur: typeof cost === 'number' ? cost : null,
 unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
-priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.airtableId),
-airtableId: e.airtableId ?? null,
+priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.id),
+id: e.id ?? null,
 price: e.price ?? old?.price ?? null,
 
 buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,

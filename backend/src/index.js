@@ -11,13 +11,14 @@ const app = express();
 // 2) Middlewares maison / routes
 const { supabaseAuth } = require('./middleware/supabaseAuth'); // <- chemin singulier (dossier existant)
 const { billing, billingWebhookHandler } = require('./routes/billing');
-const devAirtable = require('./routes/dev-airtable');
+//const devAirtable = require('./routes/dev-airtable'); enlever le 03/02 car la base est sur supabase
 const importUrlRouter = require('./routes/import-url');
 const importOcrRouter = require('./routes/import-ocr');
 const recipesRouter = require('./routes/recipes');
 const authRouter = require('./routes/auth');
 const shoppingListRouter = require('./routes/shopping-list');
 const ingredientsBase = require('./routes/ingredients-base');
+const recipeDraftsRouter = require('./routes/recipeDrafts');
 
 
 
@@ -73,13 +74,15 @@ app.use(cors({
 app.use('/beta', require('./routes/beta'));
 
 // 8) Route dev publique AVANT l’auth (pour tes tests Airtable)
-app.use('/dev', devAirtable);
+//app.use('/dev', devAirtable); la base est sur supabase
 
 // 9) Auth globale (remplit req.user pour toutes les routes suivantes)
 app.use(supabaseAuth);
 
 // nouvelle base supabase remplace Airtable
 app.use('/ingredients-base', ingredientsBase);
+
+app.use('/recipe-drafts', recipeDraftsRouter);
 
 // 10) Routes métier (ordre lisible)
 app.use('/billing', billing);                // POST /billing/checkout

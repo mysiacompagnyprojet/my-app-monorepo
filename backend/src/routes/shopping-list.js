@@ -80,7 +80,7 @@ router.post('/', needAuth, async (req, res) => {
             unitPriceBuy: 0,
             recipeCost: 0,
             buyPrice: 0,
-            airtableId: null,
+            id: null,
             unitNormalized: null,
           };
         }
@@ -103,7 +103,7 @@ router.post('/', needAuth, async (req, res) => {
           unitPriceBuy,
           recipeCost,
           buyPrice: recipeCost, // V1: achat = besoin
-          airtableId: enriched?.airtableId ?? null,
+          id: enriched?.id ?? null,
           unitNormalized: enriched?.unitNormalized ?? null,
           ...(enriched?.note ? { note: enriched.note } : {}),
         };
