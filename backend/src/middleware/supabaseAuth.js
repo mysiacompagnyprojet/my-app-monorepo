@@ -1,4 +1,5 @@
 // backend/src/middleware/supabaseAuth.js
+
 const fetch = global.fetch; // Node 18+ possède fetch nativement
 
 async function supabaseAuth(req, res, next) {
@@ -29,8 +30,17 @@ async function supabaseAuth(req, res, next) {
     }
 
     const user = await r.json();
+    //aprés avoir recupere le user Supabase (id + email)
+    const supabaseUserId = user.id;
+    const email = user.email ?? null;
+    await prisma.user.upsert({
+      where: { id: supabaseUserId },
+      update: { email },
+      create: { id: supabaseUserId, email},
+    })
     // ⚠️ user.id est l’UUID attendu par Prisma (OK)
-    req.user = { userId: user.id, email: user.email || null };
+    req.userId = supabaseUserId;
+    req.user = { userId: supabaseUserId, email }; // avant : userId: user.id, email: user.email || null 
     // console.log('supabaseAuth OK → req.user =', req.user); // (debug)
 
     return next();

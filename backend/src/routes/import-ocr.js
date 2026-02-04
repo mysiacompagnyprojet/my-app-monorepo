@@ -4,20 +4,17 @@
 const express = require('express');
 const multer = require('multer');
 //stringUtils
-const { normSpaces, stripBulletPrefix, normalizeLoose, normalizeTitleCandidate } = require('../utils/stringUtils');
+const { normSpaces, stripDiacritics,  stripBulletPrefix, normalizeLoose, normalizeTitleCandidate } = require('../utils/stringUtils');
 //ocrTitle
 const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 //textUtils
 const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils')
-//stringUtils
-const { stripDiacritics } = require('../utils/stringUtils')
-
 // ✅ Airtable service remplacer par supabase.js
 const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/supabase');
 const { ocrFromBufferWithDebug } = require('../services/vision');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 //titleUtils
-const { sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix } = require('../utils/titleUtils');
+const { sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts } = require('../utils/titleUtils');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
@@ -580,6 +577,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       'Recette importée';
 
       title = normalizeTitleCandidate(title);
+      
       //ajoute du 30/01 - sepecialement pour recette 12 zauce->sauce
       title = title.replace(/^zauce\b/i, 'sauce');
       //console log a supprimer
@@ -686,6 +684,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           } else {
             console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
             title = altNorm;
+            
           }
           // a ici
 
@@ -698,6 +697,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
            // a ici pour recette 1 le 29/01 
             title = altNorm;
+            
           }
         }
 
@@ -722,6 +722,9 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
        title;
       }
 
+      title = normalizeTitleCandidate(title);
+      title = stripOcrTitleArtifacts(title);
+      
     // ✅ IMPORTANT : draft est déclaré AVANT d’être utilisé (sinon: cannot access draft before initialization)
     const draft = {
       title,

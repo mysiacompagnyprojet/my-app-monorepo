@@ -474,6 +474,29 @@ function cleanTitleCandidate(input) {
   return normSpaces(s);
 }
 
+function stripOcrTitleArtifacts(input) {
+  let t = String(input || '').trim();
+  if (!t) return t;
+
+  // Normalise un peu avant de nettoyer
+  t = t.replace(/\s+/g, ' ').trim();
+
+  // 2) Enlève "_Ipetit" (ou "_Xxxxx") quand c’est un token isolé (souvent OCR)
+  t = t.replace(/\s+\b_[A-Za-zÀ-ÖØ-öø-ÿ]{3,}\b\s*$/g, '').trim();
+
+  // 3) Variantes "I petit" / "_Ipetit" (OCR fréquent)
+  t = t.replace(/\s+\bI\s*petit\b\s*$/i, '').trim();
+  t = t.replace(/\s+\b_Ipetit\b\s*$/i, '').trim();
+
+  // 1) Enlève les tokens du type "C.R" / "C.R." quand c’est un token isolé
+  // (On le retire surtout s’il est à la fin ou précédé d’un espace)
+  t = t.replace(/\s+\b[A-Z]\.[A-Z](?:\.)?\b\s*$/g, '').trim();
+
+  // Nettoyage final
+  t = t.replace(/\s+/g, ' ').trim();
+  return t;
+}
+
 module.exports = {
     BAD_TITLE_WORDS,
     EMOTIONAL_TITLE_PATTERNS,
@@ -495,4 +518,5 @@ module.exports = {
     visionLooksLikeSuffix,
     stripEdgeEmojisAndPunct,
     cleanTitleCandidate,
+    stripOcrTitleArtifacts,
 }

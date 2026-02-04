@@ -100,7 +100,7 @@ curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization
 
 curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE15/RECETTE15.jpg"
 
-url -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE161.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE162.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE163.png"
+curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE161.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE162.png" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE16/RECETTE163.png"
 
 curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE17/RECETTE17.jpeg"
 
