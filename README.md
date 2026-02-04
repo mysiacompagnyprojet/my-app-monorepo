@@ -109,3 +109,7 @@ curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization
 curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE19/RECETTE19.jpeg"
 
 curl -i -X POST "http://localhost:4000/import/ocr?debug=title" -H "Authorization: Bearer $TOKEN" -F "files=@/Users/shirley/Capture test import-ocr/RECETTE20/RECETTE20.jpeg"
+
+
+#NEXT_PUBLIC_API_URL=http://localhost:3000
+#NEXT_PUBLIC_BACKEND_URL1=https://edris-untakeable-vicarly.ngrok-free.dev #sur portable

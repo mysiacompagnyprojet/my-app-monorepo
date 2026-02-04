@@ -51,6 +51,8 @@ export default function ImportRecipePage() {
 
     try {
       const base = process.env.NEXT_PUBLIC_BACKEND_URL!
+       //console log a enlever
+      console.log('backend base', base)
       const token =
         localStorage.getItem('sb:token') ||
         sessionStorage.getItem('sb:token') ||
@@ -64,7 +66,7 @@ export default function ImportRecipePage() {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
         body: form,
       })
-
+      
       if (!res.ok) {
         setStatus('❌ ' + (await res.text()))
         return
