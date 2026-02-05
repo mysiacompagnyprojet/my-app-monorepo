@@ -19,6 +19,7 @@ const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
+const { supabaseAdmin } = require('../services/supabaseAdmin');
 
 let parseRawLine = null;
 try {
@@ -347,7 +348,26 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     if (!req.files?.length) {
       return res.status(400).json({ ok: false, error: 'NO_FILES', message: 'Ajoute au moins 1 image.' });
     }
+    const imageFile = req.files[0];
+    const imagePath = `ocr/${Date.now()}-${imageFile.originalname}`;
+    const { error: uploadError } = await supabaseAdmin
+      .storage
+      .from('recipe-images')
+      .upload(imagePath, imageFile.buffer, {
+        contentType: imageFile.mimetype,
+        upsert: false,
+      });
 
+      let imageUrl = null;
+
+      if(!uploadError) {
+        const { data } = supabaseAdmin
+          .storage
+          .from('recipe-images')
+          .getPublicUrl(imagePath);
+
+        imageUrl = data.publicUrl;
+      }
     const texts = [];
 
     const pickedTitles = [];
@@ -729,7 +749,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const draft = {
       title,
       servings,
-      imageUrl: null,
+      imageUrl,
       notes,
       ingredients,
       steps,

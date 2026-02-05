@@ -92,7 +92,7 @@ throw new Error(
 }
 
 const origin =
-typeof window !== 'undefined' && window.location.origin.includes('localhost')
+typeof window !== 'undefined' //&& window.location.origin.includes('localhost')
 ? window.location.origin
 : 'https://my-app-monorepo.vercel.app'
 

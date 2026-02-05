@@ -4,17 +4,14 @@
 import { supabase } from './supabase'
 
 /** ————— Base URL ————— */
-export const API_URL = (
-process.env.NEXT_PUBLIC_BACKEND_URL ||
-//process.env.NEXT_PUBLIC_API_BASE ||
-//process.env.NEXT_PUBLIC_API_URL ||
-''
-).replace(/\/+$/, '')
+export const API_URL = 
+    process.env.NEXT_PUBLIC_BACKEND_URL?.replace(/\/$/, '')
+    //process.env.NEXT_PUBLIC_BACKEND_URL ||
+    //process.env.NEXT_PUBLIC_API_BASE ||
+    //process.env.NEXT_PUBLIC_API_URL ||
 
 if (!API_URL) {
-throw new Error(
-"Variable d'environnement manquante : NEXT_PUBLIC_BACKEND_URL (ou NEXT_PUBLIC_API_BASE / NEXT_PUBLIC_API_URL)"
-)
+throw new Error ('NEXT_PUBLIC_BACKEND_URL manquante')
 }
 
 /** ————— Tokens de secours (stockage) ————— */

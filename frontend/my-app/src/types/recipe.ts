@@ -9,7 +9,8 @@ quantityRaw?: string;
 price?: { eurPer: number; perUnit: string } | null;
 costEur?: number | null;
 priceMatched?: boolean;
-airtableId?: string | null;
+//airtableId?: string | null;
+id?: string | null;
 };
 
 export type OcrDraft = {
@@ -32,7 +33,8 @@ export type RecipeIngredient = {
     unit: string
     costRecipe?: number | null
     buyPriceEur?: number | null
-    airtableId?: string | null
+    ingredientBaseId?: string
+    //airtableId?: string | null
 }
 
 export type Recipe = {

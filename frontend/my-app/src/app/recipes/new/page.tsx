@@ -7,6 +7,8 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import type { OcrDraft } from 'src/types/recipe'
+import { RecipeImagePreview } from '@/components/RecipeImagePreview'
+import { IngredientPicker } from '@/components/IngredientPicker'
 
 type Line = {
 name: string
@@ -550,6 +552,7 @@ width: 140,
 <label className="grid gap-1 text-sm font-semibold">
 Image URL
 <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} />
+<RecipeImagePreview imageUrl={imageUrl}/>
 </label>
 
 <label className="grid gap-1 text-sm font-semibold">
@@ -597,24 +600,34 @@ borderColor: 'var(--border)',
 }}
 >
 <div
-style={{
-display: 'grid',
-gridTemplateColumns: '1fr 140px 120px 220px 44px',
-gap: 10,
-alignItems: 'center',
-}}
+    style={{
+    display: 'grid',
+    gridTemplateColumns: '1fr 140px 120px 220px 44px',
+    gap: 10,
+    alignItems: 'center',
+    }}
 >
 <input
-placeholder="Ingrédient"
-value={ing.name}
-onChange={(e) => setIngredient(idx, { name: e.target.value })}
-style={{
-background: 'white',
-border: '1px solid var(--border)',
-borderRadius: 12,
-padding: 11,
-}}
+    placeholder="Ingrédient"
+    value={ing.name}
+    onChange={(e) => setIngredient(idx, { name: e.target.value })}
+    style={{
+    background: 'white',
+    border: '1px solid var(--border)',
+    borderRadius: 12,
+    padding: 11,
+    }}
 />
+
+   
+    <IngredientPicker 
+    querySeed={ing.name} 
+    onPick={(item) => { 
+        setIngredient(idx, { 
+            name: item.nom, 
+            id: item.id }) //ingredientBaseId
+    }}
+    />    
 
 <input
 placeholder="Quantité"

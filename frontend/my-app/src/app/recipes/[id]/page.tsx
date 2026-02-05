@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import { Inter, Playfair_Display } from 'next/font/google'
+import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 
 // ✅ Police UI / structure
 const inter = Inter({
@@ -175,19 +176,7 @@ export default function RecipeDetailPage() {
 
       {/* Image + titre */}
       <section className="app-card p-6" style={{ marginTop: 16 }}>
-        {recipe.imageUrl && (
-          <img
-            src={recipe.imageUrl}
-            alt={recipe.title}
-            style={{
-              width: '100%',
-              maxHeight: 360,
-              objectFit: 'cover',
-              borderRadius: 12,
-              marginBottom: 14,
-            }}
-          />
-        )}
+       <RecipeImagePreview imageUrl={recipe.imageUrl}/>
 
         {/* ✅ Titre recette en Playfair Display */}
         <h2

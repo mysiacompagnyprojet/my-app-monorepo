@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState , useEffect} from 'react'
 import { apiFetch } from 'src/lib/api'
 import { useRouter } from 'next/navigation'
+
 
 type Line = { name: string; quantity: number; unit: string }
 
@@ -15,6 +16,12 @@ type RecipeDraft = {
   ingredients: Line[]
   trash?: string[]
 }
+const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+useEffect(() => {
+  return () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+  }
+}, [previewUrl])
 
 type ImportUrlResponse = { draft: RecipeDraft }
 type ImportOcrResponse = { draft: RecipeDraft }
@@ -60,7 +67,8 @@ export default function ImportRecipePage() {
 
       const form = new FormData()
       form.append('files', file)
-
+      //console log a enlever
+      console.log("url final appele")
       const res = await fetch(`${base}/import/ocr`, {
         method: 'POST',
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
@@ -133,7 +141,11 @@ export default function ImportRecipePage() {
             id="importOcr"
             type="file"
             accept="image/*"
-            onChange={(e) => setFile(e.target.files?.[0] || null)}
+            onChange={(e) => {
+              const f = e.target.files?.[0] || null
+              setFile(f)
+              setPreviewUrl(f ? URL.createObjectURL(f) : null)
+            }}
             className="mt-2 w-full"
             style={{
               background: 'white',
@@ -143,6 +155,24 @@ export default function ImportRecipePage() {
               maxWidth: 720,
             }}
           />
+          {previewUrl && (
+            <div style={{ marginTop: 12 }}>
+            <div style={{ fontSize: 12, opacity: 0.7, marginBottom: 6 }}>
+              Aperçu de l’image
+            </div>
+              <img
+                src={previewUrl}
+                alt="Aperçu OCR"
+                style={{
+                width: '100%',
+                maxWidth: 520,
+                borderRadius: 12,
+                border: '1px solid rgba(0,0,0,0.08)',
+                }}
+              />
+            </div>
+          )}
+
 
           <div className="mt-4">
             <button onClick={importOcr} disabled={!file} className="app-btn-primary">
