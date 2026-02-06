@@ -7,22 +7,15 @@ import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import type { OcrDraft } from 'src/types/recipe'
+import type { IngredientLine } from 'src/types/recipe'
 import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 import { IngredientPicker } from '@/components/IngredientPicker'
 
-type Line = {
-name: string
-quantity: number
-unit: string
-quantityRaw?: string
+type Line = IngredientLine & {
 
-price?: { eurPer: number; perUnit: string } | null
-costEur?: number | null
 unitPriceBuy?: number | null
-priceMatched?: boolean
-id?: string | null
 
-buyPriceEur?: number | null
+
 buyLabel?: string | null
 buyRefQty?: number | null
 buyRefUnit?: string | null
@@ -600,35 +593,53 @@ borderColor: 'var(--border)',
 }}
 >
 <div
-    style={{
-    display: 'grid',
-    gridTemplateColumns: '1fr 140px 120px 220px 44px',
-    gap: 10,
-    alignItems: 'center',
-    }}
+style={{
+display: 'grid',
+gridTemplateColumns: '1fr 100px 120px 200px 44px', //ne pas toucher grandeur des conteneur parfait
+gap: 10,
+alignItems: 'center',
+}}
+>
+{/* ✅ COLONNE 1 : Ingrédient + bouton DANS le même rectangle */}
+<div
+style={{
+display: 'flex',
+alignItems: 'center',
+gap: 8,
+background: 'white',
+border: '1px solid var(--border)',
+borderRadius: 12,
+padding: '0 8px',
+minWidth: 0,
+}}
 >
 <input
-    placeholder="Ingrédient"
-    value={ing.name}
-    onChange={(e) => setIngredient(idx, { name: e.target.value })}
-    style={{
-    background: 'white',
-    border: '1px solid var(--border)',
-    borderRadius: 12,
-    padding: 11,
-    }}
+placeholder="Ingrédient"
+value={ing.name}
+onChange={(e) => setIngredient(idx, { name: e.target.value })}
+style={{
+flex: 1,
+minWidth: 0,
+background: 'transparent',
+border: 'none',
+outline: 'none',
+padding: 11,
+}}
 />
 
-   
-    <IngredientPicker 
-    querySeed={ing.name} 
-    onPick={(item) => { 
-        setIngredient(idx, { 
-            name: item.nom, 
-            id: item.id }) //ingredientBaseId
-    }}
-    />    
+<IngredientPicker
+querySeed={ing.name}
+onPick={(item) => {
+setIngredient(idx, {
+name: item.nom,
+ingredientBaseId: item.id,
+})
+}}
+buttonLabel="Voir les produits"
+/>
+</div>
 
+{/* COLONNE 2 : quantité */}
 <input
 placeholder="Quantité"
 value={qtyInputs[idx] ?? ''}
@@ -641,6 +652,7 @@ padding: 11,
 }}
 />
 
+{/* COLONNE 3 : unité */}
 <input
 placeholder="Unité"
 value={ing.unit}
@@ -653,20 +665,54 @@ padding: 11,
 }}
 />
 
+{/* COLONNE 4 : prix */}
 <div
 style={{
-minWidth: 220,
+minWidth: 0, // Colonne des prix décalé de la droite vers la gauche
 display: 'flex',
-justifyContent: 'space-between',
+justifyContent: 'flex-end',//'space-between',
+gap: 50,
 alignItems: 'center',
-fontSize: 13,
-fontWeight: 800,
+fontSize: 13,//taille des chiffres
+fontWeight: 800,//le gras des chiffres prix
 }}
 >
-<span>{fmtEur(typeof ing.costEur === 'number' ? ing.costEur : null)}</span>
-<span>{fmtEur(typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null)}</span>
+{/* Colonne Prix recette */}
+<div style={{ textAlign: 'right' }}>
+<div
+style={{
+fontSize: 13,
+opacity: 0.6,
+fontWeight: 800,
+lineHeight: '12px',
+}}
+>
+Prix recette
+</div>
+<div style={{ fontSize: 13, fontWeight: 800 }}>
+{fmtEur(typeof ing.costEur === 'number' ? ing.costEur : null)}
+</div>
 </div>
 
+{/* Colonne Prix produit */}
+<div style={{ textAlign: 'right' }}>
+<div
+style={{
+fontSize: 13,
+opacity: 0.6,
+fontWeight: 800,
+lineHeight: '12px',
+}}
+>
+Prix produit
+</div>
+<div style={{ fontSize: 13, fontWeight: 800 }}>
+{fmtEur(typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null)}
+</div>
+</div>
+</div>
+
+{/* COLONNE 5 : bouton X */}
 <button
 type="button"
 onClick={() => removeIngredient(idx)}

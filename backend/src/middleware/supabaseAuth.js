@@ -1,8 +1,21 @@
 // backend/src/middleware/supabaseAuth.js
+const { prisma } = require('../lib/prisma')
 
 const fetch = global.fetch; // Node 18+ possède fetch nativement
 
 async function supabaseAuth(req, res, next) {
+  if (process.env.DEV_BYPASS_AUTH === 'true') {
+        req.user = {
+            userId: process.env.DEV_USER_ID || 'dev-user',
+            email: process.env.DEV_USER_EMAIL || 'shirley.valeton88@icloud.com',
+        }
+        console.log('[auth]'), {
+            bypass: process.env.DEV_BYPASS_AUTH,
+            user: req.user,
+        }
+        req.userId = req.user.userId
+        return next()
+    }
   try {
     const authHeader = req.headers.authorization || '';
     const m = authHeader.match(/^Bearer\s+(.+)$/i);

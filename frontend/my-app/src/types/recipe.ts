@@ -1,40 +1,38 @@
 //frontend/my-app/src/types/recipe.ts
-export type IngredientLine = {
-name: string;
-quantity?: number;
-unit?: string;
-quantityRaw?: string;
-
-// ✅ Airtable pricing (V1)
-price?: { eurPer: number; perUnit: string } | null;
-costEur?: number | null;
-priceMatched?: boolean;
-//airtableId?: string | null;
-id?: string | null;
-};
-
-export type OcrDraft = {
-title: string;
-servings: number;
-imageUrl: string | null;
-notes: string;
-ingredients: IngredientLine[];
-steps: string[];
-trash?: string[];
-
-// ✅ total calculé backend
-totalCostEur?: number | null;
-};
-
 export type RecipeIngredient = {
-    id? : string
+    id? : string | null
     name: string
     quantity: number
     unit: string
+
     costRecipe?: number | null
     buyPriceEur?: number | null
-    ingredientBaseId?: string
+
+    ingredientBaseId?: string | null
     //airtableId?: string | null
+}
+
+export type IngredientLine = RecipeIngredient & {
+    quantityRaw?: string
+
+    // ✅ Airtable pricing (V1)
+    price?: { eurPer: number; perUnit: string } | null
+    costEur?: number | null
+    priceMatched?: boolean
+    //airtableId?: string | null;
+}
+
+export type OcrDraft = {
+    title: string
+    servings: number
+    imageUrl: string | null
+    notes: string
+    ingredients: IngredientLine[]
+    steps: string[]
+    trash?: string[]
+
+    // ✅ total calculé backend
+    totalCostEur?: number | null
 }
 
 export type Recipe = {
