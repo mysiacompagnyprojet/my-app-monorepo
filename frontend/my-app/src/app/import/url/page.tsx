@@ -1,3 +1,5 @@
+//frontend/my-app/src/app/import/url/page.tsx
+
 'use client'
 
 import { useState } from 'react'
@@ -34,7 +36,7 @@ export default function Page() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(res.draft))
       setStatus('✅ Import OK')
-      router.push('/recipes/new?from=ocr=1')
+      router.push('/recipes/new?from=ocr')//=1 enlever le 08/02
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }

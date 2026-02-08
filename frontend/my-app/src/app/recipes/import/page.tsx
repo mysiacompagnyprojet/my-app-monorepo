@@ -1,3 +1,5 @@
+//frontend/my-app/src/app/recipes/import/page.tsx
+
 'use client'
 
 import { useState , useEffect} from 'react'
@@ -16,12 +18,6 @@ type RecipeDraft = {
   ingredients: Line[]
   trash?: string[]
 }
-const [previewUrl, setPreviewUrl] = useState<string | null>(null)
-useEffect(() => {
-  return () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl)
-  }
-}, [previewUrl])
 
 type ImportUrlResponse = { draft: RecipeDraft }
 type ImportOcrResponse = { draft: RecipeDraft }
@@ -31,6 +27,12 @@ export default function ImportRecipePage() {
   const [file, setFile] = useState<File | null>(null)
   const [status, setStatus] = useState('')
   const router = useRouter()
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    }
+  }, [previewUrl])
 
   async function importUrl() {
     const cleanedUrl = url.trim()
@@ -46,7 +48,7 @@ export default function ImportRecipePage() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(res.draft))
       setStatus('✅ Import OK')
-      router.push('/recipes/new?from=ocr=1')
+      router.push('/recipes/new?from=ocr') //=1 enlever le 08/02
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }
@@ -84,7 +86,7 @@ export default function ImportRecipePage() {
 
       sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
       setStatus('✅ OCR OK')
-      router.push('/recipes/new?from=ocr=1')
+      router.push('/recipes/new?from=ocr')//=1 enlever le 08/02
     } catch (e: any) {
       setStatus('❌ ' + (e?.message || 'Erreur'))
     }

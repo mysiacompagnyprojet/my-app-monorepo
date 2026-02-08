@@ -1,5 +1,5 @@
 // frontend/my-app/src/app/recipes/new/page.tsx
-// frontend/my-app/src/app/recipes/new/page.tsx
+
 'use client'
 
 import type React from 'react'
@@ -147,7 +147,7 @@ useEffect(() => {
 if (!fromOcr) return
 
 const raw = sessionStorage.getItem('recipeDraft')
-if (!raw) return
+if (!raw || raw === 'null' || raw === 'undefines') return
 
 try {
 const d = JSON.parse(raw) as OcrDraft
@@ -215,7 +215,7 @@ if (!prefill) return
 
 try {
 const raw = sessionStorage.getItem('recipeDraft')
-if (!raw) return
+if (!raw || raw === 'null' || raw === 'undefines') return
 
 const d: Draft = JSON.parse(raw)
 
