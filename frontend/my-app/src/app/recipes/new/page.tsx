@@ -12,13 +12,12 @@ import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 import { IngredientPicker } from '@/components/IngredientPicker'
 
 type Line = IngredientLine & {
-
 unitPriceBuy?: number | null
-
 
 buyLabel?: string | null
 buyRefQty?: number | null
 buyRefUnit?: string | null
+buyRecalced?: boolean // ajouté le 08/02 pour griser quand ce n'est pas recalculé
 
 // ✅ pour afficher "⚠️ ingrédient non trouvé" / autres infos backend
 note?: string
@@ -70,7 +69,8 @@ if (mix) {
 const a = Number(mix[1])
 const b = Number(mix[2])
 const c = Number(mix[3])
-if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0) return a + b / c
+if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0)
+return a + b / c
 }
 
 const frac = s.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/)
@@ -95,6 +95,28 @@ function fmtEur(v: any): string {
 const n = typeof v === 'string' ? Number(String(v).replace(',', '.')) : Number(v)
 if (!Number.isFinite(n)) return '—'
 return `${n.toFixed(2)} €`
+}
+
+function normalizeIngredientForLookup(raw: string): string { // nettoyer les lignes ingredients pour le retrouver dans la base
+    let s = String(raw || '').trim()
+    if (!s) return ''
+
+    // enléve tout ce qui est entre parenthése
+    s = s.replace(/\([^)]*\)/g, ' ')
+
+    // enleve tout ce qui suit une virgule et point virgule
+    s = s.replace(/[,;:()].*$/g, ' ')
+    
+    // enleve "selon...", voir si on rajoute d'autre chose ?
+    s = s.replace(/\bselon\b.*$/gi, ' ')
+
+    // enleve qualificatifs frequents, voir s'il faut en rajouter
+    s = s.replace(/\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|fraîche|ciselé(e)?|décortiqué(e)?)\b/gi, ' ')
+
+    //nettoie les espaces
+    s = s.replace(/\s+/g, ' ').trim()
+
+    return s
 }
 
 // ✅ décide si on doit afficher "⚠️ ingrédient non trouvé"
@@ -137,7 +159,10 @@ return ingredients.reduce((acc, i) => acc + (typeof i.costEur === 'number' ? i.c
 }, [ingredients])
 
 const totalProducts = useMemo(() => {
-return ingredients.reduce((acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0), 0)
+return ingredients.reduce(
+(acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0),
+0
+)
 }, [ingredients])
 
 // ─────────────────────────────────────────────────────────────
@@ -147,7 +172,7 @@ useEffect(() => {
 if (!fromOcr) return
 
 const raw = sessionStorage.getItem('recipeDraft')
-if (!raw || raw === 'null' || raw === 'undefines') return
+if (!raw || raw === 'null' || raw === 'undefined') return
 
 try {
 const d = JSON.parse(raw) as OcrDraft
@@ -158,32 +183,43 @@ setServings(Number(d.servings || 1) || 1)
 setImageUrl(String(d.imageUrl || ''))
 setNotes(String(d.notes || ''))
 
-const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
+const s = Array.isArray(d.steps)
+? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
+: []
 setSteps(s.length ? s : [''])
 
 const ing = Array.isArray(d.ingredients) ? d.ingredients : []
 const normalized = ing
 .map((row: any): Line | null => {
 if (!row) return null
-if (typeof row === 'string') return { name: row, quantity: 0, unit: '' }
-if (row.raw) return { name: String(row.raw), quantity: 0, unit: '' }
+if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
+if (row.raw) return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+
+const buyPriceEur =
+typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
 return {
 name: String(row.name || '').trim(),
 quantity: Number(row.quantity || 0) || 0,
 unit: String(row.unit || ''),
-quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+quantityRaw:
+typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
 price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
-unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+unitPriceBuy:
+typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
 id: row.id ?? null,
 
-buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
+buyPriceEur,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+buyRefUnit:
+typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+
+// si le backend a déjà fourni un buyPriceEur, on considère “prêt”, sinon grisé
+buyRecalced: typeof buyPriceEur === 'number',
 
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
@@ -215,7 +251,7 @@ if (!prefill) return
 
 try {
 const raw = sessionStorage.getItem('recipeDraft')
-if (!raw || raw === 'null' || raw === 'undefines') return
+if (!raw || raw === 'null' || raw === 'undefined') return
 
 const d: Draft = JSON.parse(raw)
 
@@ -224,32 +260,43 @@ setServings(Number(d.servings || 1) || 1)
 setImageUrl(String(d.imageUrl || ''))
 setNotes(String(d.notes || ''))
 
-const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
+const s = Array.isArray(d.steps)
+? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
+: []
 setSteps(s.length ? s : [''])
 
 const ing = Array.isArray(d.ingredients) ? d.ingredients : []
 const normalized = ing
 .map((row: any): Line | null => {
 if (!row) return null
-if (typeof row === 'string') return { name: row, quantity: 0, unit: '' }
-if ((row as any).raw) return { name: String((row as any).raw), quantity: 0, unit: '' }
+if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
+if ((row as any).raw)
+return { name: String((row as any).raw), quantity: 0, unit: '', buyRecalced: false }
+
+const buyPriceEur =
+typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
 return {
 name: String(row.name || '').trim(),
 quantity: Number(row.quantity || 0) || 0,
 unit: String(row.unit || ''),
-quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+quantityRaw:
+typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
 price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : null,
-unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+unitPriceBuy:
+typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: row.priceMatched ?? false,
 id: row.id ?? null,
 
-buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null,
+buyPriceEur,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+buyRefUnit:
+typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+
+buyRecalced: typeof buyPriceEur === 'number',
 
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
@@ -260,7 +307,9 @@ const finalIngredients = normalized.length ? normalized : [{ name: '', quantity:
 setIngredients(finalIngredients)
 setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
+const tr = Array.isArray(d.trash)
+? d.trash.map((x) => String(x || '').trim()).filter(Boolean)
+: []
 setTrash(tr.join('\n'))
 } catch (e) {
 console.error('prefill parse error', e)
@@ -270,7 +319,11 @@ console.error('prefill parse error', e)
 function setIngredient(idx: number, patch: Partial<Line>) {
 setIngredients((prev) => {
 const copy = [...prev]
-copy[idx] = { ...copy[idx], ...patch }
+copy[idx] = {
+...copy[idx],
+...patch,
+buyRecalced: false, // ✅ dès qu'on change quelque chose → prix produit grisé
+}
 return copy
 })
 }
@@ -313,7 +366,12 @@ const idx = idxs[k]
 const old = copy[idx]
 const e = enriched[k] as any
 
-const cost = typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
+const cost =
+typeof e.costEur === 'number'
+? e.costEur
+: typeof e.costRecipe === 'number'
+? e.costRecipe
+: null
 
 copy[idx] = {
 ...old,
@@ -328,6 +386,7 @@ buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
 buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
 buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
 buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
+buyRecalced: true, // ✅ recalcul effectué → prix produit actif
 
 note: typeof e.note === 'string' ? e.note : undefined,
 }
@@ -347,7 +406,7 @@ if (!silent) setStatus('⏳ Recalcul des prix…')
 const idxs: number[] = []
 const list = ingredients
 .map((i, idx) => {
-const name = String(i.name || '').trim()
+const name = normalizeIngredientForLookup(i.name)
 if (!name) return null
 idxs.push(idx)
 return {
@@ -397,7 +456,10 @@ const lastSigRef = useRef<string>('')
 
 const ingredientsSig = useMemo(() => {
 return ingredients
-.map((i) => `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`)
+.map(
+(i) =>
+`${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`
+)
 .join('||')
 }, [ingredients])
 
@@ -420,6 +482,20 @@ if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
 }
 // eslint-disable-next-line react-hooks/exhaustive-deps
 }, [ingredientsSig])
+
+async function uploadCroppedImage(croppedBlob: Blob) {
+    const form = new FormData()
+    form.append('file', croppedBlob, 'recipe.jpg')
+
+    const res = await apiFetch<{ ok: true; imageUrl: string }>(
+        '/upload/recipe-image',
+        {
+            method: 'POST',
+            body: form,
+        }
+    )
+    setImageUrl(res.imageUrl)
+}
 
 async function save() {
 try {
@@ -470,16 +546,16 @@ borderRadius: 10,
 }
 
 const sectionTitleStyle: React.CSSProperties = {
-fontSize: '1.13rem', // ✅ ~ +13% vs text-lg (1.125rem ≈ +13% vs 1rem)
-fontWeight: 800, // ✅ légèrement plus gras
-color: 'var(--primary)', // ✅ même couleur que titres recettes
+fontSize: '1.13rem',
+fontWeight: 800,
+color: 'var(--primary)',
 }
 
 const inputStyle: React.CSSProperties = {
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 14, // ✅ padding augmenté
+padding: 14,
 }
 
 return (
@@ -545,7 +621,7 @@ width: 140,
 <label className="grid gap-1 text-sm font-semibold">
 Image URL
 <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} />
-<RecipeImagePreview imageUrl={imageUrl}/>
+<RecipeImagePreview imageUrl={imageUrl} />
 </label>
 
 <label className="grid gap-1 text-sm font-semibold">
@@ -553,7 +629,7 @@ Notes
 <textarea
 value={notes}
 onChange={(e) => setNotes(e.target.value)}
-rows={7} // ✅ hauteur augmentée
+rows={7}
 style={{
 ...inputStyle,
 minHeight: 140,
@@ -582,7 +658,10 @@ type="button"
 </div>
 
 <div className="mt-4 grid gap-3">
-{ingredients.map((ing, idx) => (
+{ingredients.map((ing, idx) => {
+const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
+
+return (
 <div
 key={idx}
 className="app-card p-3"
@@ -595,7 +674,7 @@ borderColor: 'var(--border)',
 <div
 style={{
 display: 'grid',
-gridTemplateColumns: '1fr 100px 120px 200px 44px', //ne pas toucher grandeur des conteneur parfait
+gridTemplateColumns: '1fr 100px 120px 200px 44px', // ne pas toucher grandeur des conteneurs
 gap: 10,
 alignItems: 'center',
 }}
@@ -628,7 +707,7 @@ padding: 11,
 />
 
 <IngredientPicker
-querySeed={ing.name}
+querySeed={normalizeIngredientForLookup(ing.name)}
 onPick={(item) => {
 setIngredient(idx, {
 name: item.nom,
@@ -668,13 +747,13 @@ padding: 11,
 {/* COLONNE 4 : prix */}
 <div
 style={{
-minWidth: 0, // Colonne des prix décalé de la droite vers la gauche
+minWidth: 0,
 display: 'flex',
-justifyContent: 'flex-end',//'space-between',
+justifyContent: 'flex-end',
 gap: 50,
 alignItems: 'center',
-fontSize: 13,//taille des chiffres
-fontWeight: 800,//le gras des chiffres prix
+fontSize: 13,
+fontWeight: 800,
 }}
 >
 {/* Colonne Prix recette */}
@@ -706,8 +785,16 @@ lineHeight: '12px',
 >
 Prix produit
 </div>
-<div style={{ fontSize: 13, fontWeight: 800 }}>
-{fmtEur(typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null)}
+
+{/* ✅ grisé tant que pas recalculé */}
+<div
+style={{
+fontSize: 13,
+fontWeight: 800,
+opacity: isBuyPriceReady ? 1 : 0.35,
+}}
+>
+{isBuyPriceReady ? fmtEur(ing.buyPriceEur) : '—'}
 </div>
 </div>
 </div>
@@ -741,7 +828,8 @@ padding: '6px 10px',
 </div>
 )}
 </div>
-))}
+)
+})}
 
 <button
 onClick={() => {
@@ -778,17 +866,17 @@ borderColor: 'var(--border)',
 }}
 >
 <div className="flex items-center justify-between gap-2 mb-2">
-<span 
-    style={{
-        fontSize: 11,
-        fontWeight: 700,
-        color: 'rgba(60,60,60,0.85)',
-        background: 'rgba(120, 120, 120, 0.12)',
-        borderRadius: 8,
-        padding: '4px 8px',
-    }}
+<span
+style={{
+fontSize: 11,
+fontWeight: 700,
+color: 'rgba(60,60,60,0.85)',
+background: 'rgba(120, 120, 120, 0.12)',
+borderRadius: 8,
+padding: '4px 8px',
+}}
 >
-    Étape {idx + 1}
+Étape {idx + 1}
 </span>
 
 <button
@@ -811,13 +899,13 @@ copy[idx] = e.target.value
 return copy
 })
 }
-rows={3} // ✅ hauteur augmentée
+rows={3}
 style={{
 width: '100%',
 background: 'white',
 border: '1px solid var(--border)',
 borderRadius: 12,
-padding: 14, // ✅ padding augmenté
+padding: 14,
 minHeight: 90,
 }}
 />
@@ -840,7 +928,7 @@ type="button"
 <button
 onClick={save}
 className="app-btn-primary"
-style={{ borderRadius: 14 }} // ✅ plus arrondi
+style={{ borderRadius: 14 }}
 type="button"
 >
 Enregistrer

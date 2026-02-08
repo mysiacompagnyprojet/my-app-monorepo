@@ -19,6 +19,7 @@ const authRouter = require('./routes/auth');
 const shoppingListRouter = require('./routes/shopping-list');
 const ingredientsBase = require('./routes/ingredients-base');
 const recipeDraftsRouter = require('./routes/recipeDrafts');
+const imagesRouter = require('./routes/images');
 
 
 
@@ -27,7 +28,7 @@ app.get('/health', (_req, res) => res.json({ ok: true, status: 'ok' }));
 
 // 4) Webhook Stripe en RAW (⚠️ doit être avant express.json())
 app.use('/billing/webhook', billingWebhookHandler());
-
+app.use('/upload', imagesRouter);
 // 5) JSON pour le reste
 app.use(express.json());
 
@@ -91,6 +92,7 @@ app.use('/import', importUrlRouter);         // POST /import/url
 app.use('/import', importOcrRouter);         // POST /import/ocr
 app.use('/recipes', recipesRouter);          // GET/POST /recipes
 app.use('/shopping-list', shoppingListRouter); // POST /shopping-list
+
 
 // 11) Root (petite page d’accueil JSON)
 app.get('/', (_req, res) => {
