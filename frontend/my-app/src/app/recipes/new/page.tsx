@@ -1,15 +1,14 @@
 // frontend/my-app/src/app/recipes/new/page.tsx
-
 'use client'
 
 import type React from 'react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
-import type { OcrDraft } from 'src/types/recipe'
-import type { IngredientLine } from 'src/types/recipe'
+import type { OcrDraft, IngredientLine } from 'src/types/recipe'
 import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 import { IngredientPicker } from '@/components/IngredientPicker'
+import Cropper from 'react-easy-crop'
 
 type Line = IngredientLine & {
 unitPriceBuy?: number | null
@@ -17,9 +16,8 @@ unitPriceBuy?: number | null
 buyLabel?: string | null
 buyRefQty?: number | null
 buyRefUnit?: string | null
-buyRecalced?: boolean // ajouté le 08/02 pour griser quand ce n'est pas recalculé
+buyRecalced?: boolean
 
-// ✅ pour afficher "⚠️ ingrédient non trouvé" / autres infos backend
 note?: string
 }
 
@@ -69,8 +67,7 @@ if (mix) {
 const a = Number(mix[1])
 const b = Number(mix[2])
 const c = Number(mix[3])
-if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0)
-return a + b / c
+if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0) return a + b / c
 }
 
 const frac = s.match(/^\s*(\d+)\s*\/\s*(\d+)\s*$/)
@@ -97,29 +94,23 @@ if (!Number.isFinite(n)) return '—'
 return `${n.toFixed(2)} €`
 }
 
-function normalizeIngredientForLookup(raw: string): string { // nettoyer les lignes ingredients pour le retrouver dans la base
-    let s = String(raw || '').trim()
-    if (!s) return ''
+// Nettoyage nom ingrédient pour lookup (muscade râpée (selon...) => muscade)
+function normalizeIngredientForLookup(raw: string): string {
+let s = String(raw || '').trim()
+if (!s) return ''
 
-    // enléve tout ce qui est entre parenthése
-    s = s.replace(/\([^)]*\)/g, ' ')
+s = s.replace(/\([^)]*\)/g, ' ') // retire (...) partout
+s = s.replace(/\bselon\b.*$/gi, ' ') // retire "selon ..."
+s = s.replace(/[,;:].*$/g, ' ') // retire après virgule/;/: (souvent commentaires)
+s = s.replace(
+/\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|fraîche|ciselé(e)?|décortiqué(e)?)\b/gi,
+' '
+)
 
-    // enleve tout ce qui suit une virgule et point virgule
-    s = s.replace(/[,;:()].*$/g, ' ')
-    
-    // enleve "selon...", voir si on rajoute d'autre chose ?
-    s = s.replace(/\bselon\b.*$/gi, ' ')
-
-    // enleve qualificatifs frequents, voir s'il faut en rajouter
-    s = s.replace(/\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|fraîche|ciselé(e)?|décortiqué(e)?)\b/gi, ' ')
-
-    //nettoie les espaces
-    s = s.replace(/\s+/g, ' ').trim()
-
-    return s
+s = s.replace(/\s+/g, ' ').trim()
+return s
 }
 
-// ✅ décide si on doit afficher "⚠️ ingrédient non trouvé"
 function isNotFoundLine(ing: Line): boolean {
 const nameOk = String(ing?.name || '').trim().length > 0
 if (!nameOk) return false
@@ -133,6 +124,69 @@ if (note.includes('non trouvé') || note.includes('introuvable')) return true
 return false
 }
 
+/* ──────────────────────────────────────────────────────────────
+Crop helpers (évite les problèmes CORS en passant par fetch -> blob)
+────────────────────────────────────────────────────────────── */
+
+async function createImageFromUrl(url: string): Promise<HTMLImageElement> {
+// On force un blob local pour éviter "Load failed" (CORS/canvas tainted)
+const r = await fetch(url, { cache: 'no-store' })
+if (!r.ok) throw new Error(`Image download failed (${r.status})`)
+
+const blob = await r.blob()
+const objectUrl = URL.createObjectURL(blob)
+
+return new Promise<HTMLImageElement>((resolve, reject) => {
+const img = new Image()
+img.onload = () => {
+URL.revokeObjectURL(objectUrl)
+resolve(img)
+}
+img.onerror = () => {
+URL.revokeObjectURL(objectUrl)
+reject(new Error('Image load failed'))
+}
+img.src = objectUrl
+})
+}
+
+async function getCroppedBlob(
+imageSrc: string,
+cropPixels: { x: number; y: number; width: number; height: number }
+): Promise<Blob> {
+const image = await createImageFromUrl(imageSrc)
+
+const canvas = document.createElement('canvas')
+const ctx = canvas.getContext('2d')
+if (!ctx) throw new Error('Canvas non supporté')
+
+canvas.width = Math.max(1, Math.round(cropPixels.width))
+canvas.height = Math.max(1, Math.round(cropPixels.height))
+
+ctx.drawImage(
+image,
+cropPixels.x,
+cropPixels.y,
+cropPixels.width,
+cropPixels.height,
+0,
+0,
+cropPixels.width,
+cropPixels.height
+)
+
+return new Promise<Blob>((resolve, reject) => {
+canvas.toBlob(
+(blob) => {
+if (!blob) return reject(new Error('Impossible de générer le blob'))
+resolve(blob)
+},
+'image/jpeg',
+0.92
+)
+})
+}
+
 function NewRecipeInner() {
 const router = useRouter()
 const search = useSearchParams()
@@ -144,12 +198,23 @@ const [servings, setServings] = useState(1)
 const [imageUrl, setImageUrl] = useState('')
 const [notes, setNotes] = useState('')
 const [steps, setSteps] = useState<string[]>([''])
-const [ingredients, setIngredients] = useState<Line[]>([{ name: '', quantity: 0, unit: '' }])
+const [ingredients, setIngredients] = useState<Line[]>([{ name: '', quantity: 0, unit: '', buyRecalced: false }])
 const [qtyInputs, setQtyInputs] = useState<string[]>([''])
 const [trash, setTrash] = useState<string>('')
 const [status, setStatus] = useState<string>('')
 
 const [isRepricing, setIsRepricing] = useState(false)
+
+// Crop UI
+const [isCropping, setIsCropping] = useState(false)
+const [crop, setCrop] = useState({ x: 0, y: 0 })
+const [zoom, setZoom] = useState(1)
+const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+const [isUploadingCrop, setIsUploadingCrop] = useState(false)
+
+const onCropComplete = (_: any, croppedPixels: any) => {
+setCroppedAreaPixels(croppedPixels)
+}
 
 const prefill = useMemo(() => search.get('prefill') === '1', [search])
 const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
@@ -159,15 +224,10 @@ return ingredients.reduce((acc, i) => acc + (typeof i.costEur === 'number' ? i.c
 }, [ingredients])
 
 const totalProducts = useMemo(() => {
-return ingredients.reduce(
-(acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0),
-0
-)
+return ingredients.reduce((acc, i) => acc + (typeof i.buyPriceEur === 'number' ? i.buyPriceEur : 0), 0)
 }, [ingredients])
 
-// ─────────────────────────────────────────────────────────────
 // 1) Pré-remplissage depuis OCR
-// ─────────────────────────────────────────────────────────────
 useEffect(() => {
 if (!fromOcr) return
 
@@ -183,9 +243,7 @@ setServings(Number(d.servings || 1) || 1)
 setImageUrl(String(d.imageUrl || ''))
 setNotes(String(d.notes || ''))
 
-const s = Array.isArray(d.steps)
-? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
-: []
+const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
 setSteps(s.length ? s : [''])
 
 const ing = Array.isArray(d.ingredients) ? d.ingredients : []
@@ -195,44 +253,39 @@ if (!row) return null
 if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
 if (row.raw) return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
 
-const buyPriceEur =
-typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+const buyPriceEur = typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
 return {
 name: String(row.name || '').trim(),
 quantity: Number(row.quantity || 0) || 0,
 unit: String(row.unit || ''),
-quantityRaw:
-typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
 price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
-unitPriceBuy:
-typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
 id: row.id ?? null,
 
 buyPriceEur,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-buyRefUnit:
-typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
 
-// si le backend a déjà fourni un buyPriceEur, on considère “prêt”, sinon grisé
 buyRecalced: typeof buyPriceEur === 'number',
-
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
 })
 .filter((x): x is Line => x !== null)
 
-const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '' }]
+const finalIngredients = normalized.length
+? normalized
+: [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
 setIngredients(finalIngredients)
 setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-const tr = Array.isArray((d as any).trash)
-? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean)
-: []
+const tr = Array.isArray((d as any).trash) ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean) : []
 setTrash(tr.join('\n'))
 } catch (e) {
 console.error('ocrDraft parse error', e)
@@ -243,9 +296,7 @@ sessionStorage.removeItem('recipeDraft')
 } catch {}
 }, [fromOcr])
 
-// ─────────────────────────────────────────────────────────────
 // 2) Pré-remplissage générique (prefill=1)
-// ─────────────────────────────────────────────────────────────
 useEffect(() => {
 if (!prefill) return
 
@@ -260,9 +311,7 @@ setServings(Number(d.servings || 1) || 1)
 setImageUrl(String(d.imageUrl || ''))
 setNotes(String(d.notes || ''))
 
-const s = Array.isArray(d.steps)
-? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
-: []
+const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
 setSteps(s.length ? s : [''])
 
 const ing = Array.isArray(d.ingredients) ? d.ingredients : []
@@ -270,46 +319,41 @@ const normalized = ing
 .map((row: any): Line | null => {
 if (!row) return null
 if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
-if ((row as any).raw)
-return { name: String((row as any).raw), quantity: 0, unit: '', buyRecalced: false }
+if ((row as any).raw) return { name: String((row as any).raw), quantity: 0, unit: '', buyRecalced: false }
 
-const buyPriceEur =
-typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+const buyPriceEur = typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
 return {
 name: String(row.name || '').trim(),
 quantity: Number(row.quantity || 0) || 0,
 unit: String(row.unit || ''),
-quantityRaw:
-typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
 price: row.price ?? null,
 costEur: typeof row.costEur === 'number' ? row.costEur : null,
-unitPriceBuy:
-typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
 priceMatched: row.priceMatched ?? false,
 id: row.id ?? null,
 
 buyPriceEur,
 buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
 buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-buyRefUnit:
-typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
 
 buyRecalced: typeof buyPriceEur === 'number',
-
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
 }
 })
 .filter((x): x is Line => x !== null)
 
-const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '' }]
+const finalIngredients = normalized.length
+? normalized
+: [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
 setIngredients(finalIngredients)
 setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-const tr = Array.isArray(d.trash)
-? d.trash.map((x) => String(x || '').trim()).filter(Boolean)
-: []
+const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
 setTrash(tr.join('\n'))
 } catch (e) {
 console.error('prefill parse error', e)
@@ -319,11 +363,7 @@ console.error('prefill parse error', e)
 function setIngredient(idx: number, patch: Partial<Line>) {
 setIngredients((prev) => {
 const copy = [...prev]
-copy[idx] = {
-...copy[idx],
-...patch,
-buyRecalced: false, // ✅ dès qu'on change quelque chose → prix produit grisé
-}
+copy[idx] = { ...copy[idx], ...patch, buyRecalced: false }
 return copy
 })
 }
@@ -341,7 +381,7 @@ setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined })
 function removeIngredient(idx: number) {
 setIngredients((prev) => {
 const copy = prev.filter((_, i) => i !== idx)
-return copy.length ? copy : [{ name: '', quantity: 0, unit: '' }]
+return copy.length ? copy : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
 })
 
 setQtyInputs((prev) => {
@@ -367,11 +407,7 @@ const old = copy[idx]
 const e = enriched[k] as any
 
 const cost =
-typeof e.costEur === 'number'
-? e.costEur
-: typeof e.costRecipe === 'number'
-? e.costRecipe
-: null
+typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
 
 copy[idx] = {
 ...old,
@@ -386,7 +422,7 @@ buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
 buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
 buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
 buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
-buyRecalced: true, // ✅ recalcul effectué → prix produit actif
+buyRecalced: true,
 
 note: typeof e.note === 'string' ? e.note : undefined,
 }
@@ -422,11 +458,9 @@ if (!silent) setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.'
 return
 }
 
-const payload = { ingredients: list }
-
 const json = await apiFetch<EnrichResponse>('/recipes/enrich-ingredients', {
 method: 'POST',
-body: JSON.stringify(payload),
+body: JSON.stringify({ ingredients: list }),
 })
 
 if (!json || (json as any).ok !== true) {
@@ -442,7 +476,6 @@ return
 }
 
 applyEnriched(enriched, idxs)
-
 if (!silent) setStatus('✅ Prix recalculés')
 } catch (e: any) {
 if (!silent) setStatus('❌ ' + (e?.message || 'Erreur'))
@@ -456,10 +489,7 @@ const lastSigRef = useRef<string>('')
 
 const ingredientsSig = useMemo(() => {
 return ingredients
-.map(
-(i) =>
-`${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`
-)
+.map((i) => `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`)
 .join('||')
 }, [ingredients])
 
@@ -484,17 +514,32 @@ if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
 }, [ingredientsSig])
 
 async function uploadCroppedImage(croppedBlob: Blob) {
-    const form = new FormData()
-    form.append('file', croppedBlob, 'recipe.jpg')
+const form = new FormData()
+form.append('file', croppedBlob, 'recipe.jpg')
 
-    const res = await apiFetch<{ ok: true; imageUrl: string }>(
-        '/upload/recipe-image',
-        {
-            method: 'POST',
-            body: form,
-        }
-    )
-    setImageUrl(res.imageUrl)
+const res = await apiFetch<{ ok: true; imageUrl: string }>('/upload/recipe-image', {
+method: 'POST',
+body: form as any, // apiFetch doit laisser passer FormData tel quel
+})
+
+setImageUrl(res.imageUrl)
+}
+
+async function confirmCrop() {
+if (!imageUrl || !croppedAreaPixels) return
+try {
+setIsUploadingCrop(true)
+setStatus('⏳ Recadrage en cours…')
+const blob = await getCroppedBlob(imageUrl, croppedAreaPixels)
+await uploadCroppedImage(blob)
+setIsCropping(false)
+setStatus('✅ Image recadrée')
+} catch (e: any) {
+console.error(e)
+setStatus('❌ ' + (e?.message || 'Erreur recadrage'))
+} finally {
+setIsUploadingCrop(false)
+}
 }
 
 async function save() {
@@ -560,7 +605,6 @@ padding: 14,
 
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
-{/* ✅ header sans fond blanc */}
 <section style={{ marginBottom: 16 }}>
 <h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
 <p className="mt-2 app-muted">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
@@ -572,9 +616,7 @@ return (
 <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
 🗑️ Corbeille (texte non-recette détecté)
 </summary>
-<p className="mt-2 text-sm app-muted">
-Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
-</p>
+<p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
 <textarea
 value={trash}
 onChange={(e) => setTrash(e.target.value)}
@@ -608,10 +650,7 @@ type="number"
 min={1}
 value={servings}
 onChange={(e) => setServings(Number(e.target.value || 1))}
-style={{
-width: 140,
-...inputStyle,
-}}
+style={{ width: 140, ...inputStyle }}
 />
 </label>
 
@@ -622,6 +661,22 @@ width: 140,
 Image URL
 <input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} />
 <RecipeImagePreview imageUrl={imageUrl} />
+
+{imageUrl?.trim() && (
+<button
+type="button"
+className="app-btn-secondary"
+style={{ width: 220, marginTop: 8 }}
+onClick={() => {
+setCrop({ x: 0, y: 0 })
+setZoom(1)
+setCroppedAreaPixels(null)
+setIsCropping(true)
+}}
+>
+Recadrer l’image
+</button>
+)}
 </label>
 
 <label className="grid gap-1 text-sm font-semibold">
@@ -630,10 +685,7 @@ Notes
 value={notes}
 onChange={(e) => setNotes(e.target.value)}
 rows={7}
-style={{
-...inputStyle,
-minHeight: 140,
-}}
+style={{ ...inputStyle, minHeight: 140 }}
 />
 </label>
 </div>
@@ -674,12 +726,11 @@ borderColor: 'var(--border)',
 <div
 style={{
 display: 'grid',
-gridTemplateColumns: '1fr 100px 120px 200px 44px', // ne pas toucher grandeur des conteneurs
+gridTemplateColumns: '1fr 100px 120px 200px 44px',
 gap: 10,
 alignItems: 'center',
 }}
 >
-{/* ✅ COLONNE 1 : Ingrédient + bouton DANS le même rectangle */}
 <div
 style={{
 display: 'flex',
@@ -718,7 +769,6 @@ buttonLabel="Voir les produits"
 />
 </div>
 
-{/* COLONNE 2 : quantité */}
 <input
 placeholder="Quantité"
 value={qtyInputs[idx] ?? ''}
@@ -731,7 +781,6 @@ padding: 11,
 }}
 />
 
-{/* COLONNE 3 : unité */}
 <input
 placeholder="Unité"
 value={ing.unit}
@@ -744,7 +793,6 @@ padding: 11,
 }}
 />
 
-{/* COLONNE 4 : prix */}
 <div
 style={{
 minWidth: 0,
@@ -756,37 +804,15 @@ fontSize: 13,
 fontWeight: 800,
 }}
 >
-{/* Colonne Prix recette */}
 <div style={{ textAlign: 'right' }}>
-<div
-style={{
-fontSize: 13,
-opacity: 0.6,
-fontWeight: 800,
-lineHeight: '12px',
-}}
->
-Prix recette
-</div>
+<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Prix recette</div>
 <div style={{ fontSize: 13, fontWeight: 800 }}>
 {fmtEur(typeof ing.costEur === 'number' ? ing.costEur : null)}
 </div>
 </div>
 
-{/* Colonne Prix produit */}
 <div style={{ textAlign: 'right' }}>
-<div
-style={{
-fontSize: 13,
-opacity: 0.6,
-fontWeight: 800,
-lineHeight: '12px',
-}}
->
-Prix produit
-</div>
-
-{/* ✅ grisé tant que pas recalculé */}
+<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Prix produit</div>
 <div
 style={{
 fontSize: 13,
@@ -799,7 +825,6 @@ opacity: isBuyPriceReady ? 1 : 0.35,
 </div>
 </div>
 
-{/* COLONNE 5 : bouton X */}
 <button
 type="button"
 onClick={() => removeIngredient(idx)}
@@ -833,7 +858,7 @@ padding: '6px 10px',
 
 <button
 onClick={() => {
-setIngredients((p) => [...p, { name: '', quantity: 0, unit: '' }])
+setIngredients((p) => [...p, { name: '', quantity: 0, unit: '', buyRecalced: false }])
 setQtyInputs((p) => [...p, ''])
 }}
 className="app-btn-secondary"
@@ -912,12 +937,7 @@ minHeight: 90,
 </div>
 ))}
 
-<button
-onClick={() => setSteps((p) => [...p, ''])}
-className="app-btn-secondary"
-style={{ width: 220 }}
-type="button"
->
+<button onClick={() => setSteps((p) => [...p, ''])} className="app-btn-secondary" style={{ width: 220 }} type="button">
 + Ajouter une étape
 </button>
 </div>
@@ -925,12 +945,7 @@ type="button"
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap gap-3 items-center">
-<button
-onClick={save}
-className="app-btn-primary"
-style={{ borderRadius: 14 }}
-type="button"
->
+<button onClick={save} className="app-btn-primary" style={{ borderRadius: 14 }} type="button">
 Enregistrer
 </button>
 
@@ -960,6 +975,89 @@ fontWeight: 800,
 )}
 </div>
 </section>
+
+{/* MODAL CROP */}
+{isCropping && imageUrl?.trim() && (
+<div
+style={{
+position: 'fixed',
+inset: 0,
+background: 'rgba(0,0,0,0.55)',
+display: 'grid',
+placeItems: 'center',
+zIndex: 50,
+padding: 16,
+}}
+>
+<div
+style={{
+width: 'min(920px, 95vw)',
+background: 'white',
+borderRadius: 14,
+border: '1px solid var(--border)',
+overflow: 'hidden',
+}}
+>
+<div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+<div style={{ fontWeight: 800 }}>Recadrer l’image</div>
+<button type="button" className="app-btn-secondary" onClick={() => setIsCropping(false)}>
+Fermer
+</button>
+</div>
+
+<div style={{ position: 'relative', width: '100%', height: 480, background: '#111' }}>
+<Cropper
+image={imageUrl}
+crop={crop}
+zoom={zoom}
+onCropChange={setCrop}
+onZoomChange={setZoom}
+onCropComplete={onCropComplete}
+aspect={4 / 3}
+cropShape="rect"
+showGrid
+/>
+</div>
+{/* Barre zoom */}
+<div
+style={{
+padding: 12,
+display: 'flex',
+alignItems: 'center',
+gap: 12,
+borderTop: '1px solid var(--border)',
+}}
+>
+<div style={{ fontSize: 12, opacity: 0.7, minWidth: 40 }}>Zoom</div>
+
+<input
+type="range"
+min={1}
+max={3}
+step={0.01}
+value={zoom}
+onChange={(e) => setZoom(Number(e.target.value))}
+style={{ width: '100%' }}
+/>
+
+<div style={{ fontSize: 12, opacity: 0.7, minWidth: 42, textAlign: 'right' }}>
+{zoom.toFixed(2)}
+</div>
+</div>
+<div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
+<button
+type="button"
+className="app-btn-primary"
+onClick={confirmCrop}
+disabled={isUploadingCrop || !croppedAreaPixels}
+style={{ minWidth: 220, opacity: isUploadingCrop ? 0.7 : 1 }}
+>
+{isUploadingCrop ? 'Upload…' : 'Valider le recadrage'}
+</button>
+</div>
+</div>
+</div>
+)}
 </main>
 )
 }
