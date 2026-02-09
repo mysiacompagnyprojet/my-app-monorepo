@@ -606,8 +606,19 @@ padding: 14,
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
 <section style={{ marginBottom: 16 }}>
-<h1 className="text-2xl font-extrabold app-title">Nouvelle recette</h1>
-<p className="mt-2 app-muted">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
+<h1 className="recipe-title editable-title"
+    contentEditable
+    suppressContentEditableWarning
+    onInput={(e) => {
+        setTitle(e.currentTarget.textContent || '');
+    }}
+    onBlur={(e) => {
+        setTitle(e.currentTarget.textContent?.trim() || '');
+    }}>
+
+    {title?.trim() || 'Titre de la recette'}
+</h1>    
+<p className="recipe-subtile">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
 </section>
 
 {trash.trim() && (
@@ -637,10 +648,6 @@ padding: 12,
 <h2 style={sectionTitleStyle}>Informations</h2>
 
 <div className="mt-4 grid gap-4">
-<label className="grid gap-1 text-sm font-semibold">
-Titre
-<input value={title} onChange={(e) => setTitle(e.target.value)} style={inputStyle} />
-</label>
 
 <div className="flex flex-wrap items-end gap-4">
 <label className="grid gap-1 text-sm font-semibold">

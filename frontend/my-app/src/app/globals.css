@@ -105,6 +105,22 @@ Branding global Mysia.app
 .app-header {
 margin-top: 16px;
 }
+.app-header--compact {
+    padding: 6px 10px;
+}
+
+.app-header--compact nav {
+    padding: 0;
+    gap: 8px;
+}
+
+.app-header--compact .app-brand {
+    font-size : 13px;
+}
+
+.app-header--compact img {
+    display: block;
+}
 
 /* Branding dans le header (petit, sobre, type “signature”) */
 .app-brand {
