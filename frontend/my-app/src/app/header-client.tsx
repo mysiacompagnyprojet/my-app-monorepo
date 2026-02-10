@@ -14,15 +14,17 @@ isNewRecipe ? 'app-header--compact' : ''
 }`}
 >
 <nav className="flex items-center gap-3">
-<a href="/" className="app-brand flex items-center gap-[4px]">
+<a href="/" className="app-brand flex items-center gap-2">
 <Image
 src="/brand/logo.png"
 alt="MySia logo"
-width={28}
-height={28}
+width={56}
+height={56}
 priority
 />
-<span>MySia.app</span>
+<span>
+    MySia<span className="app-brand-suffix">.app</span>
+</span>    
 </a>
 
 {!isNewRecipe && (

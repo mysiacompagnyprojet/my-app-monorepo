@@ -104,6 +104,9 @@ Branding global Mysia.app
 
 .app-header {
 margin-top: 16px;
+background: #FFFFFF;
+border: 1px solid #E5E1DA;
+border-radius: 16px;
 }
 .app-header--compact {
     padding: 6px 10px;
@@ -115,7 +118,13 @@ margin-top: 16px;
 }
 
 .app-header--compact .app-brand {
-    font-size : 13px;
+    font-size : 22Px;
+    letter-spacing: 0.2px;
+}
+
+.app-header--compact .app-brand img {
+    width: 56px;
+    height: 56px;
 }
 
 .app-header--compact img {
@@ -124,19 +133,30 @@ margin-top: 16px;
 
 /* Branding dans le header (petit, sobre, type “signature”) */
 .app-brand {
-color: var(--text);
+display: flex;
+align-items: center;
+gap: 4px;
+font-family: var(--font-playfair);/*color: var(--text);  police mysia.app*/ 
+color: #5a3a22;/*var(--primary);*/ /* couleur  */
 font-weight: 650;
-font-size: 14px;
-letter-spacing: 0.25px;
-opacity: 0.9;
+font-size: 20px; /* taille de mysia.app*/
+line-height: 1;/*letter-spacing: 0.25px;*/
+opacity: 0.95;
 text-decoration: none;
 
 /*rendu plus doux / arrondi */
 font-feature-settings: "ss01" 1;
 }
-.app-brand:hover {
+
+.app-brand-suffix {
+    color: var(--primary);
+    font-weight: 600;
+    font-size: 0.8em;
+}
+
+.app-brand:hover .app-brand-suffix {
 opacity: 1;
-color: var(--primary);
+color: #2E222E;
 }
 
 /* Branding discret en bas de page (comme sur la story) */
@@ -207,6 +227,31 @@ transition:
         box-shadow: 0 10px 22px rgba(139, 106, 79, 0.12);
         border-color: rgba(139, 106, 79, 0.35);
     }
+}
+
+/* ===============================
+Titre recette (page new / id)
+=============================== */
+
+.recipe-title {
+font-family: var(--font-playfair);
+font-size: 32px;
+font-weight: 700;
+color: #5a3a22; /*var(--primary);*/
+margin: 0 0 6px 0;
+line-height: 1.2;
+}
+
+/* Variante editable (quand on clique pour écrire) */
+.recipe-title.editable-title {
+cursor: text;
+outline: none;
+}
+
+/* Petit effet focus quand on édite */
+.recipe-title.editable-title:focus {
+background: rgba(231, 209, 186, 0.35); /* fond doux */
+border-radius: 6px;
 }
 
 /*
