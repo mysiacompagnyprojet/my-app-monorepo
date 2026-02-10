@@ -6,7 +6,6 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import type { OcrDraft } from 'src/types/recipe'
 
-
 type ImportOcrResponse =
 | { ok: true; draft: OcrDraft }
 | { ok: true; debug: any }
@@ -62,7 +61,12 @@ body: form,
 
 // Erreur API
 if ((data as any)?.ok === false) {
-setStatus('❌ ' + ((data as any)?.message || (data as any)?.error || 'Erreur OCR'))
+setStatus(
+'❌ ' +
+((data as any)?.message ||
+(data as any)?.error ||
+'Erreur OCR')
+)
 return
 }
 
@@ -89,8 +93,11 @@ setIsRunning(false)
 }
 }
 
-const statusKind =
-status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : 'info'
+const statusKind = status.startsWith('✅')
+? 'success'
+: status.startsWith('❌')
+? 'error'
+: 'info'
 
 return (
 <main className="app-container" style={{ margin: '20px auto 40px' }}>
@@ -154,7 +161,9 @@ Tu peux sélectionner plusieurs images en même temps.
 
 {files.length > 0 && (
 <div className="mt-3 flex flex-wrap items-center gap-2">
-<span className="app-badge">{files.length} image(s) sélectionnée(s)</span>
+<span className="app-badge">
+{files.length} image(s) sélectionnée(s)
+</span>
 
 <span className="text-sm app-muted">
 max {MAX_FILES}
@@ -183,7 +192,10 @@ border: '1px solid rgba(139, 106, 79, 0.22)',
 </button>
 
 {isDebug && (
-<span className="app-badge" style={{ background: 'rgba(168,184,161,0.35)' }}>
+<span
+className="app-badge"
+style={{ background: 'rgba(168,184,161,0.35)' }}
+>
 Debug actif
 </span>
 )}
@@ -199,15 +211,26 @@ borderColor: 'var(--border)',
 background: 'rgba(255,255,255,0.7)',
 }}
 >
-<h3 className="text-lg font-extrabold app-title">Aperçu ingrédients + prix</h3>
+<h3 className="text-lg font-extrabold app-title">
+Aperçu ingrédients + prix
+</h3>
 
 <div className="mt-3 grid gap-3">
 {draft.ingredients?.map((ing, idx) => (
 <div
 key={idx}
-style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
+style={{
+padding: '8px 0',
+borderBottom: '1px solid var(--border)',
+}}
 >
-<div style={{ display: 'flex', justifyContent: 'space-between', gap: 12 }}>
+<div
+style={{
+display: 'flex',
+justifyContent: 'space-between',
+gap: 12,
+}}
+>
 <div>
 <strong>{ing.name}</strong>{' '}
 <span style={{ opacity: 0.8 }}>
@@ -216,23 +239,35 @@ style={{ padding: '8px 0', borderBottom: '1px solid var(--border)' }}
 </div>
 
 <div style={{ minWidth: 90, textAlign: 'right' }}>
-{typeof ing.costEur === 'number' ? `${ing.costEur.toFixed(2)} €` : '0.00 €'}
+{typeof ing.costEur === 'number'
+? `${ing.costEur.toFixed(2)} €`
+: '0.00 €'}
 </div>
 </div>
 
 {ing.priceMatched === false && (
-<div style={{ fontSize: 12, opacity: 0.85, color: '#ffb020' }}>
+<div
+style={{ fontSize: 12, opacity: 0.85, color: '#ffb020' }}
+>
 Prix non trouvé dans Airtable (0 appliqué)
 </div>
 )}
 </div>
 ))}
 
-<div style={{ marginTop: 10, fontWeight: 800, textAlign: 'right' }}>
-Total recette :{' '}
+<div className="cost-summary">
+<div className="cost-pill">
+<div className="cost-pill-row">
+<div className="cost-pill-label">Coût recette ≈</div>
+<div className="cost-pill-value">
+<span className="amount">
 {typeof draft.totalCostEur === 'number'
 ? `${draft.totalCostEur.toFixed(2)} €`
 : '0.00 €'}
+</span>
+</div>
+</div>
+</div>
 </div>
 </div>
 </div>
@@ -306,7 +341,13 @@ maxHeight: 420,
 
 export default function Page() {
 return (
-<Suspense fallback={<div className="app-container" style={{ padding: 24 }}>Chargement…</div>}>
+<Suspense
+fallback={
+<div className="app-container" style={{ padding: 24 }}>
+Chargement…
+</div>
+}
+>
 <OcrPageInner />
 </Suspense>
 )

@@ -13,10 +13,15 @@ import Cropper from 'react-easy-crop'
 type Line = IngredientLine & {
 unitPriceBuy?: number | null
 
+// ✅ prix "produit" (courses)
+buyPriceEur?: number | null
 buyLabel?: string | null
 buyRefQty?: number | null
 buyRefUnit?: string | null
 buyRecalced?: boolean
+
+// ✅ lien éventuel vers une base ingrédient (IngredientPicker)
+ingredientBaseId?: string | null
 
 note?: string
 }
@@ -116,7 +121,7 @@ const nameOk = String(ing?.name || '').trim().length > 0
 if (!nameOk) return false
 
 if (ing.priceMatched === false) return true
-if (!ing.id) return true
+if (!(ing as any).id) return true
 
 const note = String(ing.note || '').toLowerCase()
 if (note.includes('non trouvé') || note.includes('introuvable')) return true
@@ -129,7 +134,6 @@ Crop helpers (évite les problèmes CORS en passant par fetch -> blob)
 ────────────────────────────────────────────────────────────── */
 
 async function createImageFromUrl(url: string): Promise<HTMLImageElement> {
-// On force un blob local pour éviter "Load failed" (CORS/canvas tainted)
 const r = await fetch(url, { cache: 'no-store' })
 if (!r.ok) throw new Error(`Image download failed (${r.status})`)
 
@@ -198,7 +202,9 @@ const [servings, setServings] = useState(1)
 const [imageUrl, setImageUrl] = useState('')
 const [notes, setNotes] = useState('')
 const [steps, setSteps] = useState<string[]>([''])
-const [ingredients, setIngredients] = useState<Line[]>([{ name: '', quantity: 0, unit: '', buyRecalced: false }])
+const [ingredients, setIngredients] = useState<Line[]>([
+{ name: '', quantity: 0, unit: '', buyRecalced: false },
+])
 const [qtyInputs, setQtyInputs] = useState<string[]>([''])
 const [trash, setTrash] = useState<string>('')
 const [status, setStatus] = useState<string>('')
@@ -209,7 +215,12 @@ const [isRepricing, setIsRepricing] = useState(false)
 const [isCropping, setIsCropping] = useState(false)
 const [crop, setCrop] = useState({ x: 0, y: 0 })
 const [zoom, setZoom] = useState(1)
-const [croppedAreaPixels, setCroppedAreaPixels] = useState<{ x: number; y: number; width: number; height: number } | null>(null)
+const [croppedAreaPixels, setCroppedAreaPixels] = useState<{
+x: number
+y: number
+width: number
+height: number
+} | null>(null)
 const [isUploadingCrop, setIsUploadingCrop] = useState(false)
 
 const onCropComplete = (_: any, croppedPixels: any) => {
@@ -220,7 +231,7 @@ const prefill = useMemo(() => search.get('prefill') === '1', [search])
 const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
 
 const totalCost = useMemo(() => {
-return ingredients.reduce((acc, i) => acc + (typeof i.costEur === 'number' ? i.costEur : 0), 0)
+return ingredients.reduce((acc, i) => acc + (typeof (i as any).costEur === 'number' ? (i as any).costEur : 0), 0)
 }, [ingredients])
 
 const totalProducts = useMemo(() => {
@@ -238,15 +249,17 @@ try {
 const d = JSON.parse(raw) as OcrDraft
 setDraft(d)
 
-setTitle(String(d.title || ''))
-setServings(Number(d.servings || 1) || 1)
-setImageUrl(String(d.imageUrl || ''))
-setNotes(String(d.notes || ''))
+setTitle(String((d as any).title || ''))
+setServings(Number((d as any).servings || 1) || 1)
+setImageUrl(String((d as any).imageUrl || ''))
+setNotes(String((d as any).notes || ''))
 
-const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
+const s = Array.isArray((d as any).steps)
+? (d as any).steps.map((x: any) => String(x || '').trim()).filter(Boolean)
+: []
 setSteps(s.length ? s : [''])
 
-const ing = Array.isArray(d.ingredients) ? d.ingredients : []
+const ing = Array.isArray((d as any).ingredients) ? (d as any).ingredients : []
 const normalized = ing
 .map((row: any): Line | null => {
 if (!row) return null
@@ -274,18 +287,20 @@ buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit
 
 buyRecalced: typeof buyPriceEur === 'number',
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
-}
+} as any
 })
-.filter((x): x is Line => x !== null)
+.filter((x: any): x is Line => x !== null)
 
 const finalIngredients = normalized.length
 ? normalized
 : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
 
 setIngredients(finalIngredients)
-setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
+setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-const tr = Array.isArray((d as any).trash) ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean) : []
+const tr = Array.isArray((d as any).trash)
+? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean)
+: []
 setTrash(tr.join('\n'))
 } catch (e) {
 console.error('ocrDraft parse error', e)
@@ -319,7 +334,7 @@ const normalized = ing
 .map((row: any): Line | null => {
 if (!row) return null
 if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
-if ((row as any).raw) return { name: String((row as any).raw), quantity: 0, unit: '', buyRecalced: false }
+if (row.raw) return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
 
 const buyPriceEur = typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
@@ -342,16 +357,16 @@ buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit
 
 buyRecalced: typeof buyPriceEur === 'number',
 note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
-}
+} as any
 })
-.filter((x): x is Line => x !== null)
+.filter((x: any): x is Line => x !== null)
 
 const finalIngredients = normalized.length
 ? normalized
 : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
 
 setIngredients(finalIngredients)
-setQtyInputs(finalIngredients.map((r) => formatQtyForInput(r.quantity, r.quantityRaw)))
+setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
 const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
 setTrash(tr.join('\n'))
@@ -375,7 +390,7 @@ copy[idx] = raw
 return copy
 })
 
-setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined })
+setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined } as any)
 }
 
 function removeIngredient(idx: number) {
@@ -411,12 +426,12 @@ typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e
 
 copy[idx] = {
 ...old,
-quantityRaw: old?.quantityRaw,
+quantityRaw: (old as any)?.quantityRaw,
 costEur: typeof cost === 'number' ? cost : null,
 unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
 priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.id),
 id: e.id ?? null,
-price: e.price ?? old?.price ?? null,
+price: e.price ?? (old as any)?.price ?? null,
 
 buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
 buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
@@ -425,7 +440,7 @@ buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
 buyRecalced: true,
 
 note: typeof e.note === 'string' ? e.note : undefined,
-}
+} as any
 }
 
 return copy
@@ -519,7 +534,7 @@ form.append('file', croppedBlob, 'recipe.jpg')
 
 const res = await apiFetch<{ ok: true; imageUrl: string }>('/upload/recipe-image', {
 method: 'POST',
-body: form as any, // apiFetch doit laisser passer FormData tel quel
+body: form as any,
 })
 
 setImageUrl(res.imageUrl)
@@ -606,19 +621,21 @@ padding: 14,
 return (
 <main className="app-container" style={{ margin: '40px auto' }}>
 <section style={{ marginBottom: 16 }}>
-<h1 className="recipe-title editable-title"
-    contentEditable
-    suppressContentEditableWarning
-    onInput={(e) => {
-        setTitle(e.currentTarget.textContent || '');
-    }}
-    onBlur={(e) => {
-        setTitle(e.currentTarget.textContent?.trim() || '');
-    }}>
+<h1
+className="recipe-title editable-title"
+contentEditable
+suppressContentEditableWarning
+onInput={(e) => {
+setTitle(e.currentTarget.textContent || '')
+}}
+onBlur={(e) => {
+setTitle(e.currentTarget.textContent?.trim() || '')
+}}
+>
+{title?.trim() || 'Titre de la recette'}
+</h1>
 
-    {title?.trim() || 'Titre de la recette'}
-</h1>    
-<p className="recipe-subtile">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
+<p className="recipe-subtitle">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
 </section>
 
 {trash.trim() && (
@@ -627,7 +644,9 @@ return (
 <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
 🗑️ Corbeille (texte non-recette détecté)
 </summary>
-<p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
+<p className="mt-2 text-sm app-muted">
+Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+</p>
 <textarea
 value={trash}
 onChange={(e) => setTrash(e.target.value)}
@@ -648,7 +667,6 @@ padding: 12,
 <h2 style={sectionTitleStyle}>Informations</h2>
 
 <div className="mt-4 grid gap-4">
-
 <div className="flex flex-wrap items-end gap-4">
 <label className="grid gap-1 text-sm font-semibold">
 Portions
@@ -699,6 +717,26 @@ style={{ ...inputStyle, minHeight: 140 }}
 </section>
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
+{/* ✅ Résumé coûts (au-dessus de la section Ingrédients) */}
+<div className="cost-summary">
+<div className="cost-pill">
+<div className="cost-pill-row">   
+<div className="cost-pill-label">Coût recette</div>
+<div className="cost-pill-value">
+<span className="amount">≈ {totalCost.toFixed(2)} €</span>
+</div>
+</div>
+</div>
+
+<div className="cost-pill">
+<div className="cost-pill-row">
+<div className="cost-pill-label">Coût courses</div>
+<div className="cost-pill-value">
+<span className="amount">≈ {totalProducts.toFixed(2)} €</span>
+</div>
+</div>
+</div>
+</div> 
 <div className="flex flex-wrap items-center justify-between gap-12">
 <div>
 <h2 style={sectionTitleStyle}>Ingrédients</h2>
@@ -812,14 +850,18 @@ fontWeight: 800,
 }}
 >
 <div style={{ textAlign: 'right' }}>
-<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Prix recette</div>
+<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
+Prix recette
+</div>
 <div style={{ fontSize: 13, fontWeight: 800 }}>
-{fmtEur(typeof ing.costEur === 'number' ? ing.costEur : null)}
+{fmtEur(typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null)}
 </div>
 </div>
 
 <div style={{ textAlign: 'right' }}>
-<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Prix produit</div>
+<div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
+Prix produit
+</div>
 <div
 style={{
 fontSize: 13,
@@ -874,11 +916,6 @@ type="button"
 >
 + Ajouter un ingrédient
 </button>
-
-<div style={{ marginTop: 10, display: 'flex', justifyContent: 'flex-end', gap: 28 }}>
-<div style={{ fontWeight: 900 }}>Total recette : {totalCost.toFixed(2)} €</div>
-<div style={{ fontWeight: 900 }}>Total produits : {totalProducts.toFixed(2)} €</div>
-</div>
 </div>
 </section>
 
@@ -1025,6 +1062,7 @@ cropShape="rect"
 showGrid
 />
 </div>
+
 {/* Barre zoom */}
 <div
 style={{
@@ -1047,10 +1085,9 @@ onChange={(e) => setZoom(Number(e.target.value))}
 style={{ width: '100%' }}
 />
 
-<div style={{ fontSize: 12, opacity: 0.7, minWidth: 42, textAlign: 'right' }}>
-{zoom.toFixed(2)}
+<div style={{ fontSize: 12, opacity: 0.7, minWidth: 42, textAlign: 'right' }}>{zoom.toFixed(2)}</div>
 </div>
-</div>
+
 <div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
 <button
 type="button"

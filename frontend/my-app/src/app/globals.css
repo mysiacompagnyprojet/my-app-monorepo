@@ -254,6 +254,56 @@ background: rgba(231, 209, 186, 0.35); /* fond doux */
 border-radius: 6px;
 }
 
+/* ---- Coûts (recette / courses) ---- */
+.cost-summary {
+display: flex;
+gap: 12px;
+justify-content: flex-end;
+flex-wrap: wrap;
+margin-top: 12px;
+}
+
+.cost-pill {
+background: rgba(255, 255, 255, 0.75);
+border: 1px solid var(--border);
+border-radius: 14px;
+padding: 10px 14px;
+min-width: 190px;
+box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);/*ombre douce */
+}
+
+.cost-pill-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    white-space: nowrap;
+}
+
+.cost-pill-label {
+font-size: 12px;
+font-weight: 700;
+opacity: 0.75;
+/* margin-bottom: 6px;*/
+}
+
+.cost-pill-value {
+display: inline-flex;
+align-items: baseline;
+gap: 6px;/*justify-content: space-between;*//*gap: 10px;*/
+font-weight: 800;
+}
+
+.cost-pill-value .amount {
+font-size: 18px;
+color: var(--primary);
+}
+
+.cost-pill-value .suffix {
+font-size: 12px;
+opacity: 0.7;
+}
+
 /*
 @media (prefers-color-scheme: dark) {
 :root {
