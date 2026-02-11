@@ -664,99 +664,201 @@ padding: 12,
 )}
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
-<h2 style={sectionTitleStyle}>Informations</h2>
+ <h2 style={sectionTitleStyle}>Informations</h2>
 
-<div className="mt-4 grid gap-4">
-<div className="flex flex-wrap items-end gap-4">
-<label className="grid gap-1 text-sm font-semibold">
-Portions
-<input
-type="number"
-min={1}
-value={servings}
-onChange={(e) => setServings(Number(e.target.value || 1))}
-style={{ width: 140, ...inputStyle }}
-/>
-</label>
-
-<span className="app-badge">Lisible en un coup d’œil</span>
-</div>
-
-<label className="grid gap-1 text-sm font-semibold">
-Image URL
-<input value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} style={inputStyle} />
-<RecipeImagePreview imageUrl={imageUrl} />
-
-{imageUrl?.trim() && (
-<button
-type="button"
-className="app-btn-secondary"
-style={{ width: 220, marginTop: 8 }}
-onClick={() => {
-setCrop({ x: 0, y: 0 })
-setZoom(1)
-setCroppedAreaPixels(null)
-setIsCropping(true)
-}}
+ <div
+   style={{
+     display: 'grid',
+     gridTemplateColumns: '1fr 1fr',
+     gap: 28,
+     marginTop: 20,
+     alignItems: 'start',
+   }}
 >
-Recadrer l’image
-</button>
-)}
-</label>
+   {/* ========================= */}
+   {/* COLONNE GAUCHE            */}
+   {/* ========================= */}
+   <div style={{ display: 'grid', gap: 22 }}>
+     {/* Portions */}
+     <label className="grid gap-1 text-sm font-semibold">
+       Portions
+       <input
+         type="number"
+         min={1}
+         value={servings}
+         onChange={(e) => setServings(Number(e.target.value || 1))}
+         style={{
+           width: 120,
+           ...inputStyle,
+         }}
+       />
+     </label>
 
-<label className="grid gap-1 text-sm font-semibold">
-Notes
-<textarea
-value={notes}
-onChange={(e) => setNotes(e.target.value)}
-rows={7}
-style={{ ...inputStyle, minHeight: 140 }}
-/>
-</label>
+     {/* Notes */}
+     <label className="grid gap-1 text-sm font-semibold">
+       Notes
+       <textarea
+         value={notes}
+         onChange={(e) => setNotes(e.target.value)}
+         rows={6}
+         style={{
+           ...inputStyle,
+           minHeight: 170,
+         }}
+       />
+     </label>
+   </div>
+
+   {/* ========================= */}
+   {/* COLONNE DROITE            */}
+   {/* ========================= */}
+   <div>
+ <label
+   style={{
+     border: '1px dashed var(--border)',
+     borderRadius: 18,
+     background: 'rgba(255,255,255,0.65)',
+     padding: 28,
+     textAlign: 'center',
+     cursor: 'pointer',
+     display: 'block',
+   }}
+>
+   {/* ✅ AJOUT: input file caché, le label rend tout le bloc cliquable */}
+   <input
+     type="file"
+     accept="image/*"
+     style={{ display: 'none' }}
+     onChange={(e) => {
+       const file = e.target.files?.[0]
+       if (!file) return
+
+       const localUrl = URL.createObjectURL(file)
+       setImageUrl(localUrl)
+     }}
+   />
+
+   {imageUrl ? (
+     <div
+       style={{
+         display: 'grid',
+         gap: 16,
+       }}
+>
+       <img
+         src={imageUrl}
+         alt="preview"
+         style={{
+           width: '100%',
+           borderRadius: 14,
+           objectFit: 'cover',
+           maxHeight: 260,
+         }}
+       />
+
+       {/* ⚠️ OPTIONNEL (mais recommandé): éviter que cliquer dans l’input relance le picker */}
+       <input
+         value={imageUrl}
+         onClick={(e) => e.stopPropagation()}
+         onChange={(e) => setImageUrl(e.target.value)}
+         style={inputStyle}
+       />
+
+       <button
+         type="button"
+         className="app-btn-secondary"
+         onClick={(e) => {
+           e.preventDefault() // évite que le label déclenche l’upload
+           setCrop({ x: 0, y: 0 })
+           setZoom(1)
+           setCroppedAreaPixels(null)
+           setIsCropping(true)
+         }}
+>
+         Recadrer l’image
+       </button>
+     </div>
+   ) : (
+     <>
+       <div
+         style={{
+           width: 60,
+           height: 60,
+           borderRadius: '50%',
+           background: 'rgba(120, 120, 120, 0.15)',
+           display: 'grid',
+           placeItems: 'center',
+           margin: '0 auto 16px auto',
+           fontSize: 28,
+         }}
+>
+         +
+       </div>
+
+       <div style={{ fontWeight: 700, marginBottom: 6 }}>
+         Ajouter une image
+       </div>
+
+       <div style={{ fontSize: 13, opacity: 0.6, marginBottom: 16 }}>
+         Clique sur le + pour choisir une photo
+       </div>
+
+       {/* ⚠️ OPTIONNEL (mais recommandé): éviter que cliquer dans l’input relance le picker */}
+       <input
+         /*value={imageUrl}
+         onClick={(e) => e.stopPropagation()}
+         onChange={(e) => setImageUrl(e.target.value)}
+         /*placeholder="https://..."*/
+         /*style={inputStyle}*/
+       />
+     </>
+   )}
+ </label>
 </div>
+ </div>
 </section>
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
-{/* ✅ Résumé coûts (au-dessus de la section Ingrédients) */}
+{/* Bandeau du haut : coûts (gauche) + action (droite) */}
+<div className="ingredients-top">
 <div className="cost-summary">
 <div className="cost-pill">
-<div className="cost-pill-row">   
-<div className="cost-pill-label">Coût recette</div>
-<div className="cost-pill-value">
+<div className="cost-pill-row">
+<span className="cost-pill-label">Coût recette</span>
 <span className="amount">≈ {totalCost.toFixed(2)} €</span>
-</div>
 </div>
 </div>
 
 <div className="cost-pill">
 <div className="cost-pill-row">
-<div className="cost-pill-label">Coût courses</div>
-<div className="cost-pill-value">
+<span className="cost-pill-label">Coût courses</span>
 <span className="amount">≈ {totalProducts.toFixed(2)} €</span>
 </div>
 </div>
-</div>
-</div> 
-<div className="flex flex-wrap items-center justify-between gap-12">
-<div>
-<h2 style={sectionTitleStyle}>Ingrédients</h2>
-<p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
 </div>
 
 <button
 onClick={() => recalcPrices({ silent: false })}
 disabled={isRepricing}
-className="app-btn-secondary"
-style={{ minWidth: 240, opacity: isRepricing ? 0.7 : 1 }}
+className="app-btn-secondary ingredients-recalc"
 type="button"
 >
 🔁 {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
 </button>
 </div>
 
+{/* Titre + description (juste en dessous des coûts) */}
+<div className="ingredients-head">
+<h2 style={sectionTitleStyle}>Ingrédients</h2>
+<p className="mt-2 text-sm app-muted">
+Un ingrédient par ligne : nom, quantité, unité, prix.
+</p>
+</div>
+
 <div className="mt-4 grid gap-3">
 {ingredients.map((ing, idx) => {
-const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
+const isBuyPriceReady =
+ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
 
 return (
 <div
@@ -862,13 +964,7 @@ Prix recette
 <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
 Prix produit
 </div>
-<div
-style={{
-fontSize: 13,
-fontWeight: 800,
-opacity: isBuyPriceReady ? 1 : 0.35,
-}}
->
+<div style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
 {isBuyPriceReady ? fmtEur(ing.buyPriceEur) : '—'}
 </div>
 </div>

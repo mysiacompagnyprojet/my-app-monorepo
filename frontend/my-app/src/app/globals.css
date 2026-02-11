@@ -23,10 +23,39 @@ Direction Artistique
 /* ✅ IMPORTANT : on désactive le dark automatique.
 Donc on NE MET PAS de @media (prefers-color-scheme: dark) ici. */
 
-html,
+html, body {
+    height: 100%;
+    position: relative;
+    background: var(--bg);
+    color: var(--text);
+}
 body {
-background: var(--bg);
-color: var(--text);
+    color: var(--text);
+    background: 
+        radial-gradient(1200px 700px at 18% 12% rgba(255,255,255,0.70), rgba(255,255,255,0) 60%),
+        radial-gradient(900px 650px at 82% 28% rgba(255,244,228,0.55), rgba(255,244,228,0) 58%),
+        radial-gradient(1100px 900px at 50% 110% rgba(214,191,162,0.22), rgba(214,191,162,0) 55%),
+        linear-gradient(180deg, #F6F1EB 0%, #F2E9DE 55%, #EFE3D5 100%);
+}
+
+body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    /*grain leger*/
+    background:
+        radial-gradient(120% 90% at 50% 10%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.06) 100%),
+        repeating-linear-gradient(0deg,
+            rgba(0,0,0,0.012) 0px,
+            rgba(0,0,0,0.012) 1px,
+            rgba(255,255,255,0.015) 2px,
+            rgba(255,255,255,0.015) 3px,
+        );
+    opacity: 0.55;
+    mix-blend-mode: multiply;    
 }
 
 /* =========================
@@ -35,21 +64,28 @@ Composants réutilisables
 
 @layer components {
 .app-shell {
+position: relative;
+z-index: 1;
 min-height: 100vh;
 padding: 24px;
 }
 
 .app-container {
+position: relative;
+z-index: 1;
 width: 100%;
 max-width: 980px;
 margin: 0 auto;
 }
 
 .app-card {
-background: var(--card);
+color: #5a3a22;
+background: rgba(255, 255, 255, 0.78);
+backdrop-filter: blur(1px);
+/*background: var(--card);*/
 border: 1px solid var(--border);
 border-radius: 12px;
-box-shadow: 0 1px 10px rgba(0, 0, 0, 0.05);
+box-shadow: 0 8px 24px rgba(60, 40, 20, 0.08);/*0, 0, 0, 0.05);*/
 }
 
 .app-title {
@@ -255,53 +291,68 @@ border-radius: 6px;
 }
 
 /* ---- Coûts (recette / courses) ---- */
+/* Bandeau haut de la section ingrédients */
+.ingredients-top {
+display: flex;
+align-items: flex-start;
+justify-content: space-between;
+gap: 12px;
+margin-bottom: 12px;
+flex-wrap: wrap;
+}
+
+/* Bouton à droite (reste compact) */
+.ingredients-recalc {
+min-width: 240px;
+opacity: 1;
+}
+
+/* Coûts : alignés à gauche (comme le design cible) */
 .cost-summary {
 display: flex;
 gap: 12px;
-justify-content: flex-end;
+justify-content: flex-start;
 flex-wrap: wrap;
-margin-top: 12px;
+margin: 0;
 }
 
+/* Pill */
 .cost-pill {
 background: rgba(255, 255, 255, 0.75);
 border: 1px solid var(--border);
 border-radius: 14px;
 padding: 10px 14px;
 min-width: 190px;
-box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);/*ombre douce */
+box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
 }
 
+/* Label + montant sur la même ligne */
 .cost-pill-row {
-    display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 10px;
-    white-space: nowrap;
+display: flex;
+align-items: baseline;
+justify-content: space-between;
+gap: 10px;
+white-space: nowrap;
 }
 
 .cost-pill-label {
 font-size: 12px;
 font-weight: 700;
 opacity: 0.75;
-/* margin-bottom: 6px;*/
 }
 
-.cost-pill-value {
-display: inline-flex;
-align-items: baseline;
-gap: 6px;/*justify-content: space-between;*//*gap: 10px;*/
-font-weight: 800;
-}
-
-.cost-pill-value .amount {
+.cost-pill-row .amount {
 font-size: 18px;
+font-weight: 800;
 color: var(--primary);
 }
 
-.cost-pill-value .suffix {
-font-size: 12px;
-opacity: 0.7;
+/* Optionnel : sur mobile, le bouton passe dessous proprement */
+@media (max-width: 640px) {
+.ingredients-recalc {
+width: 100%;
+min-width: 0;
+}
 }
 
 /*
