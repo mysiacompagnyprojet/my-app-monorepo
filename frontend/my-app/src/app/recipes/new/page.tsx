@@ -664,26 +664,25 @@ padding: 12,
 )}
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
- <h2 style={sectionTitleStyle}>Informations</h2>
-
  <div
    style={{
      display: 'grid',
      gridTemplateColumns: '1fr 1fr',
      gap: 28,
-     marginTop: 20,
+     marginTop: 2,
      alignItems: 'start',
    }}
 >
    {/* ========================= */}
    {/* COLONNE GAUCHE            */}
    {/* ========================= */}
-   <div style={{ display: 'grid', gap: 22 }}>
+   <div style={{ display: 'grid', gap: 21 }}>
      {/* Portions */}
      <label className="grid gap-1 text-sm font-semibold">
        Portions
        <input
          type="number"
+         className= "app-btn app-btn-utility"
          min={1}
          value={servings}
          onChange={(e) => setServings(Number(e.target.value || 1))}
@@ -694,7 +693,7 @@ padding: 12,
      </label>
 
      {/* Notes */}
-     <label className="grid gap-1 text-sm font-semibold">
+     <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility">
        Notes
        <textarea
          value={notes}
@@ -715,7 +714,7 @@ padding: 12,
    style={{
      border: '1px dashed var(--border)',
      borderRadius: 18,
-     background: 'rgba(255,255,255,0.65)',
+     //background: 'rgba(255,255,255,0.65)',
      padding: 28,
      textAlign: 'center',
      cursor: 'pointer',
@@ -783,7 +782,7 @@ padding: 12,
            width: 60,
            height: 60,
            borderRadius: '50%',
-           background: 'rgba(120, 120, 120, 0.15)',
+           background:'rgba(176, 188, 140, 0.4)',// couleur sauge transparent du + 
            display: 'grid',
            placeItems: 'center',
            margin: '0 auto 16px auto',
@@ -793,7 +792,11 @@ padding: 12,
          +
        </div>
 
-       <div style={{ fontWeight: 700, marginBottom: 6 }}>
+       <div 
+          style={{ 
+            fontWeight: 700, 
+            marginBottom: 6 
+          }}>
          Ajouter une image
        </div>
 
@@ -838,7 +841,7 @@ padding: 12,
 <button
 onClick={() => recalcPrices({ silent: false })}
 disabled={isRepricing}
-className="app-btn app-btn-utility  ingredients-recalc"//app-btn-secondary ingredients-recalc"
+className="app-btn app-btn-utility ingredients-recalc"//app-btn-secondary ingredients-recalc"
 type="button"
 >
 🔁 {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}

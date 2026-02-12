@@ -387,30 +387,30 @@ html::after {
         
     /* taches */
     radial-gradient(260px 200px at 18% 22%,
-        rgba(140,95,60,0.18)
-        rgba(140,95,60,0) 72%
+        rgba(230, 133, 37, 0.701)
+        rgba(230, 133, 37, 0.701) 72%
     ),
     radial-gradient(360px 260px at 78% 35%,
-        rgba(120,85,55,0.14),
-        rgba(120,85,55,0) 74%
+        rgba(213, 55, 31, 0.825),
+        rgba(213, 55, 31, 0.825) 74%
     ),
     radial-gradient(520px 360px at 55% 88%,
-        rgba(120,85,55,0.10),
-        rgba(120,85,55,0) 78%
+        rgba(90, 65, 44, 0.615),
+        rgba(90, 65, 44, 0.615) 78%
     ),
 
     /* micro grain */
     repeating-linear-gradient(0deg,
-            rgba(0,0,0,0.050) 20px,
-            rgba(0,0,0,0.050) 20px,
-            rgba(255,255,255,0.050) 20px,
-            rgba(255,255,255,0.050) 20px,
+            rgba(0, 0, 0, 0.423) 20px,
+            rgba(0, 0, 0, 0.423) 20px,
+            rgba(20, 14, 14, 0.571) 20px,
+            rgba(20, 14, 14, 0.571) 20px,
     ),
     repeating-linear-gradient(90deg,
             rgba(0,0,0,0.050) 0px,
             rgba(0,0,0,0.050) 1px,
-            rgba(255,255,255,0.50) 20px,
-            rgba(255,255,255,0.50) 20px,
+            rgba(17, 12, 12, 0.577) 20px,
+            rgba(17, 12, 12, 0.577) 20px,
     );
     opacity: 10;
     mix-blend-mode: multiply; /*normal;*/    
