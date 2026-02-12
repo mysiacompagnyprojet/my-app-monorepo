@@ -85,3 +85,45 @@ body {
         linear-gradient(180deg, #F6F1EB 0%, #F2E9DE 55%, #EFE3D5 100%);
 }
 
+html::after {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+
+    background:
+    /* vignette légére effet papier */
+    radial-gradient(120% 90% at 50% 10%, rgba(0,0,0,0) 55%, rgba(80,55,35,0.12) 100%),
+        
+    /* taches */
+    radial-gradient(260px 200px at 18% 22%,
+        rgba(140,95,60,0.10)
+        rgba(140,95,60,0) 70%
+    ),
+    radial-gradient(320px 240px at 78% 35%,
+        rgba(120,85,55,0.08),
+        rgba(120,85,55,0) 72%
+    ),
+    radial-gradient(420px 320px at 55% 88%,
+        rgba(120,85,55,0.06),
+        rgba(120,85,55,0) 75%
+    ),
+
+    /* micro grain */
+    repeating-linear-gradient(0deg,
+            rgba(0,0,0,0.050) 20px,
+            rgba(0,0,0,0.050) 20px,
+            rgba(255,255,255,0.050) 20px,
+            rgba(255,255,255,0.050) 20px,
+    ),
+    repeating-linear-gradient(90deg,
+            rgba(0,0,0,0.050) 0px,
+            rgba(0,0,0,0.050) 1px,
+            rgba(255,255,255,0.50) 20px,
+            rgba(255,255,255,0.50) 20px,
+    );
+
+    opacity: 0.55;
+    mix-blend-mode: multiply; /*normal;*/    
+}
