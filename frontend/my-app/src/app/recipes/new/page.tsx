@@ -689,7 +689,6 @@ padding: 12,
          onChange={(e) => setServings(Number(e.target.value || 1))}
          style={{
            width: 120,
-           ...inputStyle,
          }}
        />
      </label>
@@ -702,7 +701,6 @@ padding: 12,
          onChange={(e) => setNotes(e.target.value)}
          rows={6}
          style={{
-           ...inputStyle,
            minHeight: 170,
          }}
        />
@@ -766,7 +764,7 @@ padding: 12,
 
        <button
          type="button"
-         className="app-btn-secondary"
+         className="app-btn app-btn-sage"//app-btn-secondary"
          onClick={(e) => {
            e.preventDefault() // évite que le label déclenche l’upload
            setCrop({ x: 0, y: 0 })
@@ -840,7 +838,7 @@ padding: 12,
 <button
 onClick={() => recalcPrices({ silent: false })}
 disabled={isRepricing}
-className="app-btn-secondary ingredients-recalc"
+className="app-btn app-btn-utility  ingredients-recalc"//app-btn-secondary ingredients-recalc"
 type="button"
 >
 🔁 {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
@@ -921,8 +919,6 @@ placeholder="Quantité"
 value={qtyInputs[idx] ?? ''}
 onChange={(e) => setQtyInput(idx, e.target.value)}
 style={{
-background: 'white',
-border: '1px solid var(--border)',
 borderRadius: 12,
 padding: 11,
 }}
@@ -933,8 +929,6 @@ placeholder="Unité"
 value={ing.unit}
 onChange={(e) => setIngredient(idx, { unit: e.target.value })}
 style={{
-background: 'white',
-border: '1px solid var(--border)',
 borderRadius: 12,
 padding: 11,
 }}
@@ -953,7 +947,7 @@ fontWeight: 800,
 >
 <div style={{ textAlign: 'right' }}>
 <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
-Prix recette
+Prix recette 
 </div>
 <div style={{ fontSize: 13, fontWeight: 800 }}>
 {fmtEur(typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null)}
@@ -973,7 +967,7 @@ Prix produit
 <button
 type="button"
 onClick={() => removeIngredient(idx)}
-className="app-btn-secondary"
+className="app-btn app-btn-secondary"
 style={smallXBtnStyle}
 title="Supprimer cette ligne"
 >
@@ -1077,7 +1071,7 @@ minHeight: 90,
 </div>
 ))}
 
-<button onClick={() => setSteps((p) => [...p, ''])} className="app-btn-secondary" style={{ width: 220 }} type="button">
+<button onClick={() => setSteps((p) => [...p, ''])} className="app-btn app-btn-secondary" style={{ width: 220 }} type="button">
 + Ajouter une étape
 </button>
 </div>
@@ -1085,8 +1079,8 @@ minHeight: 90,
 
 <section className="app-card p-6" style={{ marginTop: 16 }}>
 <div className="flex flex-wrap gap-3 items-center">
-<button onClick={save} className="app-btn-primary" style={{ borderRadius: 14 }} type="button">
-Enregistrer
+<button onClick={save} className="app-btn app-btn-sage" style={{ borderRadius: 14 }} type="button">
+Enregistrer la recette
 </button>
 
 {status && (
@@ -1140,7 +1134,7 @@ overflow: 'hidden',
 >
 <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
 <div style={{ fontWeight: 800 }}>Recadrer l’image</div>
-<button type="button" className="app-btn-secondary" onClick={() => setIsCropping(false)}>
+<button type="button" className="app-btn app-btn-secondary" onClick={() => setIsCropping(false)}>
 Fermer
 </button>
 </div>

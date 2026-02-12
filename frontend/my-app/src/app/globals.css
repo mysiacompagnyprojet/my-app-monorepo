@@ -6,18 +6,20 @@ Direction Artistique
 ========================= */
 
 :root {
-/* Fond & texte */
---bg: #F6F1EB; /* Beige chaud */
---text: #2B2B2B; /* Anthracite doux */
+    --bg: #F7F4EF; /* Beige chaud*/
+    --text: #2E2220; /* Anthracite doux */
+    --muted: rgba(46,34,32,0.65);
 
-/* Surfaces */
---card: #FFFFFF; /* Cartes */
---border: #E6DCD2; /* Séparateurs (beige plus foncé) */
+    --card: rgba(255,255,255,0.78);/* Cartes */
+    --card-2: rgba(255,255,255,0.64);
+    --border: rgba(230,220,210,0.85);/* Séparateurs (beige plus foncé) */
 
-/* Accents */
---primary: #8B6A4F; /* Brun chaud (CTA / titres / actifs) */
---primary-2: #7A5C43; /* Variante hover */
---success: #A8B8A1; /* Vert sauge (succès) */
+    --primary: #7B442E;/* Brun chaud (CTA / titres / actifs) */
+    --primary-2: #6B3A26;/* Variante hover */
+
+    --sage: #68650A;/* Vert sauge (succès) */
+
+    --input: rgba(255,255,255,0.82);
 }
 
 /* ✅ IMPORTANT : on désactive le dark automatique.
@@ -25,37 +27,14 @@ Donc on NE MET PAS de @media (prefers-color-scheme: dark) ici. */
 
 html, body {
     height: 100%;
-    position: relative;
+    /*position: relative;
     background: var(--bg);
-    color: var(--text);
+    color: var(--text);*/
 }
 body {
-    color: var(--text);
-    background: 
-        radial-gradient(1200px 700px at 18% 12% rgba(255,255,255,0.70), rgba(255,255,255,0) 60%),
-        radial-gradient(900px 650px at 82% 28% rgba(255,244,228,0.55), rgba(255,244,228,0) 58%),
-        radial-gradient(1100px 900px at 50% 110% rgba(214,191,162,0.22), rgba(214,191,162,0) 55%),
-        linear-gradient(180deg, #F6F1EB 0%, #F2E9DE 55%, #EFE3D5 100%);
-}
-
-body::before {
-    content: "";
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-
-    /*grain leger*/
-    background:
-        radial-gradient(120% 90% at 50% 10%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.06) 100%),
-        repeating-linear-gradient(0deg,
-            rgba(0,0,0,0.012) 0px,
-            rgba(0,0,0,0.012) 1px,
-            rgba(255,255,255,0.015) 2px,
-            rgba(255,255,255,0.015) 3px,
-        );
-    opacity: 0.55;
-    mix-blend-mode: multiply;    
+    /*color: var(--text);
+    background: var(--bg);*/
+    background: transparent;
 }
 
 /* =========================
@@ -65,35 +44,40 @@ Composants réutilisables
 @layer components {
 .app-shell {
 position: relative;
-z-index: 1;
+z-index: 2;
 min-height: 100vh;
 padding: 24px;
 }
 
 .app-container {
-position: relative;
-z-index: 1;
 width: 100%;
 max-width: 980px;
 margin: 0 auto;
 }
 
 .app-card {
-color: #5a3a22;
-background: rgba(255, 255, 255, 0.78);
-backdrop-filter: blur(1px);
-/*background: var(--card);*/
-border: 1px solid var(--border);
-border-radius: 12px;
-box-shadow: 0 8px 24px rgba(60, 40, 20, 0.08);/*0, 0, 0, 0.05);*/
+color: var(--text);/*#5a3a22;*/
+background: linear-gradient(180deg, rgba(255,255,255,0.82));/*var(--card);*/
+backdrop-filter: blur(2px);
+border: 1px solid rgba(230,220,210,0.70);
+border-radius: 18px;
+box-shadow: 0 12px 30px rgba(60, 40, 20, 0.08);/*0 10px 28px rgba(60, 40, 20, 0.08);*/
 }
 
 .app-title {
 color: var(--primary);
 }
 
+.app-input {
+    background: var(--input);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px;
+    box-shadow: 0 60px 14px rgba(60,40,20,0.04);
+}
+
 .app-muted {
-color: rgba(43, 43, 43, 0.65);
+color: var(--muted);
 }
 
 .app-badge {
@@ -105,33 +89,55 @@ font-size: 12px;
 font-weight: 600;
 }
 
+.app-btn {
+    border-radius: 12px;
+    padding: 12px 16px;
+    font-weight: 700;
+    transition: transform 160ms ease, filter 160ms ease, background 160ms ease;
+}
+
 .app-btn-primary {
 background: var(--primary);
 color: white;
-border-radius: 10px;
-padding: 10px 14px;
-font-weight: 700;
-transition: background 150ms ease;
 }
+
 .app-btn-primary:hover {
 background: var(--primary-2);
 }
-.app-btn-primary:disabled {
-opacity: 0.6;
-cursor: not-allowed;
+
+.app-btn-sage {
+    background: #B0BC8C;/*garder la couleur #B0BC8C - pas celle-ci #68650A;*/
+    color: #FFF;
+    box-shadow: 0 10px 22px rgba(176,188,140,0.35);
+}
+
+.app-btn-sage:hover {
+    filter: brightness(0.96);
+}
+
+.app-btn-sage:active {
+    transform: translateY(1px);
 }
 
 .app-btn-secondary {
 background: transparent;
 color: var(--text);
 border: 1px solid var(--border);
-border-radius: 10px;
-padding: 10px 14px;
-font-weight: 700;
-transition: background 150ms ease;
 }
-.app-btn-secondary:hover {
-background: rgba(230, 220, 210, 0.55);
+
+.app-btn-utility {
+    background: rgba(255,255,255,0.75);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+}
+
+.app-btn-utility:hover {
+    filter: brightness(0.98);
+}
+
+.app-btn-utility:active {
+    transform: translateY(1px);
 }
 
 /* =========================
@@ -140,10 +146,12 @@ Branding global Mysia.app
 
 .app-header {
 margin-top: 16px;
-background: #FFFFFF;
-border: 1px solid #E5E1DA;
-border-radius: 16px;
+background: rgba(255,255,255,0.70);/*#FFFFFF;*/
+border: 1px solid rgba(230,220,210,0.70);/*#E5E1DA;*/
+border-radius: 18px;
+box-shadow: 0 8px 22px rgba(60,40,20,0.06);
 }
+
 .app-header--compact {
     padding: 6px 10px;
 }
@@ -190,10 +198,10 @@ font-feature-settings: "ss01" 1;
     font-size: 0.8em;
 }
 
-.app-brand:hover .app-brand-suffix {
+/*.app-brand:hover .app-brand-suffix {
 opacity: 1;
 color: #2E222E;
-}
+}*/
 
 /* Branding discret en bas de page (comme sur la story) */
 .app-footer {
@@ -355,6 +363,61 @@ min-width: 0;
 }
 }
 
+html::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background:
+    linear-gradient(270deg, #F7F4EF 30%, #F2E9DE 55%, #EFE3D5 100%);
+
+    opacity: 1;
+}
+
+html::after{
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 1;
+
+    background:
+    /* vignette légére effet papier */
+    radial-gradient(120% 90% at 50% 10%, rgba(0,0,0,0) 55%, rgba(80,55,35,0.12) 100%),
+        
+    /* taches */
+    radial-gradient(260px 200px at 18% 22%,
+        rgba(140,95,60,0.10)
+        rgba(140,95,60,0) 70%
+    ),
+    radial-gradient(320px 240px at 78% 35%,
+        rgba(120,85,55,0.08),
+        rgba(120,85,55,0) 72%
+    ),
+    radial-gradient(420px 320px at 55% 88%,
+        rgba(120,85,55,0.06),
+        rgba(120,85,55,0) 75%
+    ),
+
+    /* micro grain */
+    repeating-linear-gradient(0deg,
+            rgba(0,0,0,0.020) 0px,
+            rgba(0,0,0,0.020) 1px,
+            rgba(255,255,255,0.018) 2px,
+            rgba(255,255,255,0.018) 3px,
+    ),
+    repeating-linear-gradient(90deg,
+            rgba(0,0,0,0.012) 0px,
+            rgba(0,0,0,0.012) 1px,
+            rgba(255,255,255,0.010) 2px,
+            rgba(255,255,255,0.010) 3px,
+    );
+
+    opacity: 0.55;
+    mix-blend-mode: multiply; /*normal;*/    
+}
 /*
 @media (prefers-color-scheme: dark) {
 :root {
