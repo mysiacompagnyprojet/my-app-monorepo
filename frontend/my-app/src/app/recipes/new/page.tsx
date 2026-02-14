@@ -693,7 +693,7 @@ padding: 12,
      </label>
 
      {/* Notes */}
-     <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility">
+     <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui">
        Notes
        <textarea
          value={notes}
@@ -819,18 +819,18 @@ padding: 12,
  </div>
 </section>
 
-<section className="app-card p-6" style={{ marginTop: 16 }}>
+<section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
 {/* Bandeau du haut : coûts (gauche) + action (droite) */}
 <div className="ingredients-top">
 <div className="cost-summary">
-<div className="cost-pill">
+<div className="cost-pill paper-ui">
 <div className="cost-pill-row">
 <span className="cost-pill-label">Coût recette</span>
 <span className="amount">≈ {totalCost.toFixed(2)} €</span>
 </div>
 </div>
 
-<div className="cost-pill">
+<div className="cost-pill paper-ui">
 <div className="cost-pill-row">
 <span className="cost-pill-label">Coût courses</span>
 <span className="amount">≈ {totalProducts.toFixed(2)} €</span>
@@ -864,7 +864,7 @@ ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
 return (
 <div
 key={idx}
-className="app-card p-3"
+//className="app-card p-3" encadrement autour des containers
 style={{
 boxShadow: 'none',
 background: 'rgba(255,255,255,0.7)',
@@ -880,6 +880,7 @@ alignItems: 'center',
 }}
 >
 <div
+className="app-card p-3 paper-ui"
 style={{
 display: 'flex',
 alignItems: 'center',
@@ -892,7 +893,7 @@ minWidth: 0,
 }}
 >
 <input
-placeholder="Ingrédient"
+placeholder="Nom de l'ingrédient..."
 value={ing.name}
 onChange={(e) => setIngredient(idx, { name: e.target.value })}
 style={{
@@ -948,9 +949,10 @@ fontSize: 13,
 fontWeight: 800,
 }}
 >
-<div style={{ textAlign: 'right' }}>
+{/* cout recette et produit enlever d'ici à */}  
+          <div style={{ textAlign: 'right' }}>
 <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
-Prix recette 
+Coût recette 
 </div>
 <div style={{ fontSize: 13, fontWeight: 800 }}>
 {fmtEur(typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null)}
@@ -959,7 +961,7 @@ Prix recette
 
 <div style={{ textAlign: 'right' }}>
 <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>
-Prix produit
+Coût produit
 </div>
 <div style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
 {isBuyPriceReady ? fmtEur(ing.buyPriceEur) : '—'}
@@ -967,6 +969,7 @@ Prix produit
 </div>
 </div>
 
+{/* A ici */}  
 <button
 type="button"
 onClick={() => removeIngredient(idx)}
@@ -1003,7 +1006,7 @@ onClick={() => {
 setIngredients((p) => [...p, { name: '', quantity: 0, unit: '', buyRecalced: false }])
 setQtyInputs((p) => [...p, ''])
 }}
-className="app-btn-secondary"
+className="app-btn-secondary paper-ui"
 style={{ width: 260 }}
 type="button"
 >
@@ -1023,7 +1026,7 @@ key={idx}
 className="app-card p-3"
 style={{
 boxShadow: 'none',
-background: 'rgba(255,255,255,0.7)',
+background: 'rgba(255,255,255,0.7)', //'rgba(255,255,255,0.7)'
 borderColor: 'var(--border)',
 }}
 >
