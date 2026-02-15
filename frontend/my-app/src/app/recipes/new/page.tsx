@@ -796,14 +796,14 @@ function NewRecipeInner() {
            {/* ✅ MODIF: on déplace les 2 coûts ICI, sous “Ajouter une image” */}
            <div className="cost-summary" style={{ justifyContent: 'flex-start' }}>
              <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
-               <div className="cost-pill-row">
+               <div className="cost-pill-row cost-pill-row-recipe">
                  <span className="cost-pill-label recipe-color-2">Coût recette</span>
                  <span className="amount">≈ {totalCost.toFixed(2)} €</span>
                </div>
              </div>
 
              <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
-               <div className="cost-pill-row">
+               <div className="cost-pill-row cost-pill-row-courses">
                  <span className="cost-pill-label recipe-color-2">Coût courses</span>
                  <span className="amount">≈ {totalProducts.toFixed(2)} €</span>
                </div>
@@ -848,7 +848,7 @@ function NewRecipeInner() {
                <div
                  style={{
                    display: 'grid',
-                   gridTemplateColumns: '1fr 100px 120px 200px 44px',
+                   gridTemplateColumns: '1fr 65px 70px 200px 44px',
                    gap: 10,
                    alignItems: 'center',
                  }}
@@ -893,7 +893,7 @@ function NewRecipeInner() {
                  </div>
 
                  <input
-                   placeholder="Quantité"
+                   placeholder="Qté"
                    value={qtyInputs[idx] ?? ''}
                    onChange={(e) => setQtyInput(idx, e.target.value)}
                    style={{
@@ -916,23 +916,23 @@ function NewRecipeInner() {
                    style={{
                      minWidth: 0,
                      display: 'flex',
-                     justifyContent: 'flex-end',
-                     gap: 50,
+                     justifyContent: 'center',//'flex-end'
+                     gap: 6, //50
                      alignItems: 'center',
                      fontSize: 13,
                      fontWeight: 800,
                    }}
                    >
-                   <div style={{ textAlign: 'right' }}>
+                   <div style={{ textAlign: 'center' }}>
                      <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût recette</div>
-                     <div style={{ fontSize: 13, fontWeight: 800 }}>
+                     <div className='cost-pill-row-recipe' style={{ fontSize: 13, fontWeight: 800 }}>
                        {fmtEur(typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null)}
                      </div>
                    </div>
 
-                   <div style={{ textAlign: 'right' }}>
-                     <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût produit</div>
-                     <div style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
+                   <div style={{ textAlign: 'center' }}>
+                     <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût courses</div>
+                     <div className='cost-pill-row-courses' style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
                        {isBuyPriceReady ? fmtEur(ing.buyPriceEur) : '—'}
                      </div>
                    </div>
@@ -941,7 +941,7 @@ function NewRecipeInner() {
                  <button
                    type="button"
                    onClick={() => removeIngredient(idx)}
-                   className="app-btn app-btn-secondary"
+                   className="app-btn app-btn-utility"
                    style={smallXBtnStyle}
                    title="Supprimer cette ligne"
                    >
@@ -974,7 +974,7 @@ function NewRecipeInner() {
              setIngredients((p) => [...p, { name: '', quantity: 0, unit: '', buyRecalced: false }])
              setQtyInputs((p) => [...p, ''])
            }}
-           className="app-btn app-btn-secondary paper-ui recipe-color-2"
+           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
            style={{ width: 260 }}
            type="button"
            >
@@ -1000,23 +1000,53 @@ function NewRecipeInner() {
              }}
              >
              <div className="flex items-center justify-between gap-2 mb-2">
-               <span
+               <div
                  style={{
-                   fontSize: 11,
+                   display: 'flex',
+                   alignItems: 'center',
+                   gap: 10,
+                   fontSize: 15,//11
                    fontWeight: 700,
-                   color: 'rgba(117, 99, 94, 0.7)',
-                   background: 'rgba(120, 120, 120, 0.12)',
-                   borderRadius: 8,
-                   padding: '4px 8px',
+                   color: 'var(--primary)',//'rgba(117, 99, 94, 0.7)'
+                   letterSpacing: 0.2,
+                   //background: 'rgba(120, 120, 120, 0.12)',
+                   //borderRadius: 1,
+                   //padding: '4px 8px',
                  }}
                  >
-                 Étape {idx + 1}
+                  <div
+                    style={{
+                      width: 28,
+                      height:28,
+                      borderRadius: '50%',
+                      background: 'rgba(176, 188, 140, 0.4)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 13,
+                      fontWeight: '700',
+                      color: '#75635E',
+                      lineHeight: 1,
+                    }}
+                   >
+                    {idx + 1}
+                  </div> 
+                <span
+                  style={{
+                    fontSize: 15,
+                    fontWeight: 700,
+                    color: 'var(--primary)',
+                    letterSpacing: 0.2,
+                    lineHeight: 1,
+                  }}
+                >
+                 Étape
                </span>
-
+              </div>
                <button
                  type="button"
                  onClick={() => removeStep(idx)}
-                 className="app-btn-secondary"
+                 className="app-btn app-btn-utility"
                  style={smallXBtnStyle}
                  title="Supprimer cette étape"
                  >
@@ -1046,7 +1076,7 @@ function NewRecipeInner() {
            </div>
          ))}
 
-         <button onClick={() => setSteps((p) => [...p, ''])} className="app-btn app-btn-secondary paper-ui recipe-color-2" style={{ width: 220 }} type="button">
+         <button onClick={() => setSteps((p) => [...p, ''])} className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2" style={{ width: 220 }} type="button">
            + Ajouter une étape
          </button>
        </div>

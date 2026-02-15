@@ -212,6 +212,7 @@ background: var(--primary-2);
     background: #B0BC8C;/*garder la couleur #B0BC8C - pas celle-ci #68650A;*/
     color: #FFF;
     box-shadow: 0 10px 22px rgba(176,188,140,0.35);
+    border: 1px solid var(--border);
 }
 
 .app-btn-sage:hover {
@@ -472,15 +473,22 @@ white-space: nowrap;
 }
 
 .cost-pill-label {
-font-size: 12px;
-font-weight: 700;
+font-size: 18px;
+font-weight: 800;
 opacity: 0.75;
 }
 
 .cost-pill-row .amount {
 font-size: 18px;
 font-weight: 800;
-color: var(--primary);
+}
+
+.cost-pill-row-courses {
+    color: var(--primary);
+}
+
+.cost-pill-row-recipe {
+    color: #68650A;
 }
 
 /* Optionnel : sur mobile, le bouton passe dessous proprement */
