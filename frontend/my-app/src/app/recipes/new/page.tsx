@@ -1004,7 +1004,7 @@ function NewRecipeInner() {
                  style={{
                    display: 'flex',
                    alignItems: 'center',
-                   gap: 10,
+                   gap: 15,
                    fontSize: 15,//11
                    fontWeight: 700,
                    color: 'var(--primary)',//'rgba(117, 99, 94, 0.7)'
@@ -1016,14 +1016,14 @@ function NewRecipeInner() {
                  >
                   <div
                     style={{
-                      width: 28,
-                      height:28,
+                      width: 32,
+                      height:32,
                       borderRadius: '50%',
                       background: 'rgba(176, 188, 140, 0.4)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 13,
+                      fontSize: 14,
                       fontWeight: '700',
                       color: '#75635E',
                       lineHeight: 1,
@@ -1085,7 +1085,16 @@ function NewRecipeInner() {
      {/* Save + status */}
      <section className="app-card p-6" style={{ marginTop: 16 }}>
        <div className="flex flex-wrap gap-3 items-center">
-         <button onClick={save} className="app-btn app-btn-sage" style={{ borderRadius: 14 }} type="button">
+         <button onClick={save} className="app-btn app-btn-sage" 
+            style={{ 
+              display: 'flex', 
+              borderRadius: 14,
+              justifyContent: 'center',
+              alignItems: 'center',
+              gap: 16,
+              flexWrap: 'wrap',
+              }} 
+            type="button">
            Enregistrer la recette
          </button>
 
