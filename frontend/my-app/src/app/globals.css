@@ -7,7 +7,7 @@ Direction Artistique
 
 :root {
     --bg: #F7F4EF; /* Beige chaud*/
-    --text: #2E2220; /* Anthracite doux */
+    --text: #75635E; /* 2E2220 - couleur pour portions+notes+Un ingrédient par ligne : nom, quantité, unité, prix. - 1 étape = 1 bloc. Garde les phrases courtes.*/
     --muted: rgba(46,34,32,0.65);
 
     --card: rgba(255,255,255,0.78);/* Cartes */
@@ -284,7 +284,7 @@ display: flex;
 align-items: center;
 gap: 4px;
 font-family: var(--font-playfair);/*color: var(--text);  police mysia.app*/ 
-color: #5a3a22;/*var(--primary);*/ /* couleur  */
+color: #5B4D49;/*#5a3a22 var(--primary);*/ /* couleur  */
 font-weight: 650;
 font-size: 20px; /* taille de mysia.app*/
 line-height: 1;/*letter-spacing: 0.25px;*/
@@ -401,7 +401,7 @@ Titre recette (page new / id)
 font-family: var(--font-playfair);
 font-size: 32px;
 font-weight: 700;
-color: #5a3a22; /*var(--primary);*/
+color: var(--primary); /* #75635E; /* #5a3a22 var(--primary);*/
 margin: 0 0 6px 0;
 line-height: 1.2;
 }
@@ -418,9 +418,17 @@ background: rgba(231, 209, 186, 0.35); /* fond doux */
 border-radius: 6px;
 }
 
+.recipe-color-1 { /* comme remplis l'essentiel */
+    color: #75635E; 
+}
+
+.recipe-color-2 { /* comme titre recette */
+    color: var(--primary);
+}
+
 /* ---- Coûts (recette / courses) ---- */
 /* Bandeau haut de la section ingrédients */
-.ingredients-top {
+.ingredients-top { /* class de <ingredients>*/ 
 display: flex;
 align-items: flex-start;
 justify-content: space-between;
@@ -440,7 +448,7 @@ opacity: 1;
 display: flex;
 gap: 12px;
 justify-content: flex-start;
-flex-wrap: wrap;
+flex-wrap: nowrap;
 margin: 0;
 }
 
@@ -449,7 +457,7 @@ margin: 0;
 /*background: rgba(255, 255, 255, 0.75);*/
 border: 1px solid var(--border);
 border-radius: 14px;
-padding: 10px 14px;
+padding: 35px 20px; /* 10px 14px */
 min-width: 190px;
 box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
 }
