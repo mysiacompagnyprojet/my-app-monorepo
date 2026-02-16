@@ -199,7 +199,7 @@ function NewRecipeInner() {
  const router = useRouter()
  const search = useSearchParams()
 
- const [draft, setDraft] = useState<OcrDraft | null>(null)
+ //const [draft, setDraft] = useState<OcrDraft | null>(null)
 
  const [title, setTitle] = useState('')
  const [servings, setServings] = useState(1)
@@ -252,7 +252,7 @@ function NewRecipeInner() {
 
    try {
      const d = JSON.parse(raw) as OcrDraft
-     setDraft(d)
+     //setDraft(d)
 
      setTitle(String((d as any).title || ''))
      setServings(Number((d as any).servings || 1) || 1)
@@ -817,7 +817,7 @@ function NewRecipeInner() {
      <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
        {/* Bandeau du haut : titre (gauche) + action (droite) */}
        <div className="ingredients-top">
-         <div className="ingredients-head grid gap-1 text-sm font-semi bold" style={{ marginBottom: 0 }}>
+         <div className="ingredients-head grid gap-1 text-sm font-semibold" style={{ marginBottom: 0 }}>
            <h2 className="recipe-color-2" style={sectionTitleStyle}>Ingrédients</h2>
            <p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
          </div>
@@ -826,9 +826,36 @@ function NewRecipeInner() {
            onClick={() => recalcPrices({ silent: false })}
            disabled={isRepricing}
            className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
-           type="button"
-             >
-           🔁 {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
+           type="button">
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <span
+                aria-hidden="true"
+                className={isRepricing ? 'icon-spin' : ''}
+                style={{ 
+                  width: 18, 
+                  height: 18, 
+                  display: 'inline-flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}
+              >
+                <svg 
+                  viewBox="0 0 24 24" 
+                  width="18" 
+                  height="18" 
+                  fill="none" 
+                  stroke="#68650A" 
+                  strokeWidth="2"
+                >
+                  <rect x="6" y="3" width="12" height="18" rx="2"/>
+                    <path d="M8 7h8" />
+                    <path d="M9 11h1M12 11h1M15 11h1" />
+                    <path d="M9 14h1M12 14h1M15 14h1" />
+                    <path d="M9 17h1M12 17h1M15 17h1" />
+                </svg>
+              </span>
+              <span>{isRepricing ? 'Recalcul…' : 'Recalculer les prix'}</span>
+            </span>
          </button>
        </div>
 
@@ -992,11 +1019,12 @@ function NewRecipeInner() {
          {steps.map((s, idx) => (
            <div
              key={idx}
-             className="app-card p-3"
+             className="p-3"//app-card
              style={{
                boxShadow: 'none',
-               background: 'rgba(255,255,255,0.7)',
+               background: 'rgba(255, 255, 255, 0.95)',
                borderColor: 'var(--border)',
+               borderRadius: 12,
              }}
              >
              <div className="flex items-center justify-between gap-2 mb-2">
@@ -1083,9 +1111,9 @@ function NewRecipeInner() {
      </section>
 
      {/* Save + status */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <div className="flex flex-wrap gap-3 items-center">
-         <button onClick={save} className="app-btn app-btn-sage" 
+     <section className="app-card p-6" style={{ marginTop: 16}}>
+       <div className="flex flex-wrap gap-3 items-center justify-center">
+         <button onClick={save} className="app-btn-sage app-btn-lg" 
             style={{ 
               display: 'flex', 
               borderRadius: 14,

@@ -24,8 +24,8 @@ Direction Artistique
     /* vieux papiers */
     --paper-warm: rgba(214,191,162,0.22);
     --paper-vignette: rgba(0,0,0,0.06);
-    --paper-stain: 0.2;/* intensité des grosses tache 0.2 */
-    --paper-grain: 0.5; /* intensité des grains à l'horizontal 0.2 */
+    /* --paper-stain: 0.2;intensité des grosses tache 0.2 */
+    /*--paper-grain: 0.5;  intensité des grains à l'horizontal 0.2 */
     --paper-fibers: 0.1;/* intensité des grains à la vertical 0.07*/
     /* couleur grains */
     --grain-brown: 120, 72, 44; /* brun chaud  120, 72, 44 -  90, 50, 30*/
@@ -215,6 +215,15 @@ background: var(--primary-2);
     border: 1px solid var(--border);
 }
 
+.app-btn-lg {
+    border-radius: 12px;
+    padding: 18px 40px;
+    font-weight: 700;
+    transition: transform 160ms ease, filter 160ms ease, background 160ms ease;
+    font-size: 25px;
+    min-width: 400px;
+}
+
 .app-btn-sage:hover {
     filter: brightness(0.96);
 }
@@ -380,9 +389,9 @@ font-size: 14px;
 display: block;
 border-radius: 12px;
 transition:
-    transform 180 ms ease,
-    box-shadow 180 ms ease,
-    border-color 180 ms ease;
+    transform 180ms ease,
+    box-shadow 180ms ease,
+    border-color 180ms ease;
 }
 
 /*Hover desktop uniquement*/
@@ -473,13 +482,13 @@ white-space: nowrap;
 }
 
 .cost-pill-label {
-font-size: 18px;
-font-weight: 800;
+font-size: 30px;
+font-weight: 900;
 opacity: 0.75;
 }
 
 .cost-pill-row .amount {
-font-size: 20px;
+font-size: 25px;
 font-weight: 800;
 }
 
@@ -497,4 +506,10 @@ font-weight: 800;
 width: 100%;
 min-width: 0;
 }}
-
+/* animation icone recalculer les prix*/
+.icon-spin {
+    animation: spin 0.9s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
