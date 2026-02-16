@@ -124,8 +124,10 @@ function isNotFoundLine(ing: Line): boolean {
  const nameOk = String(ing?.name || '').trim().length > 0
  if (!nameOk) return false
 
+ if (ing.ingredientBaseId) return false
+
  if (ing.priceMatched === false) return true
- if (!(ing as any).id) return true
+ //if (!(ing as any).id) return true
 
  const note = String(ing.note || '').toLowerCase()
  if (note.includes('non trouvé') || note.includes('introuvable')) return true
@@ -913,7 +915,10 @@ function NewRecipeInner() {
                        setIngredient(idx, {
                          name: item.nom,
                          ingredientBaseId: item.id,
-                       })
+                         priceMatched: true,
+                         note: undefined,
+                         id: item.id as any,
+                       } as any)
                      }}
                      buttonLabel="Voir les produits"
                    />
