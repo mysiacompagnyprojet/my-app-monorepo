@@ -67,6 +67,56 @@ type EnrichResponse =
 Helpers quantité : accepte 1/4, 1 1/2, 1,2
 ────────────────────────────────────────────────────────────── */
 
+function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | null {
+ const u = String(uRaw || '').trim().toLowerCase()
+ if (!u) return null
+ if (u === 'g' || u === 'gr' || u === 'gramme' || u === 'grammes') return 'g'
+ if (u === 'kg' || u === 'kilo' || u === 'kilos') return 'g'
+ if (u === 'ml') return 'ml'
+ if (u === 'l' || u === 'litre' || u === 'litres') return 'ml'
+ if (u === 'cl') return 'ml'
+ if (u === 'dl') return 'ml'
+ if (u === 'piece' || u === 'pièce' || u === 'pièces' || u === 'pcs') return 'piece'
+ return null
+}
+
+function toBaseQtyFront(qty: number, unitRaw: string): { qty: number; unit: 'g' | 'ml' | 'piece' } | null {
+ const u = String(unitRaw || '').trim().toLowerCase()
+ const q = Number(qty || 0)
+ if (!Number.isFinite(q)) return null
+
+ const canon = canonUnitFront(u)
+ if (!canon) return null
+
+ // g
+ if (u === 'kg' || u === 'kilo' || u === 'kilos') return { qty: q * 1000, unit: 'g' }
+ if (canon === 'g') return { qty: q, unit: 'g' }
+
+ // ml
+ if (u === 'l' || u === 'litre' || u === 'litres') return { qty: q * 1000, unit: 'ml' }
+ if (u === 'cl') return { qty: q * 10, unit: 'ml' }
+ if (u === 'dl') return { qty: q * 100, unit: 'ml' }
+ if (canon === 'ml') return { qty: q, unit: 'ml' }
+
+ // piece
+ return { qty: q, unit: 'piece' }
+}
+
+function computeCostCourses(ing: Line): number | null {
+ const buyPrice = typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null
+ const refQty = typeof ing.buyRefQty === 'number' ? ing.buyRefQty : null
+ const refUnit = typeof ing.buyRefUnit === 'string' ? ing.buyRefUnit : null
+ if (!buyPrice || !refQty || !refUnit) return null
+
+ const qBase = toBaseQtyFront(Number(ing.quantity || 0), String(ing.unit || ''))
+ const packBase = toBaseQtyFront(refQty, refUnit)
+ if (!qBase || !packBase) return null
+ if (qBase.unit !== packBase.unit) return null
+
+ const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+ return packs * buyPrice
+}
+
 function parseQtyInput(raw: string): number {
  const s = String(raw || '').trim()
  if (!s) return 0
@@ -112,7 +162,7 @@ function normalizeIngredientForLookup(raw: string): string {
  s = s.replace(/\bselon\b.*$/gi, ' ') // retire "selon ..."
  s = s.replace(/[,;:].*$/g, ' ') // retire après virgule/;/: (souvent commentaires)
  s = s.replace(
-   /\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|fraîche|ciselé(e)?|décortiqué(e)?)\b/gi,
+   /\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|ciselé(e)?|décortiqué(e)?)\b/gi, //enlever car ça bloqué crème frîche dans les ingrédient |fraîche
    ' '
  )
 
@@ -242,8 +292,11 @@ function NewRecipeInner() {
  }, [ingredients])
 
  const totalProducts = useMemo(() => {
-   return ingredients.reduce((acc, i) => acc + (typeof i.buyPriceEur === 'number' ? (i.buyPriceEur as number) : 0), 0)
- }, [ingredients])
+   return ingredients.reduce((acc, ing) => {
+    const v = computeCostCourses(ing)
+    return acc + (typeof v === 'number' ? v : 0)
+   }, 0)
+  }, [ingredients])
 
  // 1) Pré-remplissage depuis OCR
  useEffect(() => {
@@ -621,19 +674,18 @@ function NewRecipeInner() {
  return (
    <main className="app-container" style={{ margin: '40px auto' }}>
      <section style={{ marginBottom: 16 }}>
-       <h1
+       <input
+         value={title}
+         onChange={(e) => setTitle(e.target.value)}
+         placeholder="Titre de la recette"
          className="recipe-title editable-title"
-         contentEditable
-         suppressContentEditableWarning
-         onInput={(e) => {
-           setTitle(e.currentTarget.textContent || '')
+         style={{
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          width: '100%',
          }}
-         onBlur={(e) => {
-           setTitle(e.currentTarget.textContent?.trim() || '')
-         }}
-         >
-         {title?.trim() || 'Titre de la recette'}
-       </h1>
+       />
 
        <p className="recipe-color-1">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
      </section>
@@ -915,10 +967,13 @@ function NewRecipeInner() {
                        setIngredient(idx, {
                          name: item.nom,
                          ingredientBaseId: item.id,
-                         priceMatched: true,
-                         note: undefined,
                          id: item.id as any,
+                         //priceMatched: true,
+                         note: undefined,
                        } as any)
+                       setTimeout(() => {
+                        recalcPrices({ silent: true})
+                       }, 0)
                      }}
                      buttonLabel="Voir les produits"
                    />
@@ -965,7 +1020,7 @@ function NewRecipeInner() {
                    <div style={{ textAlign: 'center' }}>
                      <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût courses</div>
                      <div className='cost-pill-row-courses' style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
-                       {isBuyPriceReady ? fmtEur(ing.buyPriceEur) : '—'}
+                       {isBuyPriceReady ? fmtEur(computeCostCourses(ing)) : '—'}
                      </div>
                    </div>
                  </div>
@@ -980,6 +1035,10 @@ function NewRecipeInner() {
                    ✕
                  </button>
                </div>
+
+                 <div style={{ fontSize: 11, opacity: 0.6 }}>
+                id: {(ing as any).ingredientBaseId ?? (ing as any).id ?? '—'}
+                </div>
 
                {isNotFoundLine(ing) && (
                  <div

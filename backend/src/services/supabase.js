@@ -129,16 +129,18 @@ mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
 }
 
 function getBuyPackInfo(row, unitRawForBase) {
-const { unit: baseU, factor } = toBaseUnit(unitRawForBase);
+const packUnitRaw = row.type_unite ?? unitRawForBase;
+const { unit: baseU, factor } = toBaseUnit(packUnitRaw);
 
 const buyPrice = toNumberLoose(row.prix_d_achat);
-const refQty = toNumberLoose(row.quantite_de_reference);
+//const refQty = toNumberLoose(row.quantite_de_reference);
+const packQty = toNumberLoose(row.unite_g_ml_piece);
 
 return {
 buyPrice: Number.isFinite(buyPrice) ? buyPrice : null,
-refQty: Number.isFinite(refQty) ? refQty : null,
+refQty: Number.isFinite(packQty) ? packQty : null,
 refUnit: baseU || null,
-refQtyInBase: Number.isFinite(refQty) ? refQty * factor : null,
+refQtyInBase: Number.isFinite(packQty) ? packQty * factor : null,
 };
 }
 
@@ -197,7 +199,7 @@ let batch = cacheGet(allKey);
 if (!batch) {
 const { data, error } = await supabaseAdmin
 .from(TABLE)
-.select('nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+.select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
 .order('nom', { ascending: true })
 .limit(1000);
 

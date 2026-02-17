@@ -306,7 +306,9 @@ airtableId: i.id ?? null,
 unitPriceBuy: i.unitPriceBuy ?? null,
 costRecipe: i.costRecipe ?? null,
 }))
-
+// console log a supprimer
+console.log("req.userId =", req.userId);
+console.log("req.user=", req.user);
 const recipe = await prisma.recipe.create({
 data: {
 userId: req.user.userId,

@@ -256,3 +256,17 @@ html::after {
     opacity: 0.75;
     mix-blend-mode: normal; /*normal;*/    
 }
+
+<h1
+         className="recipe-title editable-title"
+         contentEditable
+         suppressContentEditableWarning
+         onInput={(e) => {
+           setTitle(e.currentTarget.textContent || '')
+         }}
+         onBlur={(e) => {
+           setTitle(e.currentTarget.textContent?.trim() || '')
+         }}
+         >
+         {title?.trim() || 'Titre de la recette'}
+       </h1>

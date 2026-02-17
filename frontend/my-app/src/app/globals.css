@@ -411,7 +411,7 @@ Titre recette (page new / id)
 font-family: var(--font-playfair);
 font-size: 32px;
 font-weight: 700;
-color: var(--primary); /* #75635E; /* #5a3a22 var(--primary);*/
+color: #6B3A26; /* #75635E; /* #5a3a22 var(--primary);*/
 margin: 0 0 6px 0;
 line-height: 1.2;
 }
