@@ -1035,11 +1035,6 @@ function NewRecipeInner() {
                    ✕
                  </button>
                </div>
-
-                 <div style={{ fontSize: 11, opacity: 0.6 }}>
-                id: {(ing as any).ingredientBaseId ?? (ing as any).id ?? '—'}
-                </div>
-
                {isNotFoundLine(ing) && (
                  <div
                    style={{
