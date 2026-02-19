@@ -7,11 +7,11 @@ const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
 const { normSpaces, stripWeird, looksLikeTimeInfoLine } = require('../utils/stringUtils');
 //textUtils'
-const { normalizeForDedup, looksLikeListBullet, looksLikeStepContinuation } = require('../utils/textUtils')
+const { normalizeForDedup, looksLikeListBullet, looksLikeStepContinuation,looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine, } = require('../utils/textUtils')
 //titleUtils'
 const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate, sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils');
 //ingredientUtils'
-const { isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
+const { isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, isStepsHeader } = require('../utils/ingredientUtils');
 //unit.js
 const { extractServingsFromLine } = require('../utils/units');
 /* =========================
@@ -129,6 +129,21 @@ function isMostlyNoise(line) {
   return false;
 }
 
+function looksLikeCreditsLine(line) {
+  const t = normSpaces(line).toLowerCase();
+
+  return (
+    /^prise de vue\b/.test(t) ||
+    /^montage\b/.test(t) ||
+    /^r[ée]gie\b/.test(t) ||
+    /^coordination\b/.test(t) ||
+    /^suivi\b/.test(t) ||
+    /^publication de\b/.test(t) ||
+    /france inter\b/.test(t) ||
+    /\b\d{1,2}\s+\w+\s+\d{4}\b/.test(t) 
+  )
+}
+
 /* =========================
    DEDUP (cross-captures)
 ========================= */
@@ -184,7 +199,7 @@ function smartFilterWithTrashFromText(rawText) {
   let rawLines = cleaned
     .split('\n')
     .map((s) => normSpaces(s))
-    .filter(Boolean)
+    .filter(Boolean);
     console.log('[OCR] raw split lines:', cleaned.split('\n').slice(0, 20));
     
     
@@ -248,6 +263,19 @@ function smartFilterWithTrashFromText(rawText) {
         }
       }
       trash.push(l);
+      continue;
+    }
+
+
+    //ajouter le 19/02
+    const creditsMarker = /(r[ée]gie culinaire\s*:|coordination [eé]ditoriale\s*:|prise de vue|montage\s*:)/i;
+    if (creditsMarker.test(l)) {
+      const parts = l.split(creditsMarker);
+      const before = normSpaces(parts[0] || '');
+      const after = normSpaces(l.slice(before.length) || '');
+
+      if (before && !looksLikeSocialNoise(before)) lines.push(before);
+      if (after) trash.push(after);
       continue;
     }
 
@@ -1366,7 +1394,21 @@ function splitIngredientsAndSteps(lines) {
         continue;
       }
 
-      if (!inSteps && (looksLikeStepLine(l) || looksLikeStepContinuation(prev, l))) inSteps = true;
+      if (!inSteps && isStepsHeader(l)) {
+        inSteps = true;
+        prev = l;
+        continue;
+      }
+
+      const prevlooksStep = looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
+      const curLooksNotIngredient =
+      !parseOcrIngredient(l) &&
+      !looksLikeSpoonMeasureIngredient(l) && 
+      !looksLikeListBullet(l);
+
+      if (!inSteps && (looksLikeStepLine(l) || looksLikeStepContinuation(prev, l) || (prevlooksStep && curLooksNotIngredient))) {
+        inSteps = true;
+      }  
 
       if (inSteps) stepLines.push(l);
       else ingredientLines.push(l);
@@ -1415,6 +1457,12 @@ function splitIngredientsAndSteps(lines) {
         }
         if (looksLikeSpoonMeasureIngredient(l)) {
           ingredientLines.push(l);
+          continue;
+        }
+
+        if (!inSteps && isStepsHeader(l)) {
+          inSteps = true;
+          prev = l;
           continue;
         }
 
@@ -1472,6 +1520,11 @@ function splitIngredientsAndSteps(lines) {
   const movedVar = moveVariantsBlockToNotes({ stepLines, notesLines });
   stepLines = movedVar.stepLines;
   notesLines = movedVar.notesLines;
+
+  const cutIdx = stepLines.findIndex(l => looksLikeCreditsLine(l));
+  if (cutIdx >= 0) {
+    stepLines = stepLines.slice(0, cutIdx);
+  }
 
   stepLines = joinWrappedLinesForSteps(stepLines);
 

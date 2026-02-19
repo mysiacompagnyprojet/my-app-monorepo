@@ -498,13 +498,15 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     split = rescueWrappedIngredientFragmentsOnly(split);
 
     lines = miniReflow(split);
+    split = splitIngredientsAndSteps(lines);
 
     let servings = split.servings || 1;
     if (!Number.isFinite(servings) || servings < 1) servings = 1;
 
     // ---------- INGREDIENTS ----------
+    const extraNotes = [];
     const ingredients = beautifyIngredients(
-      joinWrappedLinesForIngredients(split.ingredientLines || [])
+      joinWrappedLinesForIngredients(split.ingredientLines || [], parseOcrIngredient)
         .flatMap((l) => splitMergedIngredientLine(l, filtered.trash))
         .flatMap((l) => splitCommaSeparatedNoQty(l))
         .map((obj) => {
@@ -549,6 +551,11 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             return { name, quantity: 0, unit: '' };
           }
 
+          if (/^\s*ou\b/i.test(l)) {
+            extraNotes.push(l.trim());
+            return null;
+          }
+
           const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
           if (!parsed) return { name: l, quantity: 0, unit: '' };
 
@@ -559,6 +566,17 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           };
 
           row.name = String(row.name || '').replace(/[↑■]+/g, '').trim();
+
+          const paren = row.name.match(/\(([^)]+)\s*$/);
+          if (paren?.[1]) {
+            const noteFromParen = paren[1].trim();
+            //on enléve la parenthése du nom
+            row.name = row.name.replace(/\s*\([^)]+\)\s*$/, '').trim();
+            //on stock la note
+            extraNotes.push(noteFromParen);
+            //aussi pour la garder sur l;ingredient
+            row.note = noteFromParen;
+          }
 
           if (row.unit && typeof row.name === 'string') {
             row.name = row.name.replace(new RegExp(`\\s+${row.unit}$`, 'i'), '').trim();
@@ -582,8 +600,11 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       .filter((s) => !/^\d{1,3}$/.test(s));
 
     // ---------- NOTES ----------
-    const baseNotes = (split.notesLines || []).map((s) => String(s || '').trim()).filter(Boolean);
-    const notes = baseNotes.join('\n');
+    const baseNotes = (split.notesLines || [])//.map((s) => String(s || '').trim()).filter(Boolean);
+    .map(s => String(s || '').trim())
+    .filter(Boolean);
+    const allNotes = [...baseNotes,...extraNotes];
+    const notes = allNotes.join('\n');
 
     // ---------- TITRE FINAL ----------
     const guessedFromLines = guessTitleFromLines(safeLinesForTitle);

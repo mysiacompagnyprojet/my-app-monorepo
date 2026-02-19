@@ -176,8 +176,8 @@ export default function ImportRecipePage() {
           )}
 
 
-          <div className="mt-4">
-            <button onClick={importOcr} disabled={!file} className="app-btn-primary">
+          <div>{/* className="mt-4"*/}
+            <button onClick={importOcr} disabled={!file} className="app-btn-sage app-btn-lg app-btn-primary">
               Lancer l’OCR
             </button>
           </div>

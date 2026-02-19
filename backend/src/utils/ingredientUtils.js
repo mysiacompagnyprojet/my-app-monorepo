@@ -1,7 +1,9 @@
 //backend/src/utils/ingredientUtils
 
 //stringUtils
-const { normSpaces, looksLikeStepNumberedLine } = require('../utils/stringUtils');
+const { normSpaces} = require('../utils/stringUtils');
+const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/textUtils');
+
 
 const QTY_USED =
   '([0-9]+(?:[.,][0-9]+)?|[0-9]+\\s+[0-9]+\\/[0-9]+|[0-9]+\\/[0-9]+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
@@ -31,6 +33,11 @@ function fixCommonOcrQuantityUnitBugs(rawLine) {
   return s;
 }
 
+function looksLikeListBullet(line) {
+  const t = normSpaces(line);
+  return /^[-•*]\s+/.test(t);
+}
+
 function isIngredientsHeader(line) {
   const t = normSpaces(line).toLowerCase();
   if (/^ingr[ée]dients?\b/.test(t)) return true;
@@ -42,6 +49,17 @@ function isIngredientsHeader(line) {
 function isPreparationHeader(line) {
   const t = normSpaces(line).toLowerCase();
   return /^préparation\b/.test(t) || /^preparation\b/.test(t) || /^instructions?\b/.test(t);
+}
+
+function isStepsHeader(line) {
+  const t = normSpaces(line).toLowerCase();
+  return (
+    /^d[eé]roul[eé]\s*:?\s*$/.test(t) ||
+    /^étapes?\b/.test(t) ||
+    /^etapes?\b/.test(t) ||
+    /^m[ée]thode\b/.test(t) ||
+    /^r[ée]alisation\b/.test(t) 
+  );
 }
 
 // ✅ A) bruit "date" type "8 mai", "12 sept.", etc.
@@ -69,9 +87,13 @@ function looksLikeCountersNoise(line) {
   return false;
 }
 
+
 function looksLikeSocialNoise(line) {
   const t = normSpaces(line).toLowerCase();
 
+  if (looksLikeStepLine(t) || looksLikeStepVerbLine(t) || looksLikeActionSentence(t)) {
+    return false;
+  }
   if (/@[a-z0-9._-]{2,}/i.test(t)) return true;
   if (/#\w{2,}/.test(t)) return true;
 
@@ -150,10 +172,6 @@ function looksLikeSocialNoise(line) {
   }
 
   return false;
-}
-
-function looksLikeStepLine(line) {
-  return looksLikeStepVerbLine(line) || looksLikeStepNumberedLine(line);
 }
 
 function postProcessIngredientName(name) {
@@ -284,22 +302,7 @@ function normalizeUnit(u) {
   return t || '';
 }
 
-// ✅ phrases d'action “sans numérotation”
-function looksLikeActionSentence(line) {
-  const t = normSpaces(line).toLowerCase();
-  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|étalez|etalez|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser|assaisonner)\b/i.test(
-    t
-  );
-}
 
-function looksLikeStepVerbLine(line) {
-  const t = normSpaces(line);
-  if (!t) return false;
-
-  return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|assaisonnez|assaisonner|étalez|etalez|étaler|etaler|tartinez|tartiner|recouvrez|recouvrir|garnissez|garnir|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préchauffez|prechauffez|préparez|preparez|préparer|preparer|montez|monter|disposer|disposez)\b/i.test(
-    t
-  );
-}
 //return /\b(coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|remuez|salez|poivrez|déposez|deposez|nappez|saupoudrez|enfournez|laissez|poursuivez|servez|cuisez|cuire|chauffez|chauffer|préparer|préparez|preparez|employer|utiliser|disposer|disposez|assaisonner|assaisonnez|étaler|étalez)\b/i.test(
 //  t
 //);
@@ -321,13 +324,15 @@ function isIngredientFragmentLine(line) {
   if (/^(de|d['’])\b/i.test(t)) return true;
   if (/^(kg|g|mg|l|dl|cl|ml)\b/i.test(t)) return true;
   if (/^(grill[eé]es?|concass[eé]es?)\b/i.test(t)) return true;
+  if (/^(peu\s+)?farineuse?\b/i.test(t)) return true;
+  if (/^de\s+type\b/i.test(t)) return true;
 
   if (t.length <= 20 && /^[a-zà-öø-ÿ'’ -]+$/i.test(t) && !looksLikeStepLine(t)) return true;
 
   return false;
 }
 
-function joinWrappedLinesForIngredients(lines) {
+function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
   const src = (lines || []).map((x) => normSpaces(x)).filter(Boolean);
 
   const out = [];
@@ -343,6 +348,23 @@ function joinWrappedLinesForIngredients(lines) {
     const cur = src[i];
     const next = i + 1 < src.length ? src[i + 1] : '';
 
+    const bufferHasOpenParen = buffer.includes('(') && !buffer.includes(')');
+    const curLooksNewIngredientStart = 
+    /^\d+\b/.test(cur) || 
+    looksLikeListBullet(cur) || 
+    (typeof parseIngredientFn === 'function' && !!parseIngredientFn(cur));
+
+    //si on est dans une parenthése ouverte, on colle tant que ce n'est pas fermé
+    if (buffer && bufferHasOpenParen && !curLooksNewIngredientStart) {
+      buffer = `${buffer} ${cur}`;
+      continue;
+    }
+
+    if (buffer && bufferHasOpenParen && curLooksNewIngredientStart) {
+      flush();
+      buffer = cur;
+      continue;
+    }
     // 1) Cas fort "nombre seul" suivi d'une unité seule => on commence/continue un bloc
     // Ex: "200" + "g" + "de farine" ...
     if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
@@ -409,16 +431,14 @@ module.exports = {
     fixCommonOcrQuantityUnitBugs,
     isIngredientsHeader,
     isPreparationHeader,
+    isStepsHeader,
     looksLikeDateNoise,
     looksLikeCountersNoise,
     looksLikeSocialNoise,
-    looksLikeStepLine,
     postProcessIngredientName,
     normalizeQuantityRawForDisplay,
     parseQuantityToNumber,
     normalizeUnit,
-    looksLikeActionSentence,
-    looksLikeStepVerbLine,
     isUnitToken,
     isIngredientFragmentLine,
     joinWrappedLinesForIngredients,
