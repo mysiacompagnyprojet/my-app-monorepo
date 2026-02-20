@@ -1,4 +1,8 @@
 //backend/src/routes/images.js
+// LEVEL: ROUTE
+// import autorisés : express-middleware-services-lib-utils generaux
+//import interdits : routes-parsers-ocr-importocr-ingredient-title
+// importé module.exports = router 
 
 const express = require('express')
 const multer = require('multer')

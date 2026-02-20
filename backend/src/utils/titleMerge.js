@@ -1,12 +1,15 @@
 //backend/src/utils/titleMerge
+// LEVEL: UTIL (title reconstruction / merge)
+// import autorisés : stringUtils, textUtils, éventuellement titleUtils
+// import interdits : routes, middleware, services, prisma, units, ingredientParser, ocrText
+// importé par : ocrText, ocrTitle - import interdit titleUtils, textUtils, stringUtils
 
-const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
-const { parseOcrIngredient} = require('../utils/ingredientParser');
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('../utils/titleUtils');
+
 const { normalizeTitleJoinPiece } = require('../utils/textUtils');
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');
 //titleUtils
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('../utils/titleUtils');
 
 
 

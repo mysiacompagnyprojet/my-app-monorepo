@@ -1,4 +1,9 @@
 // backend/src/routes/billing.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils generaux
+//import interdits : routes-parsers-services-frontend
+// importé module.exports = router
+
 const express = require('express');
 const Stripe = require('stripe');
 const { prisma } = require('../lib/prisma');

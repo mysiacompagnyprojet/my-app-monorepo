@@ -1,5 +1,10 @@
 // backend/src/utils/costs.js
-const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/supabase')
+// LEVEL: DOMAIN-UTIL (business)
+// import autorisés : utils mais pour fichier indépendant et bas niveau - constantes neutres
+// import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma
+// importé uniquement par routes-services
+const { canonUnit, toBaseQty } = require('../utils/units')
+const { getIngredientPriceByName } = require('../services/supabase')
 
 /**
 * Nettoyage “soft” du nom pour maximiser le match Airtable.

@@ -1,4 +1,8 @@
 // backend/src/routes/recipeDrafts.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils-dependances externes(express, etc)
+// import interdits : routes-frontend-parsers-ocr
+// importé uniquement par src-index
 const express = require('express');
 const { prisma } = require('../lib/prisma');
 

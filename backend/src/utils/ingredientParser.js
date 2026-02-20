@@ -1,14 +1,18 @@
 //backend/src/utils/ingredientParsers
+// LEVEL: UTIL
+// import autorisés : stringUtils-units-heuristics- constantes neutres
+// import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma
+// importé par ocrTitle, ocrText, vision, ingredients, eventuellement import-ocr
 
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');
-const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine,} = require('../utils/textUtils')
+const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine,} = require('../utils/heuristics');
+const { isIngredientsHeader,  isPreparationHeader } = require('../utils/sectionHeaders');
+
 
 //ingredientUtils
 const { 
-  fixCommonOcrQuantityUnitBugs, 
-  isIngredientsHeader, 
-  isPreparationHeader, 
+  fixCommonOcrQuantityUnitBugs,  
   looksLikeDateNoise, 
   looksLikeCountersNoise, 
   looksLikeSocialNoise,  

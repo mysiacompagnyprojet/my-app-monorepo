@@ -1,4 +1,8 @@
 // backend/src/utils/units.js
+// LEVEL: UTIL (foundation: units / conversions / servings regex)
+// import autorisés : stringUtils
+// import interdits : titleUtils, textUtils, heuristics, ingredient*, ocr*, services, routes, middleware, prisma
+// importé par : tout le backend (utils/services/routes)
 
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');

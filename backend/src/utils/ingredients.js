@@ -1,5 +1,9 @@
 // backend/src/utils/ingredients.js
-const { normalizeUnit, canonUnit } = require('./units');
+// LEVEL: UTIL
+// import autorisés : stringUtils-units-ingredientParser- constantes neutres
+// import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma
+// importé par recipes,shopping-list,costs
+const { normalizeUnit, canonUnit } = require('../utils/units');
 
 /* ───────────────────────────── Nom d’ingrédient ─────────────────────────── */
 
@@ -217,6 +221,5 @@ module.exports = {
   mergeIngredientsCanon,
   mergeIngredients, // pour /shopping-list
   parseRawLine,     // ✅ désormais bien exportée
-  canonUnit,
   normalizeUnit,
 };

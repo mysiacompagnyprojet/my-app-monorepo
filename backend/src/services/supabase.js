@@ -1,7 +1,12 @@
 // backend/src/services/supabase.js
+// LEVEL: SERVICE
+// import autorisés : lib-utils generaux-dependances externes
+// import interdits : routes-frontend-parsers-ocr-services
+// importé uniquement par routes-services
 'use strict';
 
 const { supabaseAdmin } = require('./supabaseAdmin');
+const { canonUnit, toBaseUnit } = require('../utils/units')
 
 // -------------------------
 // LOGS optionnels
@@ -33,49 +38,6 @@ if (typeof v === 'number') return v;
 const s = String(v).replace(/\u00A0/g, ' ').trim().replace(',', '.');
 const n = parseFloat(s);
 return Number.isFinite(n) ? n : NaN;
-}
-
-function canonUnit(uRaw) {
-const u = String(uRaw || '')
-.trim()
-.toLowerCase()
-.normalize('NFD')
-.replace(/[\u0300-\u036f]/g, '');
-if (!u) return null;
-
-if (['g', 'gramme', 'grammes'].includes(u)) return 'g';
-if (['kg', 'kilogramme', 'kilogrammes'].includes(u)) return 'kg';
-if (['mg'].includes(u)) return 'mg';
-
-if (['ml', 'millilitre', 'millilitres'].includes(u)) return 'ml';
-if (['l', 'litre', 'litres'].includes(u)) return 'l';
-if (['cl'].includes(u)) return 'cl';
-if (['dl'].includes(u)) return 'dl';
-
-if (['piece', 'pièce', 'unite', 'unité', 'pc', 'botte'].includes(u)) return 'piece';
-return u;
-}
-
-function toBaseUnit(unit) {
-const u = canonUnit(unit);
-
-if (u === 'mg') return { unit: 'g', factor: 0.001 };
-if (u === 'kg') return { unit: 'g', factor: 1000 };
-if (u === 'g') return { unit: 'g', factor: 1 };
-
-if (u === 'cl') return { unit: 'ml', factor: 10 };
-if (u === 'dl') return { unit: 'ml', factor: 100 };
-if (u === 'l') return { unit: 'ml', factor: 1000 };
-if (u === 'ml') return { unit: 'ml', factor: 1 };
-
-if (u === 'piece') return { unit: 'piece', factor: 1 };
-
-return { unit: 'piece', factor: 1 };
-}
-
-function toBaseQty(qty, unit) {
-const { unit: baseU, factor } = toBaseUnit(unit);
-return { qty: Number(qty || 0) * factor, unit: baseU };
 }
 
 function roundPPU(ppu, unit) {
@@ -317,4 +279,4 @@ cacheSet(cacheKey, null);
 return null;
 }
 
-module.exports = { getIngredientPriceByName, canonUnit, toBaseUnit, toBaseQty };
+module.exports = { getIngredientPriceByName };

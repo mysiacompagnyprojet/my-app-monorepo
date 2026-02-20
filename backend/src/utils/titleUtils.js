@@ -1,11 +1,17 @@
 //backend/src/utils/titleUtils
+// LEVEL: UTIL (title cleaning / title heuristics)
+// import autorisés : stringUtils, (option) heuristics, (option) units
+// import interdits : ingredientUtils, ingredientParser, ocrTitle, ocrText, services, routes, middleware, prisma
+// importé par : ocrTitle, ocrText, services/vision (via cleanTitleCandidate), etc.
 
-//ingredientUtils
-const { isIngredientsHeader, isPreparationHeader, looksLikeStepLine } = require('../utils/ingredientUtils')
+
+const { isIngredientsHeader, isPreparationHeader } = require('../utils/sectionHeaders')
 //stringUtils
 const { normSpaces, stripDiacritics, normalizeTitleCandidate, looksLikeTimeInfoLine } = require('../utils/stringUtils');
 //utils
 const { extractServingsFromLine } = require('../utils/units');
+
+const { looksLikeStepLine } = require('../utils/heuristics')
 // ---------------- BAD TITLE (Cat-03) ----------------
 
 const BAD_TITLE_WORDS = [
@@ -270,17 +276,6 @@ function isBlacklistedUiTitle(s) {
   return false;
 }
 
-function sanitizePickedTitle(title) {
-  let t = normSpaces(title);
-  if (!t) return '';
-
-  t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
-  t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
-  t = t.replace(/\b(temps|portions?|calories)\b\s*$/i, '').trim();//ajoute le 20/01
-
-  return normSpaces(t);
-}
-
 function looksLikeEmotionalHookTitle(raw) {
   const s0 = String(raw || '').trim();
   if (!s0) return false;
@@ -435,45 +430,6 @@ function visionLooksLikeSuffix(v) {
        );
 }
 
-function stripEdgeEmojisAndPunct(s) { 
-  let t = normSpaces(s);
-
-  // retire emojis/pictos au début/fin (sans toucher au texte au centre)
-  // (range large emojis + symboles fréquemment OCR)
-  t = t
-  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
-  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '')
-  .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
-  .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '');
-
-  t = t
-  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
-  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
-  return normSpaces(t);
-}
-
-function cleanTitleCandidate(input) {
-  let s = normSpaces(input);
-
-  // 1) nettoyage "bord" large (ponctuation/bullets/quotes)
-  s = s
-    .replace(/^[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+/g, '')
-    .replace(/[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+$/g, '');
-
-  // 2) enlève emojis/pictos en bordure (plus agressif mais safe)
-  s = stripEdgeEmojisAndPunct(s);
-
-  // 3) retire ponctuation de fin type "!!!", "…", "??"
-  s = s.replace(/[.!?…]+$/g, '');
-
-  // 4) re-nettoyage bord (au cas où)
-  //s = stripEdgeEmojisAndPunct(s);
-
-  s = normalizeTitleCandidate(s);
-
-  return normSpaces(s);
-}
-
 function stripOcrTitleArtifacts(input) {
   let t = String(input || '').trim();
   if (!t) return t;
@@ -507,7 +463,6 @@ module.exports = {
     canJoinTitleLines,
     isBadTitleCandidate,
     isBlacklistedUiTitle,
-    sanitizePickedTitle,
     looksLikeEmotionalHookTitle,
     looksLikeStepTitle,
     looksLikeLooseActionStep,
@@ -516,7 +471,5 @@ module.exports = {
     looksLikeMeasureLineTitle,
     looksTruncatedTitle,
     visionLooksLikeSuffix,
-    stripEdgeEmojisAndPunct,
-    cleanTitleCandidate,
     stripOcrTitleArtifacts,
 }

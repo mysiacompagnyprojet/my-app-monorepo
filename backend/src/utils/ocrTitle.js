@@ -1,6 +1,11 @@
 // backend/src/utils/ocrTitle.js
+// LEVEL: UTIL (title heuristics)
+// import autorisés : utils bas niveau (stringUtils/titleUtils)
+// import interdits : routes, middleware, services, prisma
+// importé par : services/vision + utils/ocrText + parsers
 'use strict';
-const { cleanTitleCandidate } = require('../utils/titleUtils')
+const { cleanTitleCandidate } = require('../utils/stringUtils')
+const { isValidRecipeTitleCandidate } = require('../utils/heuristics')
 // Nettoyage léger
 
 
@@ -50,86 +55,6 @@ function looksLikeIngredientFragmentTitleForTitle(line) {
    //}
 
    return false;
-}
-
-// Faux titres UI / réseaux
-function isUiTitleBlacklisted(s) {
-  const t = cleanTitleCandidate(s).toLowerCase();
-  if (!t) return true;
-
-  if (/^toutes?\s+les\s+publications?$/i.test(t)) return true;
-  if (/^enregistr[ée]$/i.test(t)) return true;
-
-  if (/^recettes?\s+d[ée]lice$/i.test(t)) return true;
-  if (/^recettes?\s+et\s+d[ée]lices?$/i.test(t)) return true;
-
-  if (/^publication\s+de\b/i.test(t)) return true;
-
-  return false;
-}
-
-// Ressemble à une étape (verbe d’action au début)
-function looksLikeStepSentence(s) {
-  const t = cleanTitleCandidate(s);
-  if (!t) return false;
-  return /^[-•*]?\s*(égoutter|egoutter|ajouter|mixer|mixez|cuire|faire|préchauffer|prechauffer|préparer|preparer|couper|laver|mettre|verser|chauffer|mélanger|melanger|assaisonner|assaisonnez|enfourner|étaler|etaler)\b/i.test(
-    t
-  );
-}
-
-// Très important : rejeter les “sel & poivre”, “un peu de sel”, etc.
-function isAssaisonnementOnly(s) {
-  const t = cleanTitleCandidate(s).toLowerCase();
-  if (!t) return true;
-
-  if (t === 'sel & poivre' || t === 'sel et poivre') return true;
-  if (t === 'salez et poivrez') return true;
-  if (t === 'un peu de sel') return true;
-
-  return false;
-}
-
-// Candidat acceptable ?
-function isValidRecipeTitleCandidate(s) {
-  const t = cleanTitleCandidate(s);
-  if (!t) return false;
-
-  // refuse les fragments d'ingrédients qui commencent par "de / d'"
-  if (/^(de|d['’])\s+/i.test(t)) return false;
-
-  // refuse les titres coupés : "gratin de", "tarte aux", etc.
-  if (/\b(de|d['’]|du|des|à|a|au|aux)\s*$/i.test(t)) return false;
-
-  // longueur réaliste
-  if (t.length < 4 || t.length > 90) return false;
-
-  // blacklist UI + assaisonnement + étapes
-  if (isUiTitleBlacklisted(t)) return false;
-  if (isAssaisonnementOnly(t)) return false;
-  if (looksLikeStepSentence(t)) return false;
-
-  // évite les phrases (ponctuation de phrase)
-  if (/[.!?…]/.test(t)) return false;
-
-  // évite “Ingrédients”, “Préparation”, etc.
-  if (/^ingr[ée]dients?\b/i.test(t)) return false;
-  if (/^pr[ée]paration\b/i.test(t)) return false;
-  if (/^temps\s+de\s+(préparation|cuisson)\b/i.test(t)) return false;
-
-  // ✅ assouplissement :
-  // - 2+ mots : OK
-  // - 1 mot : OK seulement si c'est "title-like" (commence par une majuscule et assez long)
-  const words = t.split(/\s+/).filter(Boolean);
-  if (words.length >= 2) return true;
-
-  if (words.length === 1) {
-    // ex: "Crevettes", "Tiramisu"
-    if (t.length < 6) return false;
-    if (!/^[A-ZÀ-ÖØ-Þ]/.test(t)) return false;
-    return true;
-  }
-
-  return false;
 }
 
 // Score pour départager plusieurs titres valides
@@ -192,10 +117,6 @@ function tryMergeSplitTitle(linesOrCandidates) {
 
 module.exports = {
   looksLikeIngredientFragmentTitleForTitle,
-  isUiTitleBlacklisted,
-  looksLikeStepSentence,
-  isAssaisonnementOnly,
-  isValidRecipeTitleCandidate,
   scoreTitleCandidate,
   pickBestTitle,
   tryMergeSplitTitle,

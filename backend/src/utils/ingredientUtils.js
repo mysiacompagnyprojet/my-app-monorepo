@@ -1,8 +1,12 @@
 //backend/src/utils/ingredientUtils
+// LEVEL: UTIL
+// import autorisés : stringUtils-units-heuristics-constantes neutres
+// import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma
+// importé par import-ocr,vision,ocrText,ocrTitle
 
 //stringUtils
 const { normSpaces} = require('../utils/stringUtils');
-const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/textUtils');
+const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/heuristics');
 
 
 const QTY_USED =
@@ -36,30 +40,6 @@ function fixCommonOcrQuantityUnitBugs(rawLine) {
 function looksLikeListBullet(line) {
   const t = normSpaces(line);
   return /^[-•*]\s+/.test(t);
-}
-
-function isIngredientsHeader(line) {
-  const t = normSpaces(line).toLowerCase();
-  if (/^ingr[ée]dients?\b/.test(t)) return true;
-  if (/^ingr[ée]dients?\s+pour\s+\d+\s*/.test(t)) return true;
-  if (/^pour\s+\d+\s*personnes?\b.*\bil\b.*\bfaut\b/.test(t)) return true;
-  return false;
-}
-
-function isPreparationHeader(line) {
-  const t = normSpaces(line).toLowerCase();
-  return /^préparation\b/.test(t) || /^preparation\b/.test(t) || /^instructions?\b/.test(t);
-}
-
-function isStepsHeader(line) {
-  const t = normSpaces(line).toLowerCase();
-  return (
-    /^d[eé]roul[eé]\s*:?\s*$/.test(t) ||
-    /^étapes?\b/.test(t) ||
-    /^etapes?\b/.test(t) ||
-    /^m[ée]thode\b/.test(t) ||
-    /^r[ée]alisation\b/.test(t) 
-  );
 }
 
 // ✅ A) bruit "date" type "8 mai", "12 sept.", etc.
@@ -429,9 +409,6 @@ module.exports = {
     QTY_USED,
     CUILL_RE,
     fixCommonOcrQuantityUnitBugs,
-    isIngredientsHeader,
-    isPreparationHeader,
-    isStepsHeader,
     looksLikeDateNoise,
     looksLikeCountersNoise,
     looksLikeSocialNoise,

@@ -1,13 +1,15 @@
 // backend/src/services/vision.js
+// LEVEL: SERVICE
+// import autorisés : lib-dependances externes-stringUtils/heuristics (si bas niveau et independant)
+// import interdits : routes-frontend-parsers-ocr-services-utils
+// importé uniquement par routes-services
 'use strict';
 
 const vision = require('@google-cloud/vision');
 const sharp = require('sharp');
-
-const { isValidRecipeTitleCandidate } = require('../utils/ocrTitle');
-const { stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils')
+const { isValidRecipeTitleCandidate } = require('../utils/heuristics');
 //stringUtils
-const { normSpaces } = require('../utils/stringUtils');
+const { normSpaces, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/stringUtils');
 
 // ---------------------------------------------------------
 // ✅ Google credentials (Render / Prod) - robuste

@@ -1,25 +1,19 @@
 // backend/src/routes/shopping-list.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils-dependances externes(express, etc)
+// import interdits : routes-frontend-parsers-ocr
+// importé uniquement par src-index
 const express = require('express');
 const { prisma } = require('../lib/prisma');
 const { mergeIngredients } = require('../utils/ingredients');
 const { enrichIngredientWithCost } = require('../utils/costs');
+const { normalizeKey } = require('../utils/stringUtils')
 
 const router = express.Router();
 
 function needAuth(req, res, next) {
   if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
   next();
-}
-
-// Normalise pour règles "gratuit" (eau / sel / poivre)
-function normalizeKey(s = '') {
-  return String(s)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '') // enlève accents
-    .replace(/[^a-z0-9\s&]/g, ' ')   // garde lettres/chiffres/espace/&
-    .replace(/\s+/g, ' ')
-    .trim();
 }
 
 /**

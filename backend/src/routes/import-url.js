@@ -1,9 +1,14 @@
 // backend/src/routes/import-url.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-parsers-lib-utils,
+// import interdits : routes-frontend
+// importé uniquement par src-index
+
 const express = require('express');
 const cheerio = require('cheerio');
 const { prisma } = require('../lib/prisma');
 const { parseRawLine } = require('../utils/ingredients');
-const { checkAndIncrementLimit } = require('../utils/limits');
+const { checkAndIncrementLimit } = require('../services/importLimits');
 
 // Adapters par site
 const parseMarmiton = require('../parsers/marmiton');

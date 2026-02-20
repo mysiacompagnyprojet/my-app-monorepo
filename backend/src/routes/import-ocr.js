@@ -1,25 +1,32 @@
 // backend/src/routes/import-ocr.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils,
+// import interdits : routes-parsers-frontend
+// importé uniquement par src-index
+
 'use strict';
 
 const express = require('express');
 const multer = require('multer');
 //stringUtils
-const { normSpaces, stripDiacritics,  stripBulletPrefix, normalizeLoose, normalizeTitleCandidate } = require('../utils/stringUtils');
+const { normSpaces, stripDiacritics, stripBulletPrefix, normalizeLoose, normalizeTitleCandidate, sanitizePickedTitle } = require('../utils/stringUtils');
 //ocrTitle
-const { pickBestTitle, isValidRecipeTitleCandidate, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
+const { pickBestTitle, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 //textUtils
 const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils')
 // ✅ Airtable service remplacer par supabase.js
-const { getIngredientPriceByName, canonUnit, toBaseQty } = require('../services/supabase');
+const { getIngredientPriceByName } = require('../services/supabase');
 const { ocrFromBufferWithDebug } = require('../services/vision');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
+const { isValidRecipeTitleCandidate } = require('../utils/heuristics');
 //titleUtils
-const { sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts } = require('../utils/titleUtils');
+const { isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts } = require('../utils/titleUtils');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
+const { canonUnit, toBaseQty } = require('../utils/units')
 
 let parseRawLine = null;
 try {

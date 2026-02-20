@@ -1,3 +1,9 @@
+//backend/src/routes/beta
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils generaux
+//import interdits : routes-parsers-ocr-importocr-ingredient-title
+// importé module.exports = router ou exports.routeur = routeur
+
 const express = require('express')
 const router = express.Router()
 const { supabaseAdmin } = require('../services/supabaseAdmin')

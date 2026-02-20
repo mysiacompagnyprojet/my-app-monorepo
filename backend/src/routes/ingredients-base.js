@@ -1,4 +1,8 @@
 // backend/src/routes/ingredients-base.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils,
+// import interdits : routes-frontend-parsers-ocr
+// importé uniquement par src-index
 const express = require('express');
 const router = express.Router();
 const { supabaseAdmin } = require('../services/supabaseAdmin');

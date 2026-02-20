@@ -1,3 +1,9 @@
+//backend/src/services/supabaseAdmin
+// LEVEL: SERVICE
+// import autorisés : lib-dependances externes
+// import interdits : routes-frontend-parsers-ocr-services
+// importé uniquement par routes-services
+
 const { createClient } = require('@supabase/supabase-js');
 
 const url = process.env.SUPABASE_URL

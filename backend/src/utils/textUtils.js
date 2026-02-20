@@ -1,6 +1,10 @@
 //backend/src/utils/textUtils
-const { cleanTitleCandidate, sanitizePickedTitle } = require('../utils/titleUtils');
-const { normSpaces, cleanStepPrefix } = require('../utils/stringUtils');
+// LEVEL: UTIL (generic text helpers)
+// import autorisés : stringUtils uniquement
+// import interdits : routes, middleware, services, prisma, utils métier (ocr/ingredients/units)
+// importé par : ocrText, ocrTitle, heuristics
+
+const { normSpaces, cleanStepPrefix, cleanTitleCandidate, sanitizePickedTitle  } = require('../utils/stringUtils');
 
 function normalizeForDedup(line) {
   return normSpaces(line)
@@ -48,24 +52,6 @@ function splitStepsFromLines(arr) {
       return out;
 }
 
-
-function looksLikeStepVerbLine(line) {
- const t = normSpaces(line);
- if (!t) return false;
-
- return /\b(d[eé]roule|deroule|coupez|couper|lavez|laver|plongez|plonger|égouttez|egouttez|faites|faire|ajoutez|ajouter|mélangez|melangez|versez|verser|remuez|remuer|salez|saler|poivrez|poivrer|assaisonnez|assaisonner|étalez|etalez|étaler|etaler|enfournez|enfourner|retournez|retourner|laissez|laisser|poursuivez|poursuivre|servez|servir|cuisez|cuire|chauffez|chauffer|préchauffez|prechauffez|préparez|preparez|préparer|preparer|montez|monter|disposez|disposer)\b/i.test(t);
-}
-// ✅ phrases d'action “sans numérotation”
-function looksLikeActionSentence(line) {
-  const t = normSpaces(line).toLowerCase();
-  return /\b(bien\s+mélanger|couvrir|cuire|laisser|retirer|poursuivre|réchauffer|servir|préchauffer|étaler|étalez|etalez|détailler|dorer|déposer|fendre|farci[er]|passer|préparer|preparez|préparez|employer|utiliser|assaisonner)\b/i.test(
-    t
-  );
-}
-function looksLikeStepLine(line) {
-  return looksLikeStepVerbLine(line) || looksLikeStepNumberedLine(line);
-}
-
 // Découpage intelligent d'un gros paragraphe en étapes - pour generic.js
 function splitStepsFromText(text) {
   if (!text) return [];
@@ -107,50 +93,11 @@ function looksLikeListBullet(line) {
   return /^[-•*]\s+/.test(t);
 }
 
-function looksLikeStepContinuation(prevLine, line) {
- const prev = normSpaces(prevLine);
- const cur = normSpaces(line);
- if (!prev || !cur) return false;
-
- const prevT = prev.toLowerCase();
- const curT = cur.toLowerCase();
-
- // si la ligne d'avant ressemble à une étape, on autorise des continuations
- const prevLooksStep =
-   looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
-
- if (!prevLooksStep) return false;
-
- // cas spécifique "de façon ..." -> la suite (ex: "homogène") doit être collée
- if (/\bde\s+façon\b/i.test(prevT)) return true;
-
- // connecteurs / continuations fréquentes
- if (/^(et|puis|ensuite|afin|pour|de\s+façon|de\s+manière|jusqu['’]à)\b/i.test(curT)) return true;
-
- // mots qui doivent coller à l'étape précédente
- if (/^homog[èe]ne\b/i.test(curT)) return true;
- if (/^(et\s+)?enfourner\b/i.test(curT)) return true;
- if (/^retourner\b/i.test(curT)) return true;
-
-  // ✅ continuation classique
-  if (/^(le|la|les|l['’]|un|une|des|du|de|d['’]|au|aux|et|puis|ensuite|à|a)\b/i.test(cur)) return true;
-
-  // ✅ Facebook: "recouverte..." / "immédiatement." après une étape numérotée
-  if (/^[a-zà-öø-ÿ]/.test(cur)) return true;
-
-  return false;
-}
-
-
 
 module.exports = {
     normalizeForDedup,
     normalizeTitleJoinPiece,
     splitStepsFromLines,
     splitStepsFromText,
-    looksLikeListBullet,
-    looksLikeStepContinuation,
-    looksLikeStepVerbLine,
-    looksLikeActionSentence,
-    looksLikeStepLine,
+    looksLikeListBullet
 }

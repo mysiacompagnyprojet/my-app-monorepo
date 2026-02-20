@@ -1,19 +1,26 @@
 // backend/src/utils/ocrText.js
+// LEVEL: UTIL (OCR text parsing)
+// import autorisés : utils (stringUtils, units, heuristics, ingredientParser, ocrTitle)
+// import interdits : routes, middleware, services (vision/supabase), prisma/lib, parsers sites
+// importé par : routes import-ocr (ou services OCR), et autres utils
 'use strict';
 
 const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
-const { normSpaces, stripWeird, looksLikeTimeInfoLine } = require('../utils/stringUtils');
+const { normSpaces, stripWeird, looksLikeTimeInfoLine, stripEdgeEmojisAndPunct, cleanTitleCandidate, sanitizePickedTitle  } = require('../utils/stringUtils');
 //textUtils'
-const { normalizeForDedup, looksLikeListBullet, looksLikeStepContinuation,looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine, } = require('../utils/textUtils')
+const { normalizeForDedup, looksLikeListBullet } = require('../utils/textUtils');
 //titleUtils'
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate, sanitizePickedTitle, isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('../utils/titleUtils');
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate,  isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle } = require('../utils/titleUtils');
 //ingredientUtils'
-const { isIngredientsHeader, isPreparationHeader, looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, isStepsHeader } = require('../utils/ingredientUtils');
+const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 //unit.js
 const { extractServingsFromLine } = require('../utils/units');
+const { isIngredientsHeader,  isPreparationHeader,  isStepsHeader } = require('../utils/sectionHeaders');
+
+const { looksLikeStepContinuation,looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine } = require('../utils/heuristics');
 /* =========================
    TRASH / NOISE (iPhone + Social)
 ========================= */

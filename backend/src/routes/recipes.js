@@ -1,4 +1,8 @@
 // backend/src/routes/recipes.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-lib-utils-dependances externes(express, etc)
+// import interdits : routes-frontend-parsers-ocr
+// importé uniquement par src-index
 const express = require('express')
 const router = express.Router()
 const { PrismaClient } = require('@prisma/client')
@@ -8,10 +12,11 @@ const prisma = new PrismaClient()
 const { supabaseAuth } = require('../middleware/supabaseAuth')
 const needAuth = supabaseAuth
 
-const { cleanAndNormalizeIngredients, tidyName, canonUnit, normalizeUnit } = require('../utils/ingredients')
+const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients')
 
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs')
+const { canonUnit } = require('../utils/units')
 
 /**
 * ✅ PATCH: enrichissement "à la volée" pour l'affichage (SANS migration DB)

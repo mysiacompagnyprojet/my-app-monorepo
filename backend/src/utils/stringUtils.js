@@ -1,9 +1,24 @@
 //backend/src/utils/stringUtils - pour function purement string (norm/strip/diacritics)
+// LEVEL: UTIL (core string helpers)
+// import autorisés : AUCUN
+// import interdits : routes, middleware, services, prisma, autres utils métier
+// importé par : tous les utils et services
 
 function normSpaces(s) {
   return String(s || '')
     .replace(/\u00A0/g, ' ')
     .replace(/[ \t]+/g, ' ')
+    .trim();
+}
+
+// Normalise pour règles "gratuit" (eau / sel / poivre)
+function normalizeKey(s = '') {
+  return String(s)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // enlève accents
+    .replace(/[^a-z0-9\s&]/g, ' ')   // garde lettres/chiffres/espace/&
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
@@ -83,8 +98,59 @@ function looksLikeStepNumberedLine(line) {
   return false;
 }
 
+function stripEdgeEmojisAndPunct(s) { 
+  let t = normSpaces(s);
+
+  // retire emojis/pictos au début/fin (sans toucher au texte au centre)
+  // (range large emojis + symboles fréquemment OCR)
+  t = t
+  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
+  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '')
+  .replace(/^[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+/gu, '')
+  .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}]+$/gu, '');
+
+  t = t
+  .replace(/^[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+/g, '')
+  .replace(/[\s·•\-\–—\*\.\,\;\:\(\)\[\]{}"“”'’]+$/g, '');
+  return normSpaces(t);
+}
+
+function cleanTitleCandidate(input) {
+  let s = normSpaces(input);
+
+  // 1) nettoyage "bord" large (ponctuation/bullets/quotes)
+  s = s
+    .replace(/^[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+/g, '')
+    .replace(/[\s·•\-\–—\*\.,;:(){}\[\]"“”'’]+$/g, '');
+
+  // 2) enlève emojis/pictos en bordure (plus agressif mais safe)
+  s = stripEdgeEmojisAndPunct(s);
+
+  // 3) retire ponctuation de fin type "!!!", "…", "??"
+  s = s.replace(/[.!?…]+$/g, '');
+
+  // 4) re-nettoyage bord (au cas où)
+  //s = stripEdgeEmojisAndPunct(s);
+
+  s = normalizeTitleCandidate(s);
+
+  return normSpaces(s);
+}
+
+function sanitizePickedTitle(title) {
+  let t = normSpaces(title);
+  if (!t) return '';
+
+  t = t.replace(/\s*(?:\.\.\.|…)?\s*afficher la suite.*$/i, '');
+  t = t.replace(/\s*(?:\.\.\.|…)\s*$/g, '');
+  t = t.replace(/\b(temps|portions?|calories)\b\s*$/i, '').trim();//ajoute le 20/01
+
+  return normSpaces(t);
+}
+
 module.exports = {
     normSpaces,
+    normalizeKey,
     stripDiacritics,
     stripWeird,
     stripBulletPrefix,
@@ -92,5 +158,8 @@ module.exports = {
     normalizeTitleCandidate,
     cleanStepPrefix,
     looksLikeTimeInfoLine,
-    looksLikeStepNumberedLine
+    looksLikeStepNumberedLine,
+    stripEdgeEmojisAndPunct,
+    cleanTitleCandidate,
+    sanitizePickedTitle
 }

@@ -1,4 +1,8 @@
 // backend/src/routes/auth.js
+// LEVEL: ROUTE
+// import autorisés : middleware-services-utils generaux
+//import interdits : routes-parsers-ocr-importocr-ingredient-title
+// importé par src-index uniquement
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { prisma } = require('../lib/prisma');
