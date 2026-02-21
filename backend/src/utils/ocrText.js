@@ -151,6 +151,25 @@ function looksLikeCreditsLine(line) {
   )
 }
 
+function extractParenNote(line) {
+  const s = normSpaces(line);
+  if (!s) return null;
+
+  const notes = [];
+  const cleaned = s.replace(/\(([^()]*)\)/g, (_, inside) => {
+    const t = normSpaces(inside);
+    if (t) notes.push(t);
+    return ' ';
+  });
+
+  const outLine = normSpaces(cleaned).replace(/\s+[.,;:]\s*$/g, '');
+  if (!notes.length) return null;
+
+  if (!outLine) return null;
+
+  return {line: outLine, note: notes.join(' . ') };
+}
+
 /* =========================
    DEDUP (cross-captures)
 ========================= */
@@ -305,7 +324,11 @@ function smartFilterWithTrashFromText(rawText) {
 
     lines.push(l);
   }
+  const tHit = trash.filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
+  if (tHit.length) console.log('[DEBUG] trash hit:', tHit);
 
+  const lHit = lines.filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
+  if (lHit.length) console.log('[DEBUG] lines hit:', lHit);
   return {
     rawText: cleaned,
     lines: dedupeLines(lines),
@@ -353,14 +376,28 @@ function joinWrappedLinesForSteps(stepLines) {
       /^l['’]/i.test(cleanedLine) ||
       /^(puis|et|ensuite|alors|donc)\b/i.test(cleanedLine);
 
-    if ((!endsStrong && nextLooksContinuation) || endsConnector) {
+    const isShortWrapTail = 
+      cleanedLine.length <= 20 &&
+      !/^[A-ZÀ-Ö]{3,}$/.test(cleanedLine) &&
+      !/^(ingred[ée]dients?|préparation|preparation|déroulé|deroule)\b/i.test(cleanedLine);
+
+    const isVeryShortSentenceTail = 
+    cleanedLine.length <= 28 &&
+    /[.!?...]$/.test(cleanedLine) &&
+    !/^(ingred[ée]dients?|préparation|preparation|déroulé|deroule)\b/i.test(cleanedLine);
+
+    if (
+      endsConnector ||
+      (!endsStrong && nextLooksContinuation) || 
+      isShortWrapTail || 
+      isVeryShortSentenceTail
+    ) { //
       buffer = `${buffer} ${cleanedLine}`;
     } else {
       flush();
       buffer = cleanedLine;
     }
   }
-
   flush();
   return out;
 }
@@ -788,11 +825,11 @@ function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6)
     if (
       low === 'diner' ||
       low === 'dîner' ||
-      low === 'preparation' ||
+      low === 'preparation|déroulé|deroule)\b/i.test(cleanedLine);' ||
       low === 'préparation' ||
       low === 'temps cuisson' ||
       low === 'temps de cuisson' ||
-      low === 'temps preparation' ||
+      low === 'temps preparation|déroulé|deroule)\b/i.test(cleanedLine);' ||
       low === 'temps de préparation' ||
       low === 'difficulté' ||
       low === 'difficulte' ||
@@ -1340,6 +1377,16 @@ function looksLikeSpoonMeasureIngredient(line) {
 /* =========================
    SPLIT INGREDIENTS / STEPS / NOTES
 ========================= */
+function isStrictIngredientLine(line) {
+ const p = parseOcrIngredient(line);
+ if (!p) return false;
+
+ // adapte aux champs réels de ton parser
+ const qty = p.quantity ?? null;
+ const qtyRaw = p.quantityRaw ?? null;
+
+ return (qty != null && qty !== 0) || (typeof qtyRaw === 'string' && qtyRaw.trim() !== '');
+}
 
 function splitIngredientsAndSteps(lines) {
   const L = lines.map(normSpaces).filter(Boolean);
@@ -1409,7 +1456,7 @@ function splitIngredientsAndSteps(lines) {
 
       const prevlooksStep = looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
       const curLooksNotIngredient =
-      !parseOcrIngredient(l) &&
+      !isStrictIngredientLine(l) &&//!parseOcrIngredient(l) &&
       !looksLikeSpoonMeasureIngredient(l) && 
       !looksLikeListBullet(l);
 
@@ -1418,8 +1465,15 @@ function splitIngredientsAndSteps(lines) {
       }  
 
       if (inSteps) stepLines.push(l);
-      else ingredientLines.push(l);
-
+      else {
+        const ex = extractParenNote(l);
+        if (ex) {
+          ingredientLines.push(ex.line);
+          notesLines.push(ex.note);
+        } else {
+          ingredientLines.push(l);
+        }
+      }
       prev = l;
     }
   } else {
@@ -1453,17 +1507,30 @@ function splitIngredientsAndSteps(lines) {
       }
 
       if (!inSteps) {
-        const parsed = parseOcrIngredient(l);
+        //const parsed = parseOcrIngredient(l);
+        const parsedStrict = isStrictIngredientLine(l);
         const isBullet = looksLikeListBullet(l);
 
-        if ((afterServingsHeader && (isBullet || parsed)) && !looksLikeStepLine(l)) {
+        if ((afterServingsHeader && (isBullet || parsedStrict)) && !looksLikeStepLine(l)) {
           inIngredientBullets = true;
-          ingredientLines.push(l);
+          const ex = extractParenNote(l);
+          if (ex) {
+            ingredientLines.push(ex.line);
+            notesLines.push(ex.note);
+          } else {
+            ingredientLines.push(l);
+          }
           prev = l;
           continue;
         }
         if (looksLikeSpoonMeasureIngredient(l)) {
-          ingredientLines.push(l);
+          const ex = extractParenNote(l);
+          if (ex) {
+            ingredientLines.push(ex.line);
+            notesLines.push(ex.note);
+          } else {
+            ingredientLines.push(l);
+          }
           continue;
         }
 
@@ -1486,8 +1553,17 @@ function splitIngredientsAndSteps(lines) {
           continue;
         }
 
-        if (parsed) ingredientLines.push(l);
-        else notesLines.push(l);
+        if (parsedStrict) {
+          const ex = extractParenNote(l);
+          if(ex) {
+            ingredientLines.push(ex.line);
+            notesLines.push(ex.note);
+          } else {
+            ingredientLines.push(l);
+          }
+        } else {
+          notesLines.push(l);
+        }
 
         prev = l;
       } else {
@@ -1509,6 +1585,20 @@ function splitIngredientsAndSteps(lines) {
   }
 
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
+
+  {
+    const newIng = [];
+    for (const l of ingredientLines) {
+      const ex = extractParenNote(l);
+      if (ex) {
+        newIng.push(ex.line);
+        notesLines.push(ex.note);
+      } else {
+        newIng.push(l);
+      }
+    }
+    ingredientLines = newIng;
+  }
 
   const salvaged = salvageIngredientFragmentsFromNotes({ ingredientLines, notesLines });
   ingredientLines = salvaged.ingredientLines;
@@ -1532,7 +1622,16 @@ function splitIngredientsAndSteps(lines) {
   if (cutIdx >= 0) {
     stepLines = stepLines.slice(0, cutIdx);
   }
+  // a enlever jusqua console.log
+  function debugWhere(arr, label) {
+ const hit = (arr || []).filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
+ if (hit.length) console.log(`[DEBUG] ${label}:`, hit);
+  }
 
+  debugWhere(ingredientLines, 'ingredientLines');
+  debugWhere(stepLines, 'stepLines'); 
+  debugWhere(notesLines, 'notesLines');
+  console.log(stepLines.slice(0,30))
   stepLines = joinWrappedLinesForSteps(stepLines);
 
   // ✅ NEW: découpe en phrases si une ligne est longue et contient plusieurs phrases

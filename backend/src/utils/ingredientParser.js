@@ -8,6 +8,7 @@
 const { normSpaces } = require('../utils/stringUtils');
 const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine,} = require('../utils/heuristics');
 const { isIngredientsHeader,  isPreparationHeader } = require('../utils/sectionHeaders');
+const { QTY_USED, CUILL_RE } = require('../utils/constants');
 
 
 //ingredientUtils

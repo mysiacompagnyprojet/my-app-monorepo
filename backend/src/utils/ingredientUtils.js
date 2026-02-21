@@ -9,11 +9,6 @@ const { normSpaces} = require('../utils/stringUtils');
 const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/heuristics');
 
 
-const QTY_USED =
-  '([0-9]+(?:[.,][0-9]+)?|[0-9]+\\s+[0-9]+\\/[0-9]+|[0-9]+\\/[0-9]+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
-
-const CUILL_RE = 'cuill(?:e|è)re(?:s)?';
-
 function fixCommonOcrQuantityUnitBugs(rawLine) {
   let s = normSpaces(rawLine);
 
@@ -406,8 +401,6 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
 
 
 module.exports = {
-    QTY_USED,
-    CUILL_RE,
     fixCommonOcrQuantityUnitBugs,
     looksLikeDateNoise,
     looksLikeCountersNoise,
