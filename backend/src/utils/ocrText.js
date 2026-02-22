@@ -258,6 +258,10 @@ function smartFilterWithTrashFromText(rawText) {
     }
 
     if (isMostlyNoise(l)) {
+      if (/^[a-zà-öø-ÿ]+\.?$/i.test(l) && l.length >= 3) {
+        lines.push(l);
+        continue
+      }
       trash.push(l);
       continue;
     }
