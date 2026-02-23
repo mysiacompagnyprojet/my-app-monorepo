@@ -11,11 +11,11 @@ const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
 const { normSpaces, stripWeird, looksLikeTimeInfoLine, stripEdgeEmojisAndPunct, cleanTitleCandidate, sanitizePickedTitle  } = require('../utils/stringUtils');
 //textUtils'
-const { normalizeForDedup, looksLikeListBullet } = require('../utils/textUtils');
+const { normalizeForDedup} = require('../utils/textUtils');
 //titleUtils'
 const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate,  isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
 //ingredientUtils'
-const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
+const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, looksLikeListBullet } = require('../utils/ingredientUtils');
 //unit.js
 const { extractServingsFromLine } = require('../utils/units');
 const { isIngredientsHeader,  isPreparationHeader,  isStepsHeader } = require('../utils/sectionHeaders');
@@ -67,13 +67,13 @@ function looksLikeEditorialNoise(line) {
     return true;
   }
 
-  // Blocs "à suivre" / recos qui polluent beaucoup
-  if (/^\s*(à\s+suivre|a\s+suivre)\b/i.test(t)) return true;
-  if (/^\s*<\s*recommandations?\b/i.test(t)) return true;
+  // Blocs "à suivre" / recos qui polluent beaucoup - enlever le 23/02 car deja gerer par looksLikeSocialNoise
+  //if (/^\s*(à\s+suivre|a\s+suivre)\b/i.test(t)) return true;
+  //if (/^\s*<\s*recommandations?\b/i.test(t)) return true;
 
-  // Petits tokens UI isolés
-  if (/^\s*(recommandations?|explorer|suivre)\s*$/i.test(t)) return true;
-  if (/^\s*→\s*suivre\s*$/i.test(t)) return true;
+  // Petits tokens UI isolés - enlever le 23/02 car deja gerer par looksLikeSocialNoise
+  //if (/^\s*(recommandations?|explorer|suivre)\s*$/i.test(t)) return true;
+  //if (/^\s*→\s*suivre\s*$/i.test(t)) return true;
 
   // Pseudos / noms courts bizarres ("iman.")
   if (
@@ -577,77 +577,6 @@ function isMostlyUppercaseTitle(line) { //utilisé qu'ici si utilisé ailleurs l
 
   const upp = (t.match(/[A-ZÀ-ÖØ-Þ]/g) || []).length;
   return upp / letters >= 0.7;
-}
-
-function fabricateTitleFromIngredients(lines) { //il faut revoir cette fonction qui est aussi dans import ocr
-  const L = lines.map(normSpaces).filter(Boolean);
-
-  const scan = [];
-  for (const l of L.slice(0, 60)) {
-    if (isPreparationHeader(l)) break;
-    scan.push(l);
-  }
-
-  const stopNames = new Set(['sel', 'poivre', 'eau', "eau d'", 'eau ', 'huile', "huile d'olive", 'beurre']);
-
-  const found = [];
-  const seen = new Set();
-
-  for (const l0 of scan) {
-    const l = normSpaces(l0);
-    if (!l) continue;
-    if (looksLikeStatusBarNoise(l) || looksLikeDateNoise(l) || looksLikeCountersNoise(l) || looksLikeSocialNoise(l))
-      continue;
-    if (isIngredientsHeader(l) || extractServingsFromLine(l)) continue;
-    if (looksLikeStepLine(l)) continue;
-
-    const parsed = parseOcrIngredient(l);
-    if (!parsed?.name) continue;
-
-    const name = normSpaces(parsed.name).toLowerCase();
-    if (!name) continue;
-
-    if (stopNames.has(name)) continue;
-    if (name.startsWith('eau')) continue;
-
-    if (seen.has(name)) continue;
-    seen.add(name);
-
-    found.push(parsed.name);
-    if (found.length >= 4) break;
-  }
-
-  if (found.length < 2) {
-    for (const l0 of scan) {
-      const l = normSpaces(l0);
-      if (!l) continue;
-      if (looksLikeStatusBarNoise(l) || looksLikeDateNoise(l) || looksLikeCountersNoise(l) || looksLikeSocialNoise(l))
-        continue;
-      if (isIngredientsHeader(l) || extractServingsFromLine(l)) continue;
-      if (looksLikeStepLine(l)) continue;
-
-      const parsed = parseOcrIngredient(l);
-      if (!parsed?.name) continue;
-
-      const name = normSpaces(parsed.name).toLowerCase();
-      if (!name) continue;
-      if (name === 'sel' || name === 'poivre') continue;
-
-      if (seen.has(name)) continue;
-      seen.add(name);
-
-      found.push(parsed.name);
-      if (found.length >= 3) break;
-    }
-  }
-
-  const top = found.slice(0, 3);
-  if (top.length < 2) return null;
-
-  const pretty = top.map((x) => normSpaces(x).toLowerCase());
-  const title = pretty.length === 2 ? `${pretty[0]} & ${pretty[1]}` : `${pretty[0]}, ${pretty[1]} & ${pretty[2]}`;
-
-  return title.charAt(0).toUpperCase() + title.slice(1);
 }
 
 // fonction trouver le titre explicite dans les premières lignes, elle n'est utilisé qu'ici si ailleurs la mettre dans titleUtils et l'importé
@@ -1589,7 +1518,18 @@ function splitIngredientsAndSteps(lines) {
         }
 
         if (inIngredientBullets) {
-          notesLines.push(l);
+          // ✅ Garde les ingrédients sans quantité (ex: "Thym", "Huile d'olive") dans la liste
+          const low = l.toLowerCase();
+
+          const looksLikeNoQtyIngredient =
+          isIngredientFragmentLine(l) ||
+          /^(thym|basilic|persil|ciboulette|origan|romarin|menthe)\b/i.test(low) ||
+          /^huile\b/i.test(low) ||
+          /^(sel|poivre)\b/i.test(low);
+
+          if (looksLikeNoQtyIngredient) ingredientLines.push(l);
+          else notesLines.push(l);
+
           prev = l;
           continue;
         }

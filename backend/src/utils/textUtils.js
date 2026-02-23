@@ -88,10 +88,6 @@ function splitStepsFromText(text) {
   return steps;
 }
 
-function looksLikeListBullet(line) {
-  const t = normSpaces(line);
-  return /^[-•*]\s+/.test(t);
-}
 
 
 module.exports = {
@@ -99,5 +95,4 @@ module.exports = {
     normalizeTitleJoinPiece,
     splitStepsFromLines,
     splitStepsFromText,
-    looksLikeListBullet
 }

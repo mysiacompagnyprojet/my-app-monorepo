@@ -27,14 +27,14 @@ function fixCommonOcrQuantityUnitBugs(rawLine) {
 
   s = s.replace(/\b11\s+(de|d['’])\s*(lait|eau|crème|creme)\b/i, '1 l $1 $2');
   s = s.replace(/\b1l\b/gi, '1 l');
-  s = s.replace(/^[·•\.\,\;\:\-–—]+\s*/g, '');
+  s = s.replace(/^[·•●⚫■▪◦○\.\,\;\:\-–—]+\s*/g, '');
 
   return s;
 }
 
 function looksLikeListBullet(line) {
   const t = normSpaces(line);
-  return /^[-•*]\s+/.test(t);
+  return /^[·•●⚫■▪◦○][-•*]\s+/.test(t);
 }
 
 // ✅ A) bruit "date" type "8 mai", "12 sept.", etc.
@@ -318,7 +318,12 @@ function looksLikeNewIngredientStart(line, parseIngredientFn) {
  // cuillères
  if (/^\d+\s*(c\s*\.?\s*a\s*\.?\s*s|c\s*\.?\s*à\s*\.?\s*s|càs|cas)\b/i.test(t)) return true;
 
- if (typeof parseIngredientFn === 'function' && !!parseIngredientFn(t)) return true;
+ //ingredients sans quantités
+ const low = t.toLowerCase();
+  if (/^(thym|basilic|persil|ciboulette|origan|romarin|menthe)\b/i.test(low)) return true;
+  if (/^huile\b/i.test(low)) return true;
+  if (/^(sel|poivre)\b/i.test(low)) return true;
+  if (typeof parseIngredientFn === 'function' && !!parseIngredientFn(t)) return true;
 
  return false;
 }
@@ -385,6 +390,26 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
      continue;
    }
 
+   // si la ligne commence par une parenthèse, on traite la note à part ex: "(büche) Quelques cerneaux" -> on colle "(büche)" à l’ingrédient précédent,
+    // et on garde "Quelques cerneaux" comme nouvelle ligne.
+    if (buffer && /^\(/.test(cur)) {
+      const m = cur.match(/^\(([^)]+)\)\s*(.*)$/);
+      if (m) {
+        const note = `(${m[1]})`;
+        const rest = normSpaces(m[2] || '');
+
+        buffer = normSpaces(`${buffer} ${note}`);
+        flush();
+
+        if (rest) {
+          buffer = rest; // reste devient une nouvelle ligne “ingredient-like”
+        } else {
+          buffer = '';
+        }
+        continue;
+      }
+    }
+
    // 4) heuristiques
    const bufIsNumber = /^\d{1,4}$/.test(buffer);
    const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
@@ -425,4 +450,5 @@ module.exports = {
     isUnitToken,
     isIngredientFragmentLine,
     joinWrappedLinesForIngredients,
+    looksLikeListBullet,
 }

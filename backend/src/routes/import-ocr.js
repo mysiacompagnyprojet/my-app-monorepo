@@ -515,7 +515,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     // ---------- INGREDIENTS ----------
     const extraNotes = [];
     const ingredients = beautifyIngredients(
-      joinWrappedLinesForIngredients(split.ingredientLines || [], parseOcrIngredient)
+      (split.ingredientLines || []) // joinWrappedLinesForIngredients (split.ingredientLines || [], parseOcrIngredient) modifier le 23/02 car fais double emploi av cette fonction dans ocrText splitIngredientsAndSteps
         .flatMap((l) => splitMergedIngredientLine(l, filtered.trash))
         .flatMap((l) => splitCommaSeparatedNoQty(l))
         .map((obj) => {
