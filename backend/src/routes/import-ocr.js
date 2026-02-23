@@ -11,7 +11,7 @@ const multer = require('multer');
 //stringUtils
 const { normSpaces, stripDiacritics, stripBulletPrefix, normalizeLoose, normalizeTitleCandidate, sanitizePickedTitle } = require('../utils/stringUtils');
 //ocrTitle
-const { pickBestTitle, tryMergeSplitTitle, looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
+const { pickBestTitle, tryMergeSplitTitle} = require('../utils/ocrTitle');
 //textUtils
 const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils')
 // ✅ Airtable service remplacer par supabase.js
@@ -20,7 +20,7 @@ const { ocrFromBufferWithDebug } = require('../services/vision');
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 const { isValidRecipeTitleCandidate } = require('../utils/heuristics');
 //titleUtils
-const { isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts } = require('../utils/titleUtils');
+const { isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
@@ -336,7 +336,7 @@ async function priceIngredients(ingredients) {
       }
     })
   );
-
+  console.log('[debug][parsed ingredients]', ingredients);
   return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
 }
 // jusqu'ici Airtable pricing (v1)
@@ -490,7 +490,9 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
         const idxStart = truncStart ? Math.max(0, idx - 1) : idx;
 
-        const merged = buildMergedTitleCandidate(scan, idxStart, 4);
+        const merged = buildMergedTitleCandidate(scan, idxStart, 4,{
+          isIngredientLine: (s) => !!parseOcrIngredient(s),
+        });
 
         if (merged && merged.length > bestVisionTitle.length && !isBadTitleCandidate(merged)) {
         bestVisionTitle = merged;

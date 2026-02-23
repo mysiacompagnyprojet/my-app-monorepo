@@ -307,96 +307,109 @@ function isIngredientFragmentLine(line) {
   return false;
 }
 
+//ajouter le 23/02
+function looksLikeNewIngredientStart(line, parseIngredientFn) {
+ const t = normSpaces(line);
+
+ if (looksLikeListBullet(t)) return true;
+ if (/^\d+(?:[.,]\d+)?\b/.test(t)) return true;
+ if (/^\d+\s*\/\s*\d+\b/.test(t)) return true;
+
+ // cuillères
+ if (/^\d+\s*(c\s*\.?\s*a\s*\.?\s*s|c\s*\.?\s*à\s*\.?\s*s|càs|cas)\b/i.test(t)) return true;
+
+ if (typeof parseIngredientFn === 'function' && !!parseIngredientFn(t)) return true;
+
+ return false;
+}
+
 function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
-  const src = (lines || []).map((x) => normSpaces(x)).filter(Boolean);
+ const src = (lines || []).map((x) => normSpaces(x)).filter(Boolean);
 
-  const out = [];
-  let buffer = '';
+ const out = [];
+ let buffer = '';
 
-  const flush = () => {
-    const s = normSpaces(buffer);
-    if (s) out.push(s);
-    buffer = '';
-  };
+ const flush = () => {
+   const s = normSpaces(buffer);
+   if (s) out.push(s);
+   buffer = '';
+ };
 
-  for (let i = 0; i < src.length; i++) {
-    const cur = src[i];
-    const next = i + 1 < src.length ? src[i + 1] : '';
+ for (let i = 0; i < src.length; i++) {
+   const cur = src[i];
+   const next = i + 1 < src.length ? src[i + 1] : '';
 
-    const bufferHasOpenParen = buffer.includes('(') && !buffer.includes(')');
-    const curLooksNewIngredientStart = 
-    /^\d+\b/.test(cur) || 
-    looksLikeListBullet(cur) || 
-    (typeof parseIngredientFn === 'function' && !!parseIngredientFn(cur));
+   const bufferHasOpenParen = buffer.includes('(') && !buffer.includes(')');
+   const curLooksNewIngredientStart = looksLikeNewIngredientStart(cur, parseIngredientFn);
 
-    //si on est dans une parenthése ouverte, on colle tant que ce n'est pas fermé
-    if (buffer && bufferHasOpenParen && !curLooksNewIngredientStart) {
-      buffer = `${buffer} ${cur}`;
-      continue;
-    }
+   // parenthèse ouverte => on recolle jusqu’à fermeture
+   if (buffer && bufferHasOpenParen && !curLooksNewIngredientStart) {
+     buffer = `${buffer} ${cur}`;
+     continue;
+   }
+   if (buffer && bufferHasOpenParen && curLooksNewIngredientStart) {
+     flush();
+     buffer = cur;
+     continue;
+   }
 
-    if (buffer && bufferHasOpenParen && curLooksNewIngredientStart) {
-      flush();
-      buffer = cur;
-      continue;
-    }
-    // 1) Cas fort "nombre seul" suivi d'une unité seule => on commence/continue un bloc
-    // Ex: "200" + "g" + "de farine" ...
-    if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
-      flush(); // on ferme ce qu'on avait avant pour éviter mélange
-      buffer = `${cur} ${next}`;
-      i++; // on consomme l'unité
-      continue;
-    }
+   // 1) "200" + "g"
+   if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
+     flush();
+     buffer = `${cur} ${next}`;
+     i++;
+     continue;
+   }
 
-    // 2) Unité seule => si buffer finit par un nombre, on colle ; sinon on sort en ligne seule
-    // Ex: ["200", "g"] déjà géré par (1), mais on couvre d'autres variants.
-    if (isUnitToken(cur)) {
-      if (buffer && /\b\d{1,4}\s*$/.test(buffer)) {
-        buffer = `${buffer} ${cur}`;
-        continue;
-      }
-      // si on n'a pas de buffer, on garde l'unité (utile pour certains rescues)
-      flush();
-      out.push(cur);
-      continue;
-    }
+   // 2) unité seule
+   if (isUnitToken(cur)) {
+     if (buffer && /\b\d{1,4}\s*$/.test(buffer)) {
+       buffer = `${buffer} ${cur}`;
+       continue;
+     }
+     flush();
+     out.push(cur);
+     continue;
+   }
 
-    // 3) Si pas de buffer, on démarre
-    if (!buffer) {
-      buffer = cur;
-      continue;
-    }
+   // ✅ garde-fou : nouveau début ingrédient => on flush
+   if (buffer && !bufferHasOpenParen && curLooksNewIngredientStart) {
+     flush();
+     buffer = cur;
+     continue;
+   }
 
-    // 4) Heuristiques de collage (version "ocrText" + protections "import-ocr")
-    const bufIsNumber = /^\d{1,4}$/.test(buffer);
-    const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
+   // 3) start buffer
+   if (!buffer) {
+     buffer = cur;
+     continue;
+   }
 
-    const nextStartsDe = /^(de|d['’])\b/i.test(cur);
-    const curIsFragment = isIngredientFragmentLine(cur);
-    const curIsUnit = isUnitToken(cur);
+   // 4) heuristiques
+   const bufIsNumber = /^\d{1,4}$/.test(buffer);
+   const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
 
-    // 4a) Si le buffer se termine par un connecteur ou un nombre, on colle
-    if (bufIsNumber || bufEndsDe) {
-      buffer = `${buffer} ${cur}`;
-      continue;
-    }
+   const nextStartsDe = /^(de|d['’])\b/i.test(cur);
+   const curIsFragment = isIngredientFragmentLine(cur);
+   const curIsUnit = isUnitToken(cur);
 
-    // 4b) Si la ligne courante est un fragment (de / d' / adjectif ingrédient / petit bout), on colle
-    if (nextStartsDe || curIsFragment || curIsUnit) {
-      buffer = `${buffer} ${cur}`;
-      continue;
-    }
+   if (bufIsNumber || bufEndsDe) {
+     buffer = `${buffer} ${cur}`;
+     continue;
+   }
 
-    // 4c) Sinon on flush et on redémarre
-    flush();
-    buffer = cur;
-  }
+   // ✅ FIX ICI
+   if (!curLooksNewIngredientStart && (nextStartsDe || curIsFragment || curIsUnit)) { //
+     buffer = `${buffer} ${cur}`;
+     continue;
+   }
 
-  flush();
+   flush();
+   buffer = cur;
+ }
 
-  // Nettoyage final : resserre les espaces
-  return out.map((s) => normSpaces(s)).filter(Boolean);
+ flush();
+ return out.map((s) => normSpaces(s)).filter(Boolean);
 }
 
 

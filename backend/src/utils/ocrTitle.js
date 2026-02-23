@@ -9,54 +9,6 @@ const { isValidRecipeTitleCandidate } = require('../utils/heuristics')
 // Nettoyage léger
 
 
-function looksLikeIngredientFragmentTitleForTitle(line) {
-  const t = String(line || '').replace(/\u00A0/g, ' ').replace(/[ \t]+/g, ' ').trim();
-  if (!t) return false;
-
-  const low = t
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase();
-
-    // Exception : titres de type "Sauce Big Mac", "Sauce César", etc.
-    // On bloque uniquement "sauce de / sauce d’" (ingrédient), pas "sauce + nom" - A ALISSER
-    if (low.startsWith('sauce ') && !/\bsauce\s+(de|d['’])\b/.test(low)) {
-    return false;
-    }
-
-   // "PUREE DE", "SAUCE DE", "CONCENTRE DE", etc. - A LAISSER
-   if (/^(puree|puree|puree|puree|pate|pate|concentre|concentre|sauce|coulis)\s+(de|d['’])\b/.test(low)) {
-    return true;
-   }
-
-   // mesures très typiques des ingrédients - A LAISSER
-   const hasMeasureToken =
-   /\b(c\.?\s*a\.?\s*s|c\.?\s*a\.?\s*c|cas|cac)\b/.test(low) ||
-   /\b(pincee|pincees|cuillere|cuilleres)\b/.test(low);
-
-   const hasIngredientGrammar =
-   /^(?:\d|i)\b/.test(low) ||
-   /\b(de|d['’])\b/.test(low);
-
-   // fragments très “ingrédients” - A LAISSER
-   const hasIngredientFragment =
-   /\b(en poudre|hach(e|es|ee|ees)|tres fins|finement|rape|rapee)\b/.test(low);
-
-   if (hasMeasureToken && hasIngredientGrammar) return true;
-   if (hasIngredientFragment && hasIngredientGrammar) return true;
-
-   // Infographie / liste compacte type "en poudre I pincée I c.à.s ..." - A LAISSER
-   if (/\s\|\s/.test(t)) return true;
-   if (/\sI\s/.test(t)) return true;
-
-   // Fragments finissant par qualificatifs ingrédient
-   //if (/\b(en poudre|hach[eé]e?s?|tres\s+fin[s]?|tr[eè]s\s+fin[s]?|r[aâ]p[eé]e?s?)\b/.test(low)) {
-   //return true;
-   //}
-
-   return false;
-}
-
 // Score pour départager plusieurs titres valides
 function scoreTitleCandidate(s) {
   const t = cleanTitleCandidate(s);
@@ -116,7 +68,6 @@ function tryMergeSplitTitle(linesOrCandidates) {
 }
 
 module.exports = {
-  looksLikeIngredientFragmentTitleForTitle,
   scoreTitleCandidate,
   pickBestTitle,
   tryMergeSplitTitle,

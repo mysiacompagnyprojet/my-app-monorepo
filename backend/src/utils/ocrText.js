@@ -5,7 +5,7 @@
 // importé par : routes import-ocr (ou services OCR), et autres utils
 'use strict';
 
-const { looksLikeIngredientFragmentTitleForTitle } = require('../utils/ocrTitle');
+
 const { buildMergedTitleCandidate} = require('../utils/titleMerge');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
@@ -13,7 +13,7 @@ const { normSpaces, stripWeird, looksLikeTimeInfoLine, stripEdgeEmojisAndPunct, 
 //textUtils'
 const { normalizeForDedup, looksLikeListBullet } = require('../utils/textUtils');
 //titleUtils'
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate,  isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle } = require('../utils/titleUtils');
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate,  isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
 //ingredientUtils'
 const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 //unit.js
@@ -76,7 +76,12 @@ function looksLikeEditorialNoise(line) {
   if (/^\s*→\s*suivre\s*$/i.test(t)) return true;
 
   // Pseudos / noms courts bizarres ("iman.")
-  if (/^[a-z0-9._-]{2,}\.$/i.test(t) && t.length <= 12) return true;
+  if (
+    /^[a-z0-9._-]{2,}\.$/i.test(t) && t.length <= 12 &&
+    /[0-9_-]|[.]/.test(t.slice(0, -1))
+  ) {
+    return true;
+  }
 
   // Compteurs type "40 61" (pas toujours captés par looksLikeCountersNoise)
   if (/^\d{1,3}\s+\d{1,3}$/.test(t)) return true;
@@ -257,14 +262,13 @@ function smartFilterWithTrashFromText(rawText) {
       continue;
     }
 
-    if (isMostlyNoise(l)) {
-      if (/^[a-zà-öø-ÿ]+\.?$/i.test(l) && l.length >= 3) {
-        lines.push(l);
-        continue
-      }
-      trash.push(l);
-      continue;
-    }
+    //if (isMostlyNoise(l)) {
+      //const simpleWord = normSpaces(l);const isOneWord= /^[A-Za-zÀ-ÖØ-öø-ÿ]{3,}\.?$/.test(simpleWord);const isUiWord = /^(suivre|explorer|recommandations?)\.?$/i.test(simpleWord);
+      //if (isOneWord && !isUiWord) {lines.push(simpleWord);continue;}
+
+     // trash.push(l);
+    //  continue;
+    //}
 
     if (looksLikeStatusBarNoise(l)) {
       trash.push(l);
@@ -365,6 +369,21 @@ function joinWrappedLinesForSteps(stepLines) {
       flush();
       continue;
     }
+    //ajouter le 23/02
+    const bufferLooksIngredient = !!parseOcrIngredient(buffer) || looksLikeSpoonMeasureIngredient(buffer);
+    const lineLooksIngredient = !!parseOcrIngredient(cleanedLine) || looksLikeSpoonMeasureIngredient(cleanedLine);
+
+    if (buffer && bufferLooksIngredient && lineLooksIngredient) {
+      flush();
+      buffer = cleanedLine;
+      continue;
+    }
+
+    if (buffer && bufferLooksIngredient && isStepsHeader(cleanedLine)) {
+      flush();
+      buffer = '';
+      continue;
+    }
 
     if (!buffer) {
       buffer = cleanedLine;
@@ -390,8 +409,11 @@ function joinWrappedLinesForSteps(stepLines) {
     /[.!?...]$/.test(cleanedLine) &&
     !/^(ingred[ée]dients?|préparation|preparation|déroulé|deroule)\b/i.test(cleanedLine);
 
+    const endsContainerIntro = /\b(dans|sur|sous)\s+(un|une|le|la|les)\s*$/i.test(buffer);
+
     if (
       endsConnector ||
+      endsContainerIntro ||
       (!endsStrong && nextLooksContinuation) || 
       isShortWrapTail || 
       isVeryShortSentenceTail
@@ -749,7 +771,9 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     sawTitleCandidate = true;
 
     // ✅ candidats fusionnés (2-3 lignes)
-    const merged = buildMergedTitleCandidate(scan, i, 3);
+    const merged = buildMergedTitleCandidate(scan, i, 3, {
+      isIngredientLine: (s) => !!parseOcrIngredient(s),
+    });
 
     //console log a effecer
     console.log('[TITLE] simple candidate', { i, t, score: candidates[candidates.length-1].score });
@@ -1440,6 +1464,19 @@ function splitIngredientsAndSteps(lines) {
     for (const l of tail) {
       if (!l) continue;
 
+      if (!inSteps && ingredientLines.length > 0) {
+        const last = ingredientLines[ingredientLines.length - 1];
+        const lastHasOpenParen = /\([^)]*$/.test(last);
+        const curClosesParen = /[^()]*\)/.test(l);
+
+        if (lastHasOpenParen && curClosesParen) {
+          ingredientLines[ingredientLines.length - 1] = normSpaces(`${last} ${l}`);
+          prev = L;
+          continue;
+        }
+
+      }
+
       if (isIngredientsHeader(l) || extractServingsFromLine(l)) {
         const s = extractServingsFromLine(l);
         if (s && !servings) servings = s;
@@ -1587,7 +1624,9 @@ function splitIngredientsAndSteps(lines) {
     ingredientLines = moved.ingredientLines;
     stepLines = moved.stepLines;
   }
-
+  ingredientLines = joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
+  //console log a enlever
+  console.log('[debug ingredienLines after join]', ingredientLines);
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
 
   {

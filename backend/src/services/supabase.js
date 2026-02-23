@@ -151,74 +151,59 @@ if (fromCache !== null) return fromCache;
 // Si tu as créé "Ingredients_base" avec une majuscule, évite : renomme-la en lowercase.
 const TABLE = 'ingredients_base'; // <-- à adapter si besoin
 
-// 0) Tentative "synonyme" (match exact sur un des synonymes)
-// Ici on fait simple: on récupère un batch et on cherche en JS.
+// 0) Tentative "synonyme" (préfiltre SQL + match exact normalisé)
 try {
-const wanted = normalizeName(raw);
+ const wanted = normalizeName(raw);
 
-const allKey = `all:${TABLE}`;
-let batch = cacheGet(allKey);
-if (!batch) {
-const { data, error } = await supabaseAdmin
-.from(TABLE)
-.select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
-.order('nom', { ascending: true })
-.limit(1000);
+ // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
+ const { data: synRows, error: synErr } = await supabaseAdmin
+   .from(TABLE)
+   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+   .ilike('synonyme', `%${raw}%`)
+   .limit(50);
 
-if (!error) {
-batch = data || [];
-cacheSet(allKey, batch);
-} else {
-dlog('[SUPABASE] batch load failed', error.message);
-}
-}
+ if (!synErr && Array.isArray(synRows) && synRows.length) {
+   const candidates = [];
 
-if (Array.isArray(batch) && batch.length) {
-const candidates = [];
+   for (const row of synRows) {
+     const synList = parseSynonymsCell(row.synonyme);
+     const synNorms = synList.map(normalizeName).filter(Boolean);
+     if (!synNorms.includes(wanted)) continue;
 
-for (const row of batch) {
-const synList = parseSynonymsCell(row.synonyme);
-const synNorms = synList.map(normalizeName).filter(Boolean);
-if (!synNorms.includes(wanted)) continue;
+     const { ppu, unit, reason } = computePPUFromRow(row);
+     const ppuRounded = roundPPU(ppu, unit);
+     const packInfo = getPackPieceConversion(row, unit);
+     const buyInfo = getBuyPackInfo(row, row.type_unite ?? row.unite_g_ml_piece);
+     const density = toNumberLoose(row.densite_g_ml);
 
-const { ppu, unit, reason } = computePPUFromRow(row);
-const ppuRounded = roundPPU(ppu, unit);
-const packInfo = getPackPieceConversion(row, unit);
-const buyInfo = getBuyPackInfo(row, row.type_unite ?? row.unite_g_ml_piece);
-const density = toNumberLoose(row.densite_g_ml);
+     candidates.push({
+       id: row.id,
+       name: row.nom ?? raw,
+       unit,
+       pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
+       buyPrice: buyInfo.buyPrice,
+       refQty: buyInfo.refQty,
+       refUnit: buyInfo.refUnit,
+       ...packInfo,
+       density_g_per_ml: Number.isFinite(density) ? density : null,
+       priceStatus: reason ? 'missing_price' : 'ok',
+       priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : undefined,
+     });
+   }
 
-candidates.push({
-id: row.id, // airtableId remplacer par id le 03/02 - on garde la clé "airtableId" pour ne rien casser (tu pourras renommer plus tard)
-name: row.nom ?? raw,
-unit,
-pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
-
-buyPrice: buyInfo.buyPrice,
-refQty: buyInfo.refQty,
-refUnit: buyInfo.refUnit,
-
-...packInfo,
-density_g_per_ml: Number.isFinite(density) ? density : null,
-
-priceStatus: reason ? 'missing_price' : 'ok',
-priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : undefined,
-});
-}
-
-if (candidates.length) {
-// si plusieurs synonymes matchent, on prend le moins cher (comme avant)
-candidates.sort((a, b) => {
-const ap = Number.isFinite(a.pricePerUnit) ? a.pricePerUnit : Number.POSITIVE_INFINITY;
-const bp = Number.isFinite(b.pricePerUnit) ? b.pricePerUnit : Number.POSITIVE_INFINITY;
-return ap - bp;
-});
-const best = candidates[0];
-cacheSet(cacheKey, best);
-return best;
-}
-}
+   if (candidates.length) {
+     candidates.sort((a, b) => {
+       const ap = Number.isFinite(a.pricePerUnit) ? a.pricePerUnit : Number.POSITIVE_INFINITY;
+       const bp = Number.isFinite(b.pricePerUnit) ? b.pricePerUnit : Number.POSITIVE_INFINITY;
+       return ap - bp;
+     });
+     const best = candidates[0];
+     cacheSet(cacheKey, best);
+     return best;
+   }
+ }
 } catch (e) {
-dlog('[SUPABASE] synonym lookup failed', e?.message || e);
+ dlog('[SUPABASE] synonym lookup failed', e?.message || e);
 }
 
 // 1) Exact match sur nom (case-insensitive)

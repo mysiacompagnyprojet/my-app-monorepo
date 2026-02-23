@@ -4,7 +4,7 @@
 // import interdits : routes, middleware, services, prisma, units, ingredientParser, ocrText
 // importé par : ocrText, ocrTitle - import interdit titleUtils, textUtils, stringUtils
 
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate } = require('../utils/titleUtils');
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, canJoinTitleLines, isBadTitleCandidate, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
 
 const { normalizeTitleJoinPiece } = require('../utils/textUtils');
 //stringUtils
@@ -13,7 +13,13 @@ const { normSpaces } = require('../utils/stringUtils');
 
 
 
-function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
+function buildMergedTitleCandidate(scan, startIdx, maxLines = 3, opts = {}) {
+  //parseOcrIngredient remplacer par ce qui suit
+  const isIngredientLine = 
+    typeof opts.isIngredientLine === 'function'
+      ? opts.isIngredientLine
+      : () => false;
+
   // On démarre avec la ligne de départ normalisée
   let out = normalizeTitleJoinPiece(scan[startIdx]);
   if (!out) return null;
@@ -24,8 +30,10 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   // ❌ Ne jamais démarrer un titre sur un fragment d’ingrédient
   if (looksLikeIngredientFragmentTitleForTitle(firstRaw)) return null;
 
-  // ❌ Ne jamais démarrer un titre sur une ligne reconnue comme ingrédient
-  if (parseOcrIngredient(firstRaw)) return null;
+  // ne peut pas servir car import de ingredientParser interdit
+  //if (parseOcrIngredient(firstRaw)) return null;
+  //parserOcrIngredient remplacer par ce qui suit
+  if (isIngredientLine(firstRaw)) return null;
 
   // ❌ Ne jamais démarrer sur une ligne meta (temps, portions, etc.)
   if (isMetaInfoLineForTitle(out)) return null;
@@ -36,9 +44,8 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3) {
   // Compte le nombre de lignes fusionnées
   let used = 1;
 
-  // Callback injecté pour éviter une dépendance directe titleUtils -> ingredientParser
-  // Ici : une ligne est un ingrédient si parseOcrIngredient retourne quelque chose
-  const isIngredientLine = (s) => !!parseOcrIngredient(s);
+  // ne peut pas servir car imortation de ingredientParser interdit
+  //const isIngredientLine = (s) => !!parseOcrIngredient(s);
 
   // ✅ PATCH: autoriser certains "préfixes plats" comme début de titre
   // ex: "Tarte rustique" + "Chèvre-miel et noix" => titre complet
