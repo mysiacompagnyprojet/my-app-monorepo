@@ -10,7 +10,8 @@ const { normalizeTitleJoinPiece } = require('../utils/textUtils');
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');
 //titleUtils
-
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3, opts = {}) {
@@ -90,7 +91,7 @@ function buildMergedTitleCandidate(scan, startIdx, maxLines = 3, opts = {}) {
     const canJoin =
       canJoinTitleLines(out, next, { isIngredientLine }) || (isGenericDishPrefix(out) && plausible);
       //console log a supprimer
-      console.log ('[TITLE][MERGE CHECK]', {
+      dlog('[TITLE][MERGE CHECK]', {
         out,
         next,
         canJoin,

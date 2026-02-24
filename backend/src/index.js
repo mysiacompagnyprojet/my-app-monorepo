@@ -22,6 +22,7 @@ const ingredientsBase = require('./routes/ingredients-base')
 const recipeDraftsRouter = require('./routes/recipeDrafts')
 const imagesRouter = require('./routes/images')
 
+
 // 3) Healthcheck (ultra simple et avant tout)
 app.get('/health', (_req, res) => res.json({ ok: true, status: 'ok' }))
 

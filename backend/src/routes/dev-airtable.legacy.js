@@ -3,6 +3,8 @@ const express = require('express');
 const { getIngredientPriceByName } = require('../services/airtable');
 
 const router = express.Router();
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 router.get('/', (req, res) => {
   res.json({ ok: true, hint: 'Try /dev/airtable/lookup?name=oignon ' });
@@ -15,7 +17,7 @@ router.get('/', (req, res) => {
  */
 router.get('/airtable/lookup', async (req, res) => {
   const name = req.query.name || '';
-  console.log('[DEV Airtable] lookup name  =', name);
+  dlog('[DEV Airtable] lookup name  =', name);
   try {
     const r = await getIngredientPriceByName(name);
     if (!r) {

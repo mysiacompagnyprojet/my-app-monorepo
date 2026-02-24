@@ -13,7 +13,7 @@ const { normSpaces, stripDiacritics, stripBulletPrefix, normalizeLoose, normaliz
 //ocrTitle
 const { pickBestTitle, tryMergeSplitTitle} = require('../utils/ocrTitle');
 //textUtils
-const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils')
+const { normalizeTitleJoinPiece, splitStepsFromLines } = require('../utils/textUtils');
 // ✅ Airtable service remplacer par supabase.js
 const { getIngredientPriceByName } = require('../services/supabase');
 const { ocrFromBufferWithDebug } = require('../services/vision');
@@ -26,7 +26,9 @@ const { parseOcrIngredient} = require('../utils/ingredientParser');
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
-const { canonUnit, toBaseQty } = require('../utils/units')
+const { canonUnit, toBaseQty } = require('../utils/units');
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 let parseRawLine = null;
 try {
@@ -307,6 +309,7 @@ async function priceIngredients(ingredients) {
             price: null,
             costEur: 0,
             priceMatched: true, // on marque comme "ok" (pas d'alerte)
+            pricingStatus: 'SKIPPED',
             id: null,
           };
         }
@@ -331,12 +334,13 @@ async function priceIngredients(ingredients) {
           price: null,
           costEur: 0,
           priceMatched: false,
+          pricingStatus: 'ERROR',
           id: null,
         };
       }
     })
   );
-  console.log('[debug][parsed ingredients]', ingredients);
+  dlog('[debug][parsed ingredients]', ingredients);
   return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
 }
 // jusqu'ici Airtable pricing (v1)
@@ -617,7 +621,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     // ---------- TITRE FINAL ----------
     const guessedFromLines = guessTitleFromLines(safeLinesForTitle);
-    console.log('[BUTTER_DEBUG] guessedFromLines=', guessedFromLines);
+    dlog('[BUTTER_DEBUG] guessedFromLines=', guessedFromLines);
 
     //const head = safeLinesForTitle.slice(0, 16);
      let title =
@@ -631,7 +635,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       //ajoute du 30/01 - sepecialement pour recette 12 zauce->sauce
       title = title.replace(/^zauce\b/i, 'sauce');
       //console log a supprimer
-      console.log('[TITLE][AFTER PICK]', { bestVisionTitle, guessedFromLines, title });
+      dlog('[TITLE][AFTER PICK]', { bestVisionTitle, guessedFromLines, title });
 
       //                                                                           bestVisionTiltle à la place de guessedFromLines
       if (bestVisionTitle && guessedFromLines) {//&& title === normalizeTitleCandidate(bestVisionTitle)) {
@@ -655,7 +659,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         }
       }
       //console log a supprimer
-      console.log('[TITLE][CHECK HOOK/MEASURE]', {
+      dlog('[TITLE][CHECK HOOK/MEASURE]', {
         title,
         hook: looksLikeHookOrLongSentenceTitle(title),
         measure: looksLikeMeasureLineTitle(title),
@@ -671,10 +675,10 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       !/\b(tu\s+peux|pas\s+de|m[eé]lange|ajoute|astuce)\b/.test(titleLow);
 
       if (looksLikeSauceTitle) {
-        console.log('[TITLE][ALT BYPASS: sauce-title]', { title });
+        dlog('[TITLE][ALT BYPASS: sauce-title]', { title });
       } else if (looksLikeHookOrLongSentenceTitle(title) || looksLikeMeasureLineTitle(title)) {
         //console log a supprimer 
-        console.log('[TITLE][AFTER ALT]', { title });
+        dlog('[TITLE][AFTER ALT]', { title });
 
         const alt =
          inferTitleFromContent(ingredients, steps) ||
@@ -703,7 +707,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           const curRich = curWords >= 3 && cur.length >= 18;       // ex: "TARTE RUSTIQUE ... NOIX"
 
           //console log a supprimer
-          console.log('[TITLE][ALT CHECK]', {
+          dlog('[TITLE][ALT CHECK]', {
           previousTitle: title,
           cur,
           altNorm,
@@ -728,33 +732,29 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           });
 
           if (altIsLikelyIngredientName) {
+            dlog('[TITLE][ALT SKIP: ingredient-like]', { kept: cur, rejectedAlt: altNorm });
           } else if (curRich && altTooWeak) {
+            dlog('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
           } else {
+            dlog('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
             title = altNorm;
             
           }
           // a ici
 
-          // ✅ garde-fou : ne remplace pas un bon titre par un alt trop faible
-          if (curRich && altTooWeak) {
-          } else {
-           // a ici pour recette 1 le 29/01 
+          // ✅ garde-fou : ne remplace pas un bon titre par un alt trop faible remplacé par let shouldApllyAlt le 24/02
+          //if (curRich && altTooWeak) { } else {// a ici pour recette 1 le 29/01 title = altNorm; }
+        
+          const shouldApllyAlt =
+            !altIsLikelyIngredientName && 
+            !(curRich && altTooWeak);
+            dlog('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
+          
+          if (shouldApllyAlt) {
+            dlog('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
             title = altNorm;
-            
-          }
-
-          let shouldApllyAlt = false;
-          if (!altIsLikelyIngredientName && !(curRich && altTooWeak)){
-            shouldApllyAlt = true;
-          }
-          if (shouldApllyAlt) title = altNorm;
+          } 
         }
-
-        //remplacer par ce qui est dessus le 20/01/26 pour eviter les 
-        //title =
-        //inferTitleFromContent(ingredients, steps) ||
-        //fabricateTitleFromIngredientsRows(ingredients) ||
-        //title;
       }
     
       if (looksLikeEmotionalHookTitle(title)) {
@@ -792,7 +792,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     draft.totalCostEur = priced.totalCostEur; 
 
     //console log a supprimer
-    console.log('[TITLE][PIPELINE]', {
+   dlog('[TITLE][PIPELINE]', {
       guessedFromLines,
       bestVisionTitle,
       mergedFromVision,

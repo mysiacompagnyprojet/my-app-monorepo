@@ -21,6 +21,9 @@ const { extractServingsFromLine } = require('../utils/units');
 const { isIngredientsHeader,  isPreparationHeader,  isStepsHeader } = require('../utils/sectionHeaders');
 
 const { looksLikeStepContinuation,looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine } = require('../utils/heuristics');
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+
 /* =========================
    TRASH / NOISE (iPhone + Social)
 ========================= */
@@ -231,11 +234,11 @@ function smartFilterWithTrashFromText(rawText) {
     .split('\n')
     .map((s) => normSpaces(s))
     .filter(Boolean);
-    console.log('[OCR] raw split lines:', cleaned.split('\n').slice(0, 20));
+    dlog('[OCR] raw split lines:', cleaned.split('\n').slice(0, 20));
     
     
   rawLines = mergeHyphenWrappedLines(rawLines);
-  console.log('[OCR] after mergeHyphenWrappedLines:', rawLines.slice(0, 20));
+  dlog('[OCR] after mergeHyphenWrappedLines:', rawLines.slice(0, 20));
   
 
   const lines = [];
@@ -333,10 +336,10 @@ function smartFilterWithTrashFromText(rawText) {
     lines.push(l);
   }
   const tHit = trash.filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
-  if (tHit.length) console.log('[DEBUG] trash hit:', tHit);
+  if (tHit.length) dlog('[DEBUG] trash hit:', tHit);
 
   const lHit = lines.filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
-  if (lHit.length) console.log('[DEBUG] lines hit:', lHit);
+  if (lHit.length) dlog('[DEBUG] lines hit:', lHit);
   return {
     rawText: cleaned,
     lines: dedupeLines(lines),
@@ -705,11 +708,11 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
     });
 
     //console log a effecer
-    console.log('[TITLE] simple candidate', { i, t, score: candidates[candidates.length-1].score });
+    dlog('[TITLE] simple candidate', { i, t, score: candidates[candidates.length-1].score });
     // Sécurité : si merged existe et est différent, on l’ajoute aussi
     if (merged && merged !== t) {
       //console log a supprimer
-      console.log('[TITLE] merged candidate:', { i, merged });
+      dlog('[TITLE] merged candidate:', { i, merged });
       //securite: refuse un titre fusionné qui fint being meta/label
       if (isMetaInfoLineForTitle(merged) || isTitleNoiseLabel(merged)) {
       } else {
@@ -733,7 +736,7 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
   candidates.sort((a, b) => b.score - a.score);
 
   //console log a effacer
-  console.log('[TITLE] candidates ranked:', candidates
+  dlog('[TITLE] candidates ranked:', candidates
     .slice()
     .sort((a,b)=>b.score-a.score)
     .slice(0, 8)
@@ -1519,7 +1522,7 @@ function splitIngredientsAndSteps(lines) {
   }
   ingredientLines = joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
   //console log a enlever
-  console.log('[debug ingredienLines after join]', ingredientLines);
+  dlog('[debug ingredienLines after join]', ingredientLines);
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
 
   {
@@ -1561,13 +1564,13 @@ function splitIngredientsAndSteps(lines) {
   // a enlever jusqua console.log
   function debugWhere(arr, label) {
  const hit = (arr || []).filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
- if (hit.length) console.log(`[DEBUG] ${label}:`, hit);
+ if (hit.length) dlog(`[DEBUG] ${label}:`, hit);
   }
 
   debugWhere(ingredientLines, 'ingredientLines');
   debugWhere(stepLines, 'stepLines'); 
   debugWhere(notesLines, 'notesLines');
-  console.log(stepLines.slice(0,30))
+  dlog(stepLines.slice(0,30))
   stepLines = joinWrappedLinesForSteps(stepLines);
 
   // ✅ NEW: découpe en phrases si une ligne est longue et contient plusieurs phrases

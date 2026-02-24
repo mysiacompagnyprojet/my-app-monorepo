@@ -3,20 +3,22 @@
 // import autorisés : middleware-services-lib-utils-dependances externes(express, etc)
 // import interdits : routes-frontend-parsers-ocr
 // importé uniquement par src-index
-const express = require('express')
-const router = express.Router()
-const { PrismaClient } = require('@prisma/client')
+const express = require('express');
+const router = express.Router();
+const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient()
 
-const { supabaseAuth } = require('../middleware/supabaseAuth')
-const needAuth = supabaseAuth
+const { supabaseAuth } = require('../middleware/supabaseAuth');
+const needAuth = supabaseAuth;
 
-const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients')
+const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients');
 
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
-const { enrichIngredientWithCost } = require('../utils/costs')
-const { canonUnit } = require('../utils/units')
+const { enrichIngredientWithCost } = require('../utils/costs');
+const { canonUnit } = require('../utils/units');
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 /**
 * ✅ PATCH: enrichissement "à la volée" pour l'affichage (SANS migration DB)
@@ -312,8 +314,8 @@ unitPriceBuy: i.unitPriceBuy ?? null,
 costRecipe: i.costRecipe ?? null,
 }))
 // console log a supprimer
-console.log("req.userId =", req.userId);
-console.log("req.user=", req.user);
+dlog("req.userId =", req.userId);
+dlog("req.user=", req.user);
 const recipe = await prisma.recipe.create({
 data: {
 userId: req.user.userId,

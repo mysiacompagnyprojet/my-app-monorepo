@@ -1,5 +1,7 @@
 //backend/src/middleware/auth
 const { verifyToken } = require('../lib/jwt');
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 function authRequired(req, res, next) {
     if (process.env.DEV_BYPASS_AUTH === 'true') {
@@ -7,7 +9,7 @@ function authRequired(req, res, next) {
             userId: process.env.DEV_USER_ID || 'dev-user',
             email: process.env.DEV_USER_EMAIL || 'shirley.valeton88@icloud.com',
         }
-        console.log('[auth]'), {
+        dlog('[auth]'), {
             bypass: process.env.DEV_BYPASS_AUTH,
             user: req.user,
         }
