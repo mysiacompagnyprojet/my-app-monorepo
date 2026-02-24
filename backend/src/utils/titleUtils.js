@@ -7,8 +7,8 @@
 
 const { isIngredientsHeader, isPreparationHeader } = require('../utils/sectionHeaders')
 //stringUtils
-const { normSpaces, stripDiacritics, normalizeTitleCandidate, looksLikeTimeInfoLine, cleanTitleCandidate } = require('../utils/stringUtils');
-//utils
+const { normSpaces, stripDiacritics, normalizeTitleCandidate, looksLikeTimeInfoLine, cleanTitleCandidate, sanitizePickedTitle } = require('../utils/stringUtils');
+//unils
 const { extractServingsFromLine } = require('../utils/units');
 
 const { looksLikeStepLine } = require('../utils/heuristics')
@@ -499,6 +499,54 @@ function stripOcrTitleArtifacts(input) {
   return t;
 }
 
+//Ajout d'ici au 20/01 - pour ajouter une regle prioritaire sur gros titre
+function isAllCapsTitleCandidate(s, isIngredientLine) {
+ const t = sanitizePickedTitle(cleanTitleCandidate(s));
+ if (!t) return false;
+
+ if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
+ if (extractServingsFromLine(t)) return false;
+ if (/^(portions?|temps|calories|remarques?)\b/i.test(t)) return false;
+
+ if (/\b\w+\.(com|fr|net|org)\b/i.test(t)) return false;
+ if (isGenericSiteTitle(t) || isBlacklistedUiTitle(t)) return false;
+
+ if (typeof isIngredientLine === 'function' && isIngredientLine(t)) return false;
+ if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
+
+ const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
+ if (letters < 10) return false;
+
+ const upperLetters = (t.match(/[A-ZÀ-ÖØ-Þ]/g) || []).length;
+ if (upperLetters / letters < 0.75) return false;
+
+ if (t.length < 10 || t.length > 80) return false;
+ return true;
+}
+
+//ajout d'ici à.. le 20/01 - si une ligne ressemble à un vrai titre au millieu d'une liste à ingredients
+function isLikelyStandaloneTitleLine(s, isIngredientLine) {
+ const t = sanitizePickedTitle(cleanTitleCandidate(s));
+ if (!t) return false;
+
+ if (t.length < 10 || t.length > 80) return false;
+ if (/\d/.test(t)) return false;
+ if (t.split(/\s+/).length < 2) return false;
+
+ if (typeof isIngredientLine === 'function' && isIngredientLine(t)) return false;
+ if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
+
+ if (looksLikeStepTitle(t) || looksLikeLooseActionStep(t)) return false;
+ if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
+ if (looksLikeEmotionalHookTitle(t) || isBlacklistedUiTitle(t)) return false;
+
+ if (/\btu\b/i.test(t) || /\bpeux\b/i.test(t) || /\bajouter\b/i.test(t)) return false;
+ if (/\bgo[uû]t\b/i.test(t) && /\bproche\b/i.test(t)) return false;
+
+ return true;
+}
+
+
 module.exports = {
     BAD_TITLE_WORDS,
     EMOTIONAL_TITLE_PATTERNS,
@@ -519,4 +567,6 @@ module.exports = {
     looksTruncatedTitle,
     visionLooksLikeSuffix,
     stripOcrTitleArtifacts,
+    isAllCapsTitleCandidate,
+    isLikelyStandaloneTitleLine
 }

@@ -414,7 +414,8 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
    const bufIsNumber = /^\d{1,4}$/.test(buffer);
    const bufEndsDe = /\b(de|d['’])\s*$/i.test(buffer);
 
-   const nextStartsDe = /^(de|d['’])\b/i.test(cur);
+   const curStartsDe = /^(de|d['’])\b/i.test(cur);
+   const curParsesAsIngredient = typeof parseIngredientFn === 'function' && !!parseIngredientFn(cur);
    const curIsFragment = isIngredientFragmentLine(cur);
    const curIsUnit = isUnitToken(cur);
 
@@ -424,7 +425,7 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
    }
 
    // ✅ FIX ICI
-   if (!curLooksNewIngredientStart && (nextStartsDe || curIsFragment || curIsUnit)) { //
+   if (!curLooksNewIngredientStart && !curParsesAsIngredient && (curStartsDe || curIsFragment || curIsUnit)) { //
      buffer = `${buffer} ${cur}`;
      continue;
    }

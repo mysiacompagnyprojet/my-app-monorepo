@@ -13,7 +13,7 @@ const { normSpaces, stripWeird, looksLikeTimeInfoLine, stripEdgeEmojisAndPunct, 
 //textUtils'
 const { normalizeForDedup} = require('../utils/textUtils');
 //titleUtils'
-const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate,  isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksTruncatedTitle, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
+const { isMetaInfoLineForTitle, isTitleNoiseLabel, looksLikePlausibleTitleLine, isGenericSiteTitle, isBadTitleCandidate, looksLikeLooseActionStep, looksTruncatedTitle, looksLikeIngredientFragmentTitleForTitle, isAllCapsTitleCandidate, isLikelyStandaloneTitleLine  } = require('../utils/titleUtils');
 //ingredientUtils'
 const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, looksLikeListBullet } = require('../utils/ingredientUtils');
 //unit.js
@@ -206,7 +206,7 @@ function mergeHyphenWrappedLines(lines) {
 
     if (prev && /-$/.test(prev) && /^[a-zà-öø-ÿ]/i.test(line)) {
       //ajout des lignes ci-dessous pour titre recette 1 au 29/01
-      const glued = prev.replace(/-s/, '');
+      const glued = prev.replace(/-s$/, 's');
       const shouldNoSpace = /[a-zà-öø-ÿ]$/i.test(glued) && /^[a-zà-öø-ÿ]/i.test(line);
       out[out.length - 1] = shouldNoSpace// ligne modifier : out[out.length - 1] = normSpaces(prev.replace(/-$/, '') + line);
       ? normSpaces(glued + line)
@@ -291,7 +291,7 @@ function smartFilterWithTrashFromText(rawText) {
         const plausible = looksLikePlausibleTitleLine(salvaged, {
          isIngredientLine: (s) => !!parseOcrIngredient(s),
         });
-        if (plausible(salvaged)) {
+        if (plausible) {
           lines.push(salvaged);
           continue;
         }
@@ -782,11 +782,13 @@ function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6)
     if (
       low === 'diner' ||
       low === 'dîner' ||
-      low === 'preparation|déroulé|deroule)\b/i.test(cleanedLine);' ||
+      low === 'preparation' ||
+      low === 'déroulé' ||
+      low === 'deroule'||
       low === 'préparation' ||
       low === 'temps cuisson' ||
       low === 'temps de cuisson' ||
-      low === 'temps preparation|déroulé|deroule)\b/i.test(cleanedLine);' ||
+      low === 'temps preparation' ||
       low === 'temps de préparation' ||
       low === 'difficulté' ||
       low === 'difficulte' ||
@@ -821,6 +823,7 @@ function findTitleJustBeforeIngredientsHeader(lines, maxScan = 40, lookBack = 6)
 const DEFAULT_TITLE = 'Recette importée';
 function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
   const head = lines.slice(0, 16).map(normSpaces).filter(Boolean);
+  const isIngredientLine = (s) => !!parseOcrIngredient(s);
 
   // 1) "Title: ..." ou variantes explicites
   const explicit = findExplicitTitleInFirstLines(lines, 60);
@@ -833,61 +836,11 @@ function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
   const fromStepHeader = extractTitleFromStepHeader(lines);
   if (fromStepHeader && !isBadTitleCandidate(fromStepHeader)) return fromStepHeader;
 
-  //Ajout d'ici au 20/01 - pour ajouter une regle prioritaire sur gros titre
- function isAllCapsTitleCandidate(s) {
-  const t = sanitizePickedTitle(cleanTitleCandidate(s));
-  if (!t) return false;
-    // ignore meta
-  if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
-  if (extractServingsFromLine(t)) return false;
-  if (/^(portions?|temps|calories|remarques?)\b/i.test(t)) return false;
-
-  // ignore domaine / UI
-  if (/\b\w+\.(com|fr|net|org)\b/i.test(t)) return false;
-  if (isGenericSiteTitle(t) || isBlacklistedUiTitle(t)) return false;
-
-  // ignore ingrédients/mesures
-  if (parseOcrIngredient(t)) return false;
-  if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
-
-  // titre “fort” : majuscules, assez long
-  const letters = (t.match(/[A-Za-zÀ-ÖØ-öø-ÿ]/g) || []).length;
-  if (letters < 10) return false;
-
-  const upperLetters = (t.match(/[A-ZÀ-ÖØ-Þ]/g) || []).length;
-  if (upperLetters / letters < 0.75) return false;
-
-  if (t.length < 10 || t.length > 80) return false;
-  return true;
- }
  // ✅ Priorité: si on trouve un “gros titre” en majuscules dans le head, on le prend
  for (let i = 0; i < Math.min(head.length, 8); i++) {
-  if (isAllCapsTitleCandidate(head[i])) {
+  if (isAllCapsTitleCandidate(head[i], isIngredientLine)) {
     return sanitizePickedTitle(cleanTitleCandidate(head[i]));
   }
- } // A ici au 20/01
-  
-  //ajout d'ici à.. le 20/01 - si une ligne ressemble à un vrai titre au millieu
-  //d'une liste à ingredients
- function isLikelyStandaloneTitleLine(s) {
-  const t = sanitizePickedTitle(cleanTitleCandidate(s));
-  if (!t) return false;
-
-  // doit être assez long, sans chiffres, 2+ mots  
-  if (t.length < 10 || t.length > 80) return false;
-  if (/\d/.test(t)) return false;
-  if (t.split(/\s+/).length < 2) return false;
-
-  // rejets
-  if (parseOcrIngredient(t)) return false;
-  if (looksLikeIngredientFragmentTitleForTitle(t)) return false;
-  if (looksLikeStepTitle(t) || looksLikeLooseActionStep(t)) return false;
-  if (isIngredientsHeader(t) || isPreparationHeader(t)) return false;
-  if (looksLikeEmotionalHookTitle(t) || isBlacklistedUiTitle(t)) return false;
-  if (/\btu\b/i.test(t) || /\bpeux\b/i.test(t) || /\bajouter\b/i.test(t)) return false;
-  if (/\bgo[uû]t\b/i.test(t) && /\bproche\b/i.test(t)) return false;
-
-  return true;
  }
 
   // ✅ Si le head contient une ligne "titre" au milieu d'une liste, on la prend
@@ -895,7 +848,7 @@ function guessTitleFromLines(lines) { //utilisé ici et importé dans import ocr
   const raw = head[i];
   if (/^[-•*·]\s*/.test(raw)) continue;
 
-  if (isLikelyStandaloneTitleLine(raw)) {
+  if (isLikelyStandaloneTitleLine(raw, isIngredientLine)) {
     return sanitizePickedTitle(cleanTitleCandidate(raw));
   }
  } // a ici le 20/01
@@ -1400,7 +1353,7 @@ function splitIngredientsAndSteps(lines) {
 
         if (lastHasOpenParen && curClosesParen) {
           ingredientLines[ingredientLines.length - 1] = normSpaces(`${last} ${l}`);
-          prev = L;
+          prev = l;
           continue;
         }
 

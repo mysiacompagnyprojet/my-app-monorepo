@@ -210,9 +210,9 @@ function splitMergedIngredientLine(line, trash) {
   const m = s.match(/^(\d+)\s*g\s+de\s+(.+?)\s+de\s+beurre\s+de\s+cacahu(?:e|è)te\b/i);
   if (m && /chocolat/i.test(m[2])) {
     const qty = m[1];
-    const hasQtyInTrash = Array.isArray(trash) && trash.some((x) => String(x || '').trim() === qty);
-    const qty2 = hasQtyInTrash ? qty : qty;
-    return [`${qty} g de ${m[2].trim()}`, `${qty2} g de beurre de cacahuète`];
+    //const hasQtyInTrash = Array.isArray(trash) && trash.some((x) => String(x || '').trim() === qty);
+    //const qty2 = hasQtyInTrash ? qty : qty; enlever le 24/02 ne sert a rien
+    return [`${qty} g de ${m[2].trim()}`, `${qty} g de beurre de cacahuète`];
   }
 
   return [s];
@@ -728,11 +728,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           });
 
           if (altIsLikelyIngredientName) {
-            console.log('[TITLE][ALT SKIP: ingredient-like]', { kept: cur, rejectedAlt: altNorm });
           } else if (curRich && altTooWeak) {
-            console.log('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
           } else {
-            console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
             title = altNorm;
             
           }
@@ -740,15 +737,17 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
           // ✅ garde-fou : ne remplace pas un bon titre par un alt trop faible
           if (curRich && altTooWeak) {
-            //console log a supprimer
-            console.log('[TITLE][ALT SKIP]', { kept: cur, rejectedAlt: altNorm });
           } else {
-            //console log a supprimer
-            console.log('[TITLE][ALT APPLY]', { previousTitle: cur, altNorm });
            // a ici pour recette 1 le 29/01 
             title = altNorm;
             
           }
+
+          let shouldApllyAlt = false;
+          if (!altIsLikelyIngredientName && !(curRich && altTooWeak)){
+            shouldApllyAlt = true;
+          }
+          if (shouldApllyAlt) title = altNorm;
         }
 
         //remplacer par ce qui est dessus le 20/01/26 pour eviter les 
