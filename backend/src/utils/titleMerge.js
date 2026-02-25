@@ -10,7 +10,7 @@ const { normalizeTitleJoinPiece } = require('../utils/textUtils');
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');
 //titleUtils
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 

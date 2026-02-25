@@ -34,7 +34,7 @@ function fixCommonOcrQuantityUnitBugs(rawLine) {
 
 function looksLikeListBullet(line) {
   const t = normSpaces(line);
-  return /^[·•●⚫■▪◦○][-•*]\s+/.test(t);
+  return /^[·•●⚫■▪◦○\-•*]\s+/.test(t);//laisser comme ceci ou l'ameliorer
 }
 
 // ✅ A) bruit "date" type "8 mai", "12 sept.", etc.

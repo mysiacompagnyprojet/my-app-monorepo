@@ -2,7 +2,7 @@
 const { prisma } = require('../lib/prisma')
 
 const fetch = global.fetch; // Node 18+ possède fetch nativement
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 async function supabaseAuth(req, res, next) {

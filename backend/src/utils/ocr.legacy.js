@@ -1,4 +1,4 @@
-// backend/src/utils/ocr.js
+// backend/src/utils/ocr.legacy.js
 const { createWorker } = require('tesseract.js');
 
 let workerPromise;

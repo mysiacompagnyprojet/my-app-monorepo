@@ -21,7 +21,7 @@ const { extractServingsFromLine } = require('../utils/units');
 const { isIngredientsHeader,  isPreparationHeader,  isStepsHeader } = require('../utils/sectionHeaders');
 
 const { looksLikeStepContinuation,looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine } = require('../utils/heuristics');
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 /* =========================

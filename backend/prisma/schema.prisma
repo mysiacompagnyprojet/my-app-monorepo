@@ -1,53 +1,39 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
 datasource db {
   provider  = "postgresql"
   url       = env("DATABASE_URL")
   directUrl = env("DIRECT_URL")
 }
 
-generator client {
-  provider = "prisma-client-js"
-}
-
-/**
- * Aligné sur ta base existante :
- * - Pas d'ENUM pour subscriptionStatus (TEXT en base) → String? @map("subscriptionstatus")
- * - Colonnes physiques en minuscules: createdat/updatedat/subscriptionstatus
- * - UUID générés par la DB: dbgenerated("gen_random_uuid()")
- * - steps par défaut: '[]'::jsonb
- */
-
 model User {
-  id                 String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email              String    @unique
-  passwordHash       String    @default("")
+  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String        @unique
+  passwordHash       String        @default("")
   stripeCustomerId   String?
-  subscriptionEndsAt DateTime? @db.Timestamptz(6)
-
-  // colonnes mappées
-  subscriptionStatus String?  @default("trialing") @map("subscriptionstatus")
-  createdAt          DateTime @default(now())       @map("createdat") @db.Timestamptz(6)
-  updatedAt          DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
-
-  // relations
-  ImportLimit  ImportLimit?
-  Recipes      Recipe[]
-  RecipeDrafts RecipeDraft[]
+  subscriptionEndsAt DateTime?     @db.Timestamptz(6)
+  subscriptionStatus String?       @default("trialing") @map("subscriptionstatus")
+  createdAt          DateTime      @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt          DateTime      @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+  ImportLimit        ImportLimit?
+  Recipes            Recipe[]
+  RecipeDrafts       RecipeDraft[]
 }
 
 model Recipe {
-  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId    String   @db.Uuid
-  title     String
-  servings  Int      @default(1)
-  steps     Json     @default(dbgenerated("'[]'::jsonb"))
-  imageUrl  String?
-  notes     String?  @default("")
-
-  createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
-
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String       @db.Uuid
+  title       String
+  servings    Int          @default(1)
+  steps       Json         @default("[]")
+  imageUrl    String?
+  notes       String?      @default("")
+  createdAt   DateTime     @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt   DateTime     @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
   ingredients Ingredient[]
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId], map: "idx_recipe_user")
 }
@@ -58,51 +44,73 @@ model Ingredient {
   name         String
   quantity     Float    @default(0)
   unit         String
-  airtableId   String? 
+  airtableId   String?
   unitPriceBuy Float?
   costRecipe   Float?
   createdAt    DateTime @default(now()) @db.Timestamptz(6)
   updatedAt    DateTime @default(now()) @db.Timestamptz(6)
-
-  recipe Recipe @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  recipe       Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([recipeId], map: "idx_ri_recipe")
-  @@map("Ingredients") // si la table s’appelle déjà "Ingredients" en base
+  @@map("Ingredients")
 }
 
-//
-// 1:1 strict avec User : on utilise userId comme clé primaire (pas besoin d’un champ id séparé)
-//
 model ImportLimit {
   userId      String   @id @db.Uuid
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
   breakfasts  Int      @default(0)
   lunches     Int      @default(0)
   snacks      Int      @default(0)
   dinners     Int      @default(0)
-
   periodStart DateTime @default(now()) @db.Timestamptz(6)
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @db.Timestamptz(6)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model RecipeDraft {
   id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   userId    String   @db.Uuid
-
   sourceUrl String?
   title     String?
   imageUrl  String?
   rawText   String?
   parsed    Json?
   status    String   @default("new")
-
   createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId], map: "idx_recipedraft_user")
+}
+
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model beta_invites {
+  id                String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email             String?   @unique @default("")
+  token             String?   @unique @default("")
+  used              Boolean?  @default(false)
+  used_at           DateTime? @db.Timestamptz(6)
+  created_at        DateTime? @default(now()) @db.Timestamptz(6)
+  device_id         String?
+  device_bound_at   DateTime? @db.Timestamptz(6)
+  device_user_agent String?
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+/// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
+/// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
+model ingredients_base {
+  nom                                        String
+  unite_g_ml_piece                           Decimal? @db.Decimal
+  type_unite                                 String?
+  nombre                                     Decimal? @db.Decimal
+  densite_g_ml                               Decimal? @db.Decimal
+  quantite_de_reference                      Int?
+  prix_d_achat                               Decimal? @db.Decimal
+  synonyme                                   String?
+  gramme_par_piece                           Decimal? @default(dbgenerated("\nCASE\n    WHEN ((unite_g_ml_piece IS NULL) OR (nombre IS NULL) OR (nombre = (0)::numeric)) THEN NULL::numeric\n    ELSE (unite_g_ml_piece / nombre)\nEND")) @db.Decimal(14, 6)
+  prix_kg_l_piece                            Decimal? @default(dbgenerated("\nCASE\n    WHEN ((type_unite IS NULL) OR (prix_d_achat IS NULL) OR (unite_g_ml_piece IS NULL) OR (unite_g_ml_piece = (0)::numeric)) THEN NULL::numeric\n    WHEN (type_unite = 'mg'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000000)::numeric)\n    WHEN (type_unite = 'g'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000)::numeric)\n    WHEN (type_unite = 'kg'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'ml'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000)::numeric)\n    WHEN (type_unite = 'cl'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (100)::numeric)\n    WHEN (type_unite = 'dl'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (10)::numeric)\n    WHEN (type_unite = 'l'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'piece'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'botte'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    ELSE NULL::numeric\nEND")) @db.Decimal(14, 6)
+  recommandation_pour_x2_x3_ou_plus_portions String?
+  id                                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 }
 

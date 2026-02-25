@@ -17,7 +17,7 @@ const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../ut
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs');
 const { canonUnit } = require('../utils/units');
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 /**

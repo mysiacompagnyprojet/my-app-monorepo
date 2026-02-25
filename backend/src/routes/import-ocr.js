@@ -27,7 +27,7 @@ const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLines
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { canonUnit, toBaseQty } = require('../utils/units');
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 let parseRawLine = null;

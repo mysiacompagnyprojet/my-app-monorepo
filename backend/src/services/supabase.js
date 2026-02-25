@@ -11,7 +11,7 @@ const { canonUnit, toBaseUnit } = require('../utils/units')
 // -------------------------
 // LOGS optionnels
 // -------------------------
-const DEBUG = process.env.SUPABASE_DEBUG === '1';
+const DEBUG = process.env.SUPABASE_DEBUG === 'development';
 const dlog = (...args) => { if (DEBUG) console.debug(...args); };
 
 // -------------------------
@@ -51,6 +51,7 @@ return Number(ppu.toFixed(decimals));
 // -------------------------
 function normalizeName(s = '') {
 return String(s)
+.replace(/\r/g, '')
 .toLowerCase()
 .normalize('NFD')
 .replace(/[\u0300-\u036f]/g, '')
@@ -59,14 +60,15 @@ return String(s)
 .replace(/\b(d|de|du|des|la|le|les|l)\b/g, ' ')
 .replace(/\s+/g, ' ')
 .trim()
-.replace(/oeufs?$/, 'oeuf')
-.replace(/pommes?\sde terre$/, 'pomme de terre');
+.replace(/^oeufs?$/g, 'oeuf')
+.replace(/^pommes?\s+de\s+terre$/g, 'pomme de terre');
 }
 
 function parseSynonymsCell(v) {
 if (!v) return [];
 return String(v)
-.split(/[\n;,|]+/g)
+.replace(/\r/g, '')
+.split(/[\n,;|]+/g)
 .map((x) => x.trim())
 .filter(Boolean);
 }
@@ -140,6 +142,7 @@ return { ppu: null, unit: baseU, reason: 'PPU_NOT_FOUND' };
 // ----------------------------------------------------
 // Retour compatible avec l’ancien airtable.js
 async function getIngredientPriceByName(name, preferUnitRaw) {
+  console.log('[getIngredientpriceName] suapabase called with', JSON.stringify(name), 'unit:', preferUnitRaw);
 const raw = String(name || '').trim();
 if (!raw) return null;
 
@@ -154,13 +157,20 @@ const TABLE = 'ingredients_base'; // <-- à adapter si besoin
 // 0) Tentative "synonyme" (préfiltre SQL + match exact normalisé)
 try {
  const wanted = normalizeName(raw);
-
+ const head = wanted.split(' ') [0];
  // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
  const { data: synRows, error: synErr } = await supabaseAdmin
    .from(TABLE)
    .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
-   .ilike('synonyme', `%${raw}%`)
+   .ilike('synonyme', `%${head}%`)
    .limit(50);
+  
+    console.log('SYN PREFILTER', {
+      raw,
+      wanted,
+      count: synRows?.length,
+      synErr: synErr?.message
+    });
 
  if (!synErr && Array.isArray(synRows) && synRows.length) {
    const candidates = [];
@@ -168,6 +178,12 @@ try {
    for (const row of synRows) {
      const synList = parseSynonymsCell(row.synonyme);
      const synNorms = synList.map(normalizeName).filter(Boolean);
+     console.log('DEBUG SYN:', {
+      raw,
+      wanted,
+      synList,
+      synNorms
+     });
      if (!synNorms.includes(wanted)) continue;
 
      const { ppu, unit, reason } = computePPUFromRow(row);
@@ -210,7 +226,7 @@ try {
 const { data: exact, error: errExact } = await supabaseAdmin
 .from(TABLE)
 .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
-.ilike('nom', raw) // match exact si raw sans %
+.ilike('nom', `%${raw}%`) // match exact si raw sans %
 .limit(5);
 
 if (errExact) {

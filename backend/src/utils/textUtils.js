@@ -30,13 +30,17 @@ function normalizeTitleJoinPiece(s) {
   return normSpaces(t);
 }
 
-// pour import ocr
+// pour import ocr - laisser la fonction comme ceci ou l'ameliorer
 function splitStepsFromLines(arr) {
       const out = [];
       for (const s0 of arr || []) {
         let s = String(s0 || '').replace(/\s+/g, ' ').trim();
         if (!s) continue;
+        if (/^\d{1,3}\s*[.)\-:]\s*$/.test(s)) continue;
         if (/^\d{1,3}$/.test(s)) continue;
+
+        s = s.replace(/\s+\d{1,3}\s*[.)\-:]\s*$/g, '').trim();
+        if(!s) continue;
 
         s = cleanStepPrefix(s);
         if (!s) continue;
@@ -44,7 +48,10 @@ function splitStepsFromLines(arr) {
         const parts = s
           .split(/(?<=\.)\s+/g)
           .map((x) => cleanStepPrefix(x))
-          .filter(Boolean);
+          .map((x) => String(x || '').trim())
+          .map((x) => x.replace(/\s+\d{1,3}\s*[.)\-:]\s*$/g, '').trim())
+          .filter(Boolean)
+          .filter((x) => !/\s+\d{1,3}\s*[.)\-:]\s*$/.test(x));
 
         if (parts.length >= 2 && (s.length >= 90 || parts.length >= 3)) out.push(...parts);
         else out.push(s);
