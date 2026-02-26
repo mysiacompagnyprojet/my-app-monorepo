@@ -3,7 +3,7 @@ const express = require('express');
 const { getIngredientPriceByName } = require('../services/airtable');
 
 const router = express.Router();
-const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 router.get('/', (req, res) => {

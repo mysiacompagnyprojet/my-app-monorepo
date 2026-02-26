@@ -123,18 +123,85 @@ const PIECE_TO_G = {
   ail: 5,
 };
 
-function convertUnitForPricing(name, qty, unitRecipe, unitPrice) {
+function convertUnitForPricing(name, qty, unitRecipe, priceRow) {
+  const q = Number(qty || 0);
+  if (!Number.isFinite(q) || q <= 0) return null;
+
   const recU = canonUnit(unitRecipe);
-  const priceU = canonUnit(unitPrice);
-  if (recU === 'piece' && priceU === 'g') {
-    const key = stripAccents(String(name || '').toLowerCase().trim());
-    const weight = PIECE_TO_G[key];
-    if (!weight) {
-      return { qty, unit: recU, note: 'conversion pièce→g manquante' };
+  const targetU = priceRow?.unit;
+  if (!targetU) return null;
+
+  // 1- cuillères -> ml
+  if (recU === 'tbsp' || recU === 'tsp') {
+    const ml = q * (recU === 'tbsp' ? 15 : 5);
+
+    if (targetU === 'ml') return {
+      qty: ml,
+      unit: 'ml'
+    };
+
+    if (targetU === 'g') {
+      const d = Number(priceRow?.density_g_per_ml);
+      if(Number.isInfinite(d) && d > 0) return {
+        qty: ml * d,
+        unit: 'g'
+      };
+      return null;
     }
-    return { qty: Number(qty || 0) * Number(weight || 0), unit: 'g' };
+    return null;
   }
-  return { qty: Number(qty || 0), unit: recU };
+
+  // 2- standard -> base (g/ml/piece)
+  const base = toBaseQty(q, recU);
+  if (!base) return null;
+
+  if (base.unit === targetU) return base;
+
+  // 3- piece <-> g via gramsPerPiece
+  let gramsPerPiece = Number(priceRow?.gramsPerPiece);
+
+  // fallback via piece to g si db vide
+  if ((!Number.isFinite(gramsPerPiece) || gramsPerPiece <= 0) && name) {
+    const key = stripAccents (String(name).toLowerCase().trim());
+  }
+
+  if (base.unit === 'piece' && targetU === 'g') {
+    if(Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) 
+      return {
+      qty: base.qty * gramsPerPiece,
+      unit: 'g'
+    };
+    return null;
+  }
+  if (base.unit === 'g' && targetU === 'piece') {
+    if(Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) 
+      return {
+      qty: base.qty / gramsPerPiece,
+      unit: 'piece'
+    };
+    return null;
+  }
+
+  // 4- ml <-> g via densité
+  const density = Number(priceRow?.density_g_per_ml);
+  if (base.unit === 'ml' && targetU === 'g') {
+    if (Number.isFinite(density) && density > 0) return {
+      qty: base.qty * d,
+      unit: 'g'
+    };
+    return null;
+  }
+  
+  if (base.unit === 'g' && targetU === 'ml') {
+    if (Number.isFinite(density) && density > 0){
+      return {
+        qty: base.qty / density, 
+        unit: 'ml'
+      };
+    }
+    return null;
+  }
+  return null;
 }
 
 module.exports = {

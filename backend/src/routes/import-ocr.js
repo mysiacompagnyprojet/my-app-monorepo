@@ -26,8 +26,8 @@ const { parseOcrIngredient} = require('../utils/ingredientParser');
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
-const { canonUnit, toBaseQty } = require('../utils/units');
-const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
+const { convertUnitForPricing } = require('../utils/units');
+const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 let parseRawLine = null;
@@ -226,12 +226,6 @@ function roundMoney(n) {
   return Math.round(n * 100) / 100;
 }
 
-function spoonToMl(unit) {
-  const u = String(unit || '').toLowerCase().trim();
-  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
-  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
-  return null;
-}
 
 /**
  * Calcul le cout à partir :
@@ -255,7 +249,14 @@ function computeIngredientCostEur(ing, priceRow) {
   // unit OCR
   const unitRaw = String(ing?.unit || '').trim();
 
-  // ✅ cuillères -> ml (uniquement si Airtable est en "ml")
+  {/*function spoonToMl(unit) { remplacer par convertUnitForPricing le 26/02
+  const u = String(unit || '').toLowerCase().trim();
+  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
+  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
+  return null;
+ }*/}
+
+  {/*// ✅ cuillères -> ml (uniquement si Airtable est en "ml")
   const mlPerSpoon = spoonToMl(unitRaw);
   if (mlPerSpoon) {
     if (priceRow.unit !== 'ml') {
@@ -271,12 +272,12 @@ function computeIngredientCostEur(ing, priceRow) {
       price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
       costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
       matched: true,
-    };
-  }
+    };}
+  remplacer par convertUnitForPricing le 26/02
 
-  // ✅ unités standard -> base (g/ml/piece)
-  const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
-  const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon);
+  // ✅ unités standard -> base (g/ml/piece) ici à
+  //const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
+  //const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon); ici remplacer par convertUnitForPricing le 26/02
 
   // On ne calcule que si la base correspond à l’unité du prix unitaire Airtable
   if (baseUnit !== priceRow.unit) {
@@ -288,6 +289,26 @@ function computeIngredientCostEur(ing, priceRow) {
   }
 
   const cost = baseQty * Number(priceRow.pricePerUnit || 0);
+  return {
+    price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
+    costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
+    matched: true,
+  };*/}
+
+  const converted = convertUnitForPricing(ing.name, qty, unitRaw, priceRow);
+
+  // si conversion impossible, on affiche le prix unitaire, mais pas le cout calculeé
+  if(!converted || converted.unit !== priceRow.unit) {
+    return {
+      price: { eurPer: priceRow.pricePerunit, 
+        perUnit: priceRow.unit
+      },
+      costEur: null,
+      matched: true,
+    };
+  }
+
+  const cost = converted.qty * Number(priceRow.pricePerUnit || 0);
   return {
     price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
     costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
@@ -326,6 +347,10 @@ async function priceIngredients(ingredients) {
           costEur,                        // number | null
           priceMatched: matched,          // boolean
           id: priceRow?.id|| null,
+
+          buyPriceEur: priceRow?.buyPriceEur ?? priceRow?.buyPrice ?? null,
+          buyRefQty: priceRow?.buyRefQty ?? priceRow?.refQty ?? null,
+          buyRefUnit: priceRow?.buyRefUnit ?? priceRow?.refUnit ?? null,
         };
       } catch (e) {
         // si Airtable plante, on ne bloque pas l’OCR

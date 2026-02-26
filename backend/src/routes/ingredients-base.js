@@ -8,6 +8,26 @@ const router = express.Router();
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { getIngredientPriceByName } = require('../services/supabase');
 
+function cleanNameForPricing(name) { // laisser cette fonction car on ne peut pas importer costs.js ici
+let x = String(name || '').trim()
+if (!x) return ''
+
+// enlève (....)
+x = x.replace(/\([^)]*\)/g, ' ')
+
+// enlève "selon ..." (souvent ajouté par OCR / recettes)
+x = x.replace(/\bselon\b.*$/i, ' ')
+
+//enléve les qualificatifs pour trouver l'ingredient$
+x = x.replace(
+    /\b(eminced?|émincé(?:e|es)?|hach[ée](?:e|es)?|coup[ée](?:e|es)?|rondelles?|en\s+rondelles?)\b/gi, ' ');
+
+// espaces
+x = x.replace(/\s+/g, ' ').trim()
+
+return x
+}
+
 // GET /ingredients-base
 router.get('/', async (req, res) => {
     try {
@@ -39,11 +59,15 @@ router.get('/', async (req, res) => {
 // GET /ingredients-base/suggest?q=beurre
 router.get('/suggest', async (req, res) => {
     try {
-        const q = String(req.query.q || '').trim();
+        const qRaw = String(req.query.q || '').trim();
 
-        if (!q || q.length < 2) {
+        if (!qRaw || qRaw.length < 2) {
         return res.json({ ok: true, items: [] });
         }
+
+        const q = cleanNameForPricing(qRaw);
+
+        const head = q.split(/\s+/)[0] || q;
 
         const { data, error } = await supabaseAdmin
             .from('ingredients_base')
@@ -60,7 +84,7 @@ router.get('/suggest', async (req, res) => {
                 'gramme_par_piece',
                 'prix_kg_l_piece',
             `)
-        .ilike('nom', `%${q}%`)
+        .or(`nom.ilike.%${q}%,synonyme.ilike.%${q}%,nom.ilike.%${head}%,synonyme.ilike.%${head}%`)//.ilike('nom', `%${q}%`)
         .order('nom', { ascending: true })
         .limit(20);
 

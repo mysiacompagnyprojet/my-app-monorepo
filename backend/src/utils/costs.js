@@ -22,6 +22,10 @@ s = s.replace(/\([^)]*\)/g, ' ')
 // enlève "selon ..." (souvent ajouté par OCR / recettes)
 s = s.replace(/\bselon\b.*$/i, ' ')
 
+//enléve les qualificatifs pour trouver l'ingredient$
+s = s.replace(
+    /\b(eminced?|émincé(?:e|es)?|hach[ée](?:e|es)?|coup[ée](?:e|es)?|rondelles?|en\s+rondelles?)\b/gi, ' ');
+
 // espaces
 s = s.replace(/\s+/g, ' ').trim()
 
@@ -45,7 +49,7 @@ if (!u) return null
 // unités OCR → unités canoniques
 if (u === 'gousse' || u === 'gousses') return 'piece'
 if (u === 'tranche' || u === 'tranches') return 'piece'
-if (u === 'cuillere' || u === 'cuillère' || u === 'cuilleres' || u === 'cuillères') return 'piece'
+//if (u === 'cuillere' || u === 'cuillère' || u === 'cuilleres' || u === 'cuillères') return 'piece'
 
 return u
 }
@@ -55,25 +59,36 @@ return u
 * Retourne { qty, unit } ou null si conversion impossible.
 */
 function convertRecipeToPricingUnit(qty, unitRaw, targetUnit) {
-const unitCanon = canonUnitExtended(unitRaw)
-const q = Number(qty || 0)
-if (!Number.isFinite(q)) return null
+    const unitCanon = canonUnitExtended(unitRaw)
+    const q = Number(qty || 0)
+    if (!Number.isFinite(q)) return null
 
-// d’abord on passe en base (g/ml/piece) selon l’unité recette
-// ⚠️ toBaseQty de airtable.js gère déjà cl/dl/l etc via canonUnit(),
-// mais canonUnit() ne connaît pas "gousse". On le traite en amont.
-if (unitCanon === 'piece') {
-return { qty: q, unit: 'piece' }
-}
+    if (unitCanon === 'tbsp' || unitCanon === 'tsp') {
+    const ml = q * (unitCanon === 'tbsp' ? 15 : 5);
 
-const base = toBaseQty(q, unitCanon) // => { qty, unit: 'g'|'ml'|'piece' }
-if (!base || !base.unit) return null
+        if (targetUnit === 'ml') return {
+            qty: ml,
+            unit: 'ml'
+        };
 
-// si la base correspond à la target => OK
-if (base.unit === targetUnit) return base
+        return { qty: ml, unit: 'ml' };
+    }
 
-// sinon, on ne convertit pas ici (densité g<->ml géré plus bas)
-return base // on renvoie quand même base pour densité éventuelle
+    // d’abord on passe en base (g/ml/piece) selon l’unité recette
+    // ⚠️ toBaseQty de airtable.js gère déjà cl/dl/l etc via canonUnit(),
+    // mais canonUnit() ne connaît pas "gousse". On le traite en amont.
+    if (unitCanon === 'piece') {
+        return { qty: q, unit: 'piece' }
+    }
+
+    const base = toBaseQty(q, unitCanon) // => { qty, unit: 'g'|'ml'|'piece' }
+    if (!base || !base.unit) return null
+
+    // si la base correspond à la target => OK
+    if (base.unit === targetUnit) return base
+
+    // sinon, on ne convertit pas ici (densité g<->ml géré plus bas)
+    return base // on renvoie quand même base pour densité éventuelle
 }
 
 /**

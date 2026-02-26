@@ -18,6 +18,8 @@ type Line = IngredientLine & {
  buyRefQty?: number | null
  buyRefUnit?: string | null
  buyRecalced?: boolean
+ gramsPerPiece?: number | null
+ density_g_per_ml?: number | null
 
  // ✅ lien éventuel vers une base ingrédient (IngredientPicker)
  ingredientBaseId?: string | null
@@ -67,35 +69,44 @@ type EnrichResponse =
 Helpers quantité : accepte 1/4, 1 1/2, 1,2
 ────────────────────────────────────────────────────────────── */
 
-function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | null {
- const u = String(uRaw || '').trim().toLowerCase()
- if (!u) return null
- if (u === 'g' || u === 'gr' || u === 'gramme' || u === 'grammes') return 'g'
- if (u === 'kg' || u === 'kilo' || u === 'kilos') return 'g'
- if (u === 'ml') return 'ml'
- if (u === 'l' || u === 'litre' || u === 'litres') return 'ml'
- if (u === 'cl') return 'ml'
- if (u === 'dl') return 'ml'
- if (u === 'piece' || u === 'pièce' || u === 'pièces' || u === 'pcs') return 'piece'
+function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | null {
+ const u0 = String(uRaw || '').trim().toLowerCase()
+ if (!u0) return null
+
+ if (u0 === 'càs' || u0 === 'cas' || u0 === 'cs' || u0.includes('cuill') && u0.includes('soupe')) return 'tbsp'
+ if (u0 === 'càc' || u0 === 'cac' || u0 === 'cc' || u0.includes('cuill') && u0.includes('cafe')) return 'tsp'
+
+ if (u0 === 'g' || u0 === 'gr' || u0 === 'gramme' || u0 === 'grammes') return 'g'
+ if (u0 === 'kg' || u0 === 'kilo' || u0 === 'kilos') return 'g'
+
+ if (u0 === 'ml') return 'ml'
+ if (u0 === 'l' || u0 === 'litre' || u0 === 'litres') return 'ml'
+ if (u0 === 'cl') return 'ml'
+ if (u0 === 'dl') return 'ml'
+
+ if (u0  === 'piece' || u0 === 'pièce' || u0 === 'pièces' || u0 === 'pcs') return 'piece'
  return null
 }
 
 function toBaseQtyFront(qty: number, unitRaw: string): { qty: number; unit: 'g' | 'ml' | 'piece' } | null {
- const u = String(unitRaw || '').trim().toLowerCase()
+ const u0 = String(unitRaw || '').trim().toLowerCase()
  const q = Number(qty || 0)
  if (!Number.isFinite(q)) return null
 
- const canon = canonUnitFront(u)
+ const canon = canonUnitFront(u0)
  if (!canon) return null
 
+ if (canon === 'tbsp') return { qty: q * 15, unit: 'ml' }
+ if (canon === 'tsp') return { qty: q * 5, unit: 'ml' }
+
  // g
- if (u === 'kg' || u === 'kilo' || u === 'kilos') return { qty: q * 1000, unit: 'g' }
+ if (u0 === 'kg' || u0 === 'kilo' || u0 === 'kilos') return { qty: q * 1000, unit: 'g' }
  if (canon === 'g') return { qty: q, unit: 'g' }
 
  // ml
- if (u === 'l' || u === 'litre' || u === 'litres') return { qty: q * 1000, unit: 'ml' }
- if (u === 'cl') return { qty: q * 10, unit: 'ml' }
- if (u === 'dl') return { qty: q * 100, unit: 'ml' }
+ if (u0 === 'l' || u0 === 'litre' || u0 === 'litres') return { qty: q * 1000, unit: 'ml' }
+ if (u0 === 'cl') return { qty: q * 10, unit: 'ml' }
+ if (u0 === 'dl') return { qty: q * 100, unit: 'ml' }
  if (canon === 'ml') return { qty: q, unit: 'ml' }
 
  // piece
@@ -108,13 +119,50 @@ function computeCostCourses(ing: Line): number | null {
  const refUnit = typeof ing.buyRefUnit === 'string' ? ing.buyRefUnit : null
  if (!buyPrice || !refQty || !refUnit) return null
 
- const qBase = toBaseQtyFront(Number(ing.quantity || 0), String(ing.unit || ''))
+ // base recette + base pack
+ let qBase = toBaseQtyFront(Number(ing.quantity || 0), String(ing.unit || ''))
  const packBase = toBaseQtyFront(refQty, refUnit)
  if (!qBase || !packBase) return null
- if (qBase.unit !== packBase.unit) return null
 
- const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
- return packs * buyPrice
+ // si déjà compatible => OK
+ if (qBase.unit === packBase.unit) {
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ // ---- conversions avancées ----
+
+ // piece -> g via gramsPerPiece
+ const gpp = typeof ing.gramsPerPiece === 'number' ? ing.gramsPerPiece : null
+ if (qBase.unit === 'piece' && packBase.unit === 'g' && gpp && gpp > 0) {
+   qBase = { qty: qBase.qty * gpp, unit: 'g' }
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ // g -> piece via gramsPerPiece (rare mais propre)
+ if (qBase.unit === 'g' && packBase.unit === 'piece' && gpp && gpp > 0) {
+   qBase = { qty: qBase.qty / gpp, unit: 'piece' }
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ // ml <-> g via densité
+ const d = typeof ing.density_g_per_ml === 'number' ? ing.density_g_per_ml : null
+ if (d && d > 0) {
+   if (qBase.unit === 'ml' && packBase.unit === 'g') {
+     qBase = { qty: qBase.qty * d, unit: 'g' }
+     const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+     return packs * buyPrice
+   }
+   if (qBase.unit === 'g' && packBase.unit === 'ml') {
+     qBase = { qty: qBase.qty / d, unit: 'ml' }
+     const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+     return packs * buyPrice
+   }
+ }
+
+ return null
 }
 
 function parseQtyInput(raw: string): number {
@@ -344,6 +392,8 @@ function NewRecipeInner() {
            buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
            buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
            buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+           gramsPerPiece: typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
+           density_g_per_ml: typeof row.density_g_per_ml === 'number' ? row.density_g_per_ml : row.density_g_per_ml ?? null,
 
            buyRecalced: typeof buyPriceEur === 'number',
            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
@@ -410,6 +460,8 @@ function NewRecipeInner() {
            buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
            buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
            buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+           gramsPerPiece: typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
+           density_g_per_ml: typeof row.density_g_per_ml === 'number' ? row.density_g_per_ml : row.density_g_per_ml ?? null,
 
            buyRecalced: typeof buyPriceEur === 'number',
            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
@@ -491,6 +543,8 @@ function NewRecipeInner() {
          buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
          buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
          buyRecalced: true,
+         gramsPerPiece: typeof e.gramsPerPiece === 'number' ? e.gramsPerPiece : null,
+         density_g_per_ml: typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
 
          note: typeof e.note === 'string' ? e.note : undefined,
        } as any

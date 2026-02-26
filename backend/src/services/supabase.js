@@ -11,7 +11,7 @@ const { canonUnit, toBaseUnit } = require('../utils/units')
 // -------------------------
 // LOGS optionnels
 // -------------------------
-const DEBUG = process.env.SUPABASE_DEBUG === 'development';
+const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG) console.debug(...args); };
 
 // -------------------------
@@ -92,7 +92,8 @@ mlPerPiece: Number.isFinite(mlPerPiece) ? mlPerPiece : null,
 };
 }
 
-function getBuyPackInfo(row, unitRawForBase) {
+{/*la fonction été comme ceci avant d'être remplacé par celle ci-dessous le 26/02 - a supprimer si c'est ok
+  function getBuyPackInfo(row, unitRawForBase) {
 const packUnitRaw = row.type_unite ?? unitRawForBase;
 const { unit: baseU, factor } = toBaseUnit(packUnitRaw);
 
@@ -106,6 +107,35 @@ refQty: Number.isFinite(packQty) ? packQty : null,
 refUnit: baseU || null,
 refQtyInBase: Number.isFinite(packQty) ? packQty * factor : null,
 };
+}*/}
+
+function getBuyPackInfo(row, unitRaw) {
+ const buyPrice = toNumberLoose(row?.prix_d_achat);
+ if (!Number.isFinite(buyPrice) || buyPrice <= 0) {
+   return { buyPrice: null, refQty: null, refUnit: null };
+ }
+
+ const unitU = row?.type_unite ?? unitRaw ?? row?.unite_g_ml_piece;
+ const { unit: baseU, factor } = toBaseUnit(unitU); // baseU: 'g'|'ml'|'piece'
+
+ // ✅ quantité pack réelle = unite_g_ml_piece (pas quantite_de_reference)
+ const packQtyRaw = toNumberLoose(row?.unite_g_ml_piece);
+
+ if (baseU === 'piece') {
+   // pack en pièces: on préfère nombre, sinon 1
+   const n = toNumberLoose(row?.nombre);
+   const refQty = Number.isFinite(n) && n > 0 ? n : 1;
+   return { buyPrice, refQty, refUnit: 'piece' };
+ }
+
+ if (!Number.isFinite(packQtyRaw) || packQtyRaw <= 0) {
+   return { buyPrice, refQty: null, refUnit: baseU };
+ }
+
+ // si unite_g_ml_piece est en kg/l/cl/... on ramène en base via factor
+ const refQty = packQtyRaw * factor;
+
+ return { buyPrice, refQty, refUnit: baseU };
 }
 
 // Prix unitaire: priorité à prix_kg_l_piece, sinon fallback prix_d_achat / quantite_de_reference
@@ -190,6 +220,7 @@ try {
      const ppuRounded = roundPPU(ppu, unit);
      const packInfo = getPackPieceConversion(row, unit);
      const buyInfo = getBuyPackInfo(row, row.type_unite ?? row.unite_g_ml_piece);
+     console.log('[BUYINFO]', raw, buyInfo);
      const density = toNumberLoose(row.densite_g_ml);
 
      candidates.push({
@@ -197,11 +228,19 @@ try {
        name: row.nom ?? raw,
        unit,
        pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
+
        buyPrice: buyInfo.buyPrice,
+       buyPriceEur: buyInfo.buyPrice,
        refQty: buyInfo.refQty,
        refUnit: buyInfo.refUnit,
+       buyRefQty: buyInfo.refQty,
+       buyRefUnit: buyInfo.refUnit,
+
        ...packInfo,
+
+       gramsPerPiece: toNumberLoose(row.gramme_par_piece) || null,
        density_g_per_ml: Number.isFinite(density) ? density : null,
+
        priceStatus: reason ? 'missing_price' : 'ok',
        priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : undefined,
      });
@@ -262,10 +301,14 @@ unit,
 pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
 
 buyPrice: buyInfo.buyPrice,
+buyPriceEur: buyInfo.buyPrice,
 refQty: buyInfo.refQty,
 refUnit: buyInfo.refUnit,
+buyRefQty: buyInfo.refQty,
+buyRefUnit: buyInfo.refUnit,
 
 ...packInfo,
+gramsPerPiece: toNumberLoose(picked.gramme_par_piece) || null,
 density_g_per_ml: Number.isFinite(density) ? density : null,
 
 priceStatus: reason ? 'missing_price' : 'ok',

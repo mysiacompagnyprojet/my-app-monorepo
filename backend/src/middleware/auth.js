@@ -1,6 +1,6 @@
 //backend/src/middleware/auth
 const { verifyToken } = require('../lib/jwt');
-const DEBUG_OCR = process.env.OCR_DEBUG === 'development';
+const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 function authRequired(req, res, next) {
