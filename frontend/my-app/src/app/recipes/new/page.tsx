@@ -20,6 +20,7 @@ type Line = IngredientLine & {
  buyRecalced?: boolean
  gramsPerPiece?: number | null
  density_g_per_ml?: number | null
+ mlPerPiece?: number | null
 
  // ✅ lien éventuel vers une base ingrédient (IngredientPicker)
  ingredientBaseId?: string | null
@@ -59,6 +60,10 @@ type EnrichIngredientOut = {
  buyLabel?: string | null
  buyRefQty?: number | null
  buyRefUnit?: string | null
+
+ gramsPerPiece?: number | null
+ density_g_per_ml?: number | null
+ mlPerPiece?: number | null
 }
 
 type EnrichResponse =
@@ -483,11 +488,15 @@ function NewRecipeInner() {
 
  function setIngredient(idx: number, patch: Partial<Line>) {
    setIngredients((prev) => {
-     const copy = [...prev]
-     copy[idx] = { ...copy[idx], ...patch, buyRecalced: false }
+      const copy = [...prev]
+      copy[idx] = { 
+        ...copy[idx], 
+        ...patch, 
+        buyRecalced: false,
+      }
      return copy
-   })
- }
+    })
+  }
 
  function setQtyInput(idx: number, raw: string) {
    setQtyInputs((prev) => {
@@ -543,8 +552,11 @@ function NewRecipeInner() {
          buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
          buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
          buyRecalced: true,
+
          gramsPerPiece: typeof e.gramsPerPiece === 'number' ? e.gramsPerPiece : null,
          density_g_per_ml: typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
+         mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
+
 
          note: typeof e.note === 'string' ? e.note : undefined,
        } as any

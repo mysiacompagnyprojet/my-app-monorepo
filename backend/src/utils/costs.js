@@ -43,6 +43,13 @@ function canonUnitExtended(uRaw) {
 const u0 = String(uRaw || '').trim().toLowerCase()
 if (!u0) return null
 
+// ✅ cuillères (OCR)
+if (u0 === 'càs' || u0 === 'cas' || u0 === 'cs') return 'tbsp'
+if (u0 === 'càc' || u0 === 'cac' || u0 === 'cc') return 'tsp'
+
+// ✅ pièces (OCR)
+if (u0 === 'pièce' || u0 === 'pièces' || u0 === 'piece' || u0 === 'pieces' || u0 === 'pcs') return 'piece'
+
 const u = canonUnit(uRaw) || u0
 if (!u) return null
 
@@ -50,6 +57,9 @@ if (!u) return null
 if (u === 'gousse' || u === 'gousses') return 'piece'
 if (u === 'tranche' || u === 'tranches') return 'piece'
 //if (u === 'cuillere' || u === 'cuillère' || u === 'cuilleres' || u === 'cuillères') return 'piece'
+
+// sécurité (accent)
+if (u === 'pièce' || u === 'pièces') return 'piece'
 
 return u
 }
@@ -154,9 +164,12 @@ const quantity = Number(i?.quantity || 0) || 0
 const unitRaw = String(i?.unit || '').trim()
 
 const outBase = {
-name: rawName || name,
-quantity,
-unit: unitRaw,
+    name: rawName || name,
+    quantity,
+    unit: unitRaw,
+    gramsPerPiece: null, 
+    density_g_per_ml: null,
+    mlPerPiece: null,
 }
 
 if (!name) {
@@ -178,6 +191,14 @@ note: 'nom vide',
 
 // ⚠️ preferUnitRaw = l’unité recette pour choisir un record compatible si plusieurs
 const pricing = await getIngredientPriceByName(name, unitRaw)
+console.log('[PRICING DEBUG]', name, {
+ unitRaw,
+ priceUnit: pricing?.unit,
+ buyRefUnit: pricing?.buyRefUnit,
+ buyRefQty: pricing?.buyRefQty,
+ nombre: pricing?.count,
+ gramsPerPiece: pricing?.gramsPerPiece,
+});
 
 if (!pricing) {
 return {
@@ -204,9 +225,15 @@ const buyLabel = formatPackLabel(buyRefQty, buyRefUnit)
 
 const priceUnit = pricing.unit // 'g' | 'ml' | 'piece'
 const pricePerUnit = Number(pricing.pricePerUnit)
-const density = Number(pricing.density_g_per_ml) // g/ml
+
+
 const gramsPerPiece = Number(pricing.gramsPerPiece)
+const density = Number(pricing.density_g_per_ml) // g/ml
 const mlPerPiece = Number(pricing.mlPerPiece)
+
+const gramsPerPieceOut = Number.isFinite(gramsPerPiece) && gramsPerPiece > 0 ? gramsPerPiece : null
+const densityOut = Number.isFinite(density) && density > 0 ? density: null
+const mlPerPieceOut = Number.isFinite(mlPerPiece) && mlPerPiece > 0 ? mlPerPiece : null
 
 // ✅ Cas "prix manquant" côté Airtable (PPU introuvable)
 // (airtable.js renvoie pricePerUnit=null + priceStatus=missing_price)
@@ -230,6 +257,9 @@ priceMatched: Boolean(pricing.id),
 priceStatus: pricing?.priceStatus === 'missing_price' ? 'missing_price' : 'invalid_price',
 priceMessage: msg,
 note: 'pricePerUnit invalide',
+gramsPerPiece: gramsPerPieceOut,
+density_g_per_ml : densityOut,
+mlPerPiece: mlPerPieceOut,
 }
 }
 
