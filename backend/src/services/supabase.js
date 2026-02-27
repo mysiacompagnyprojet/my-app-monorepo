@@ -187,6 +187,9 @@ const TABLE = 'ingredients_base'; // <-- à adapter si besoin
 // 0) Tentative "synonyme" (préfiltre SQL + match exact normalisé)
 try {
  const wanted = normalizeName(raw);
+ if (!wanted || wanted.length < 3) {
+    return null;
+ }
  const head = wanted.split(' ') [0];
  // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
  const { data: synRows, error: synErr } = await supabaseAdmin
@@ -254,6 +257,7 @@ try {
      });
      const best = candidates[0];
      cacheSet(cacheKey, best);
+     console.log('[PRICE BEST]', raw, { unit: best?.unit, pricePerUnit: best?.pricePerUnit, gramsPerPiece: best?.gramsPerPiece, density: best?.density_g_per_ml })
      return best;
    }
  }
@@ -292,7 +296,7 @@ const { ppu, unit, reason } = computePPUFromRow(picked);
 const ppuRounded = roundPPU(ppu, unit);
 const packInfo = getPackPieceConversion(picked, unit);
 const buyInfo = getBuyPackInfo(picked, picked.type_unite ?? picked.unite_g_ml_piece);
-const density = toNumberLoose(picked.densite_g_ml);
+const density = toNumberLoose(picked.densite_g_per_ml);
 
 const out = {
 id: picked.id, // idem: compat
@@ -316,6 +320,7 @@ priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : 
 };
 
 cacheSet(cacheKey, out);
+console.log('[PRICE OUT]', raw, { unit: out?.unit, pricePerUnit: out?.pricePerUnit, gramsPerPiece: out?.gramsPerPiece, density: out?.density_g_per_ml })
 return out;
 }
 
@@ -323,4 +328,43 @@ cacheSet(cacheKey, null);
 return null;
 }
 
-module.exports = { getIngredientPriceByName };
+async function getIngredientPriceById(id) {
+ const TABLE = 'ingredients_base';
+
+ const { data: row, error } = await supabaseAdmin
+   .from(TABLE)
+   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+   .eq('id', id)
+   .maybeSingle();
+
+ if (error || !row) return null;
+
+ const { ppu, unit, reason } = computePPUFromRow(row);
+ const ppuRounded = roundPPU(ppu, unit);
+ const packInfo = getPackPieceConversion(row, unit);
+ const buyInfo = getBuyPackInfo(row, row.type_unite ?? row.unite_g_ml_piece);
+ const density = toNumberLoose(row.densite_g_ml);
+
+ return {
+   id: row.id,
+   name: row.nom,
+   unit,
+   pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
+
+   buyPrice: buyInfo.buyPrice,
+   buyPriceEur: buyInfo.buyPrice,
+   refQty: buyInfo.refQty,
+   refUnit: buyInfo.refUnit,
+   buyRefQty: buyInfo.refQty,
+   buyRefUnit: buyInfo.refUnit,
+
+   ...packInfo,
+   gramsPerPiece: toNumberLoose(row.gramme_par_piece) || null,
+   density_g_per_ml: Number.isFinite(density) ? density : null,
+
+   priceStatus: reason ? 'missing_price' : 'ok',
+   priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : undefined,
+ };
+}
+
+module.exports = { getIngredientPriceByName, getIngredientPriceById };

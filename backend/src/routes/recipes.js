@@ -150,98 +150,110 @@ return res.status(500).json({ ok: false, error: 'internal error' })
 // body: { ingredients: [{ name, quantity, unit }] }
 // ─────────────────────────────────────────────
 router.post('/enrich-ingredients', needAuth, async (req, res) => {
-const body = req.body ?? {}
-const list = Array.isArray(body.ingredients) ? body.ingredients : []
+ const body = req.body ?? {}
+ const list = Array.isArray(body.ingredients) ? body.ingredients : []
 
-if (!list.length) {
-return res.status(400).json({ ok: false, error: 'ingredients[] requis' })
-}
+ if (!list.length) {
+   return res.status(400).json({ ok: false, error: 'ingredients[] requis' })
+ }
 
-try {
-const out = await Promise.all(
-list.map(async (i) => {
-const base = {
-name: String(i?.name || '').trim(),
-quantity: Number(i?.quantity || 0) || 0,
-unit: String(i?.unit || '').trim(),
-}
+ try {
+   const out = await Promise.all(
+     list.map(async (i) => {
+        console.log('[ENRICH IN]', { name: i?.name, unit: i?.unit, ingredientBaseId: i?.ingredientBaseId})
+       const base = {
+         name: String(i?.name || '').trim(),
+         quantity: Number(i?.quantity || 0) || 0,
+         unit: String(i?.unit || '').trim(),
+         // ✅ pour ne pas rester “bloqué” sur le mauvais article quand plusieurs ont le même nom
+         ingredientBaseId: i?.ingredientBaseId ?? null,
+       }
 
-if (!base.name) {
-return {
-...base,
-id: null,
-unitPriceBuy: null,
-buyPriceEur: null,
-buyRefQty: null,
-buyRefUnit: null,
-buyLabel: null,
-costEur: 0,
-priceMatched: false,
-priceStatus: 'invalid',
-priceMessage: 'Nom d’ingrédient vide',
-}
-}
+       if (!base.name) {
+         return {
+           ...base,
+           id: null,
+           unitPriceBuy: null,
+           buyPriceEur: null,
+           buyRefQty: null,
+           buyRefUnit: null,
+           buyLabel: null,
+           costEur: 0,
+           priceMatched: false,
+           priceStatus: 'invalid',
+           priceMessage: "Nom d’ingrédient vide",
+         }
+       }
 
-const enriched = await enrichIngredientWithCost(base)
+       const enriched = await enrichIngredientWithCost(base)
 
-return {
-name: base.name,
-quantity: base.quantity,
-unit: base.unit,
+       return {
+         name: base.name,
+         quantity: base.quantity,
+         unit: base.unit,
+         ingredientBaseId: base.ingredientBaseId,
 
-id: enriched?.id ?? null,
-priceMatched: Boolean(enriched?.id),
+         id: enriched?.id ?? null,
+         priceMatched: Boolean(enriched?.id),
 
-// €/unité (souvent €/g ou €/ml) — utile pour debug/affichage
-unitPriceBuy: enriched?.unitPriceBuy ?? null,
+         // €/unité (souvent €/g ou €/ml)
+         unitPriceBuy: enriched?.unitPriceBuy ?? null,
 
-// ✅ prix "recette" (quantité utilisée)
-costEur: Number(enriched?.costRecipe || 0),
+         // ✅ prix recette
+         costEur: Number(enriched?.costRecipe || 0),
 
-// ✅ prix d’achat "pack" (produit en magasin)
-buyPriceEur: enriched?.buyPriceEur ?? null,
-buyLabel: enriched?.buyLabel ?? null,
-buyRefQty: enriched?.buyRefQty ?? null,
-buyRefUnit: enriched?.buyRefUnit ?? null,
+         // ✅ prix pack
+         buyPriceEur: enriched?.buyPriceEur ?? null,
+         buyLabel: enriched?.buyLabel ?? null,
+         buyRefQty: enriched?.buyRefQty ?? null,
+         buyRefUnit: enriched?.buyRefUnit ?? null,
 
-// ✅ nouveau : statut/message pour affichage sous la ligne
-priceStatus: enriched?.priceStatus ?? null,
-priceMessage: enriched?.priceMessage ?? null,
+         gramsPerPiece: enriched?.gramsPerPiece?? null,
+         density_g_per_ml: enriched?.density?? null,
+         mlPerPiece: enriched?.mlPerPiece?? null,
 
-...(enriched?.note ? { note: enriched.note } : {}),
-}
-})
-)
+         // ✅ statut/message ligne
+         priceStatus: enriched?.priceStatus ?? null,
+         priceMessage: enriched?.priceMessage ?? null,
 
-return res.json({ ok: true, ingredients: out })
-} catch (e) {
-// ✅ IMPORTANT : ne pas casser l'UX si une erreur inattendue se produit.
-// On renvoie "ok: true" avec 0€ et un message générique par ingrédient.
-console.error('POST /recipes/enrich-ingredients unexpected error:', e)
+         ...(enriched?.note ? { note: enriched.note } : {}),
+       }
+     })
+   )
 
-const safeOut = list.map((i) => {
-const base = {
-name: String(i?.name || '').trim(),
-quantity: Number(i?.quantity || 0) || 0,
-unit: String(i?.unit || '').trim(),
-}
-return {
-...base,
-id: null,
-priceMatched: false,
-unitPriceBuy: null,
-costEur: 0,
-buyPriceEur: null,
-buyLabel: null,
-buyRefQty: null,
-buyRefUnit: null,
-priceStatus: 'error',
-priceMessage: 'Erreur calcul prix',
-}
-})
+   console.log('[ENRICH RESULT sample]', out?.[0])
+   console.log('[ENRICH RESULT keys]', Object.keys(out?.[0] || {}))
 
-return res.status(200).json({ ok: true, ingredients: safeOut })
-}
+   return res.status(200).json({ ok: true, ingredients: out })
+ } catch (e) {
+   console.error('POST /recipes/enrich-ingredients unexpected error:', e)
+
+   // ✅ fallback “safe” : aucune logique métier ici
+   const outError = list.map((i) => {
+     const base = {
+       name: String(i?.name || '').trim(),
+       quantity: Number(i?.quantity || 0) || 0,
+       unit: String(i?.unit || '').trim(),
+       ingredientBaseId: i?.ingredientBaseId ?? null,
+     }
+
+     return {
+       ...base,
+       id: null,
+       priceMatched: false,
+       unitPriceBuy: null,
+       costEur: 0,
+       buyPriceEur: null,
+       buyLabel: null,
+       buyRefQty: null,
+       buyRefUnit: null,
+       priceStatus: 'error',
+       priceMessage: 'Erreur calcul prix',
+     }
+   })
+
+   return res.status(200).json({ ok: true, ingredients: outError })
+ }
 })
 
 // ─────────────────────────────────────────────

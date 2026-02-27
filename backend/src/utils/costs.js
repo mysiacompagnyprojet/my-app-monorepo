@@ -4,7 +4,7 @@
 // import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma
 // importé uniquement par routes-services
 const { canonUnit, toBaseQty } = require('../utils/units')
-const { getIngredientPriceByName } = require('../services/supabase')
+const { getIngredientPriceByName, getIngredientPriceById } = require('../services/supabase')
 
 /**
 * Nettoyage “soft” du nom pour maximiser le match Airtable.
@@ -158,114 +158,279 @@ return `${q} ${u}`
 * @param {{ name: string, quantity?: number, unit?: string }} i
 */
 async function enrichIngredientWithCost(i) {
-const rawName = String(i?.name || '').trim()
-const name = cleanNameForPricing(rawName)
-const quantity = Number(i?.quantity || 0) || 0
-const unitRaw = String(i?.unit || '').trim()
+    const rawName = String(i?.name || '').trim()
+    const name = cleanNameForPricing(rawName)
+    const quantity = Number(i?.quantity || 0) || 0
+    const unitRaw = String(i?.unit || '').trim()
 
-const outBase = {
-    name: rawName || name,
-    quantity,
-    unit: unitRaw,
-    gramsPerPiece: null, 
-    density_g_per_ml: null,
-    mlPerPiece: null,
+    const outBase = {
+        name: rawName || name,
+        quantity,
+        unit: unitRaw,
+        gramsPerPiece: null, 
+        density_g_per_ml: null,
+        mlPerPiece: null,
+    }
+
+    if (!name) {
+        return {
+            ...outBase,
+            id: null,
+            unitPriceBuy: null,
+            buyPriceEur: null,
+            buyRefQty: null,
+            buyRefUnit: null,
+            buyLabel: null,
+            costRecipe: 0,
+            priceMatched: false,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceStatus: 'invalid',
+            priceMessage: 'Nom d’ingrédient vide',
+            note: 'nom vide',
+        }
+    }
+
+    // ⚠️ preferUnitRaw = l’unité recette pour choisir un record compatible si plusieurs
+    const pricing = i?.ingredientBaseId
+    ? await getIngredientPriceById(i.ingredientBaseId)
+    : await getIngredientPriceByName(name, unitRaw)
+    console.log('[PRICING DEBUG]', name, {
+        unitRaw,
+        priceUnit: pricing?.unit,
+        buyRefUnit: pricing?.buyRefUnit,
+        buyRefQty: pricing?.buyRefQty,
+        nombre: pricing?.count,
+        gramsPerPiece: pricing?.gramsPerPiece,
+    });
+
+    if (!pricing) {
+        return {
+            ...outBase,
+            id: null,
+            unitPriceBuy: null,
+
+            buyPriceEur: null,
+            buyRefQty: null,
+            buyRefUnit: null,
+            buyLabel: null,
+
+            costRecipe: 0,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: false,
+            priceStatus: 'not_found',
+            priceMessage: "Ingrédient non trouvé dans la base",
+        
+            note: 'non trouvé dans la base',
+        }
+    }
+
+    // ✅ Prix d'achat pack + infos pack (si airtable.js les renvoie)
+    const buyPriceEur = pickNumber(pricing, ['buyPrice', 'buyPriceEur', 'buy_price', 'purchasePrice', 'purchase_price'])
+    const buyRefQty = pickNumber(pricing, ['refQty', 'buyRefQty', 'referenceQty', 'ref_quantity', 'reference_quantity'])
+    const buyRefUnit = pickString(pricing, ['refUnit', 'buyRefUnit', 'referenceUnit', 'ref_unit', 'reference_unit'])
+    const buyLabel = formatPackLabel(buyRefQty, buyRefUnit)
+
+    const priceUnit = pricing.unit // 'g' | 'ml' | 'piece'
+    const pricePerUnit = Number(pricing.pricePerUnit)
+
+
+    const gramsPerPiece = Number(pricing.gramsPerPiece)
+    const density = Number(pricing.density_g_per_ml) // g/ml
+    const mlPerPiece = Number(pricing.mlPerPiece)
+
+    const gramsPerPieceOut = Number.isFinite(gramsPerPiece) && gramsPerPiece > 0 ? gramsPerPiece : null
+    const densityOut = Number.isFinite(density) && density > 0 ? density: null
+    const mlPerPieceOut = Number.isFinite(mlPerPiece) && mlPerPiece > 0 ? mlPerPiece : null
+
+    // ✅ Cas "prix manquant" côté Airtable (PPU introuvable)
+    // (airtable.js renvoie pricePerUnit=null + priceStatus=missing_price)
+    if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
+        const msg =
+        pricing?.priceMessage ||
+        (pricing?.priceStatus === 'missing_price'
+        ? 'Prix manquant pour cet ingrédient'
+        : 'Prix unitaire invalide')
+
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: null,
+
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+
+            costRecipe: 0,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: pricing?.priceStatus === 'missing_price' ? 'missing_price' : 'invalid_price',
+            priceMessage: msg,
+
+            note: 'pricePerUnit invalide',
+
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+        }
+    }
+
+    // 1) Conversion simple vers base
+    const base = convertRecipeToPricingUnit(quantity, unitRaw, priceUnit)
+    console.log('[BASE]', name, { quantity, unitRaw, priceUnit, base })
+    if (!base || !base.unit || !Number.isFinite(base.qty)) {
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: pricePerUnit,
+
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+            costRecipe: 0,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: 'conversion_failed',
+            priceMessage: "Conversion d’unité impossible",
+            note: 'conversion de base impossible',
+        }
+    }
+
+    // 2) Cas direct: base.unit === priceUnit
+    if (base.unit === priceUnit) {
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: pricePerUnit,
+
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+
+            costRecipe: base.qty * pricePerUnit,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: 'ok',
+        }
+    }
+
+    // 3) Cas "piece" recette → pricing en g/ml via gramsPerPiece/mlPerPiece
+    if (base.unit === 'piece' && priceUnit === 'g' && Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) {
+        const qtyG = base.qty * gramsPerPiece
+        const cost = qtyG * pricePerUnit;
+        console.log('[BRANCH]', name, 'CASE=piece_to_g', { base, gramsPerPiece, pricePerUnit})
+        console.log('[RETURN]', name, {
+            unitRaw,
+            base,
+            priceUnit,
+            gramsPerPiece,
+            qtyG,
+            pricePerUnit,
+            costRecipe: qtyG * pricePerUnit,
+        });
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: pricePerUnit,
+
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+
+            costRecipe: qtyG * pricePerUnit,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: 'ok',
+            note: 'conversion piece→g (gramsPerPiece)',
+        }
+    }
+
+    if (base.unit === 'piece' && priceUnit === 'ml' && Number.isFinite(mlPerPiece) && mlPerPiece > 0) {
+        const qtyMl = base.qty * mlPerPiece
+        console.log('[BRANCH]', name, 'CASE=piece_to_ml', { base, mlPerPiece, pricePerUnit})
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: pricePerUnit,
+
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+
+            costRecipe: qtyMl * pricePerUnit,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: 'ok',
+            note: 'conversion piece→ml (mlPerPiece)',
+        }
+    }
+
+    // 4) Cas densité g<->ml
+    if (Number.isFinite(density) && density > 0) {
+        // recette en ml (base.unit=ml) pricing en g
+        if (base.unit === 'ml' && priceUnit === 'g') {
+            const qtyG = base.qty * density // g = ml * densité
+            console.log('[BRANCH]', name, 'CASE=density_ml_to_g', { base, density, pricePerUnit})
+
+            return {
+                ...outBase,
+                id: pricing.id ?? null,
+                unitPriceBuy: pricePerUnit,
+
+                buyPriceEur,
+                buyRefQty,
+                buyRefUnit,
+                buyLabel,
+
+                costRecipe: qtyG * pricePerUnit,
+                gramsPerPiece: gramsPerPiece ?? null,
+                density_g_per_ml: density ?? null,
+                mlPerPiece: mlPerPiece ?? null,
+                priceMatched: Boolean(pricing.id),
+                priceStatus: 'ok',
+                note: 'conversion densité (ml→g)',
+            }
+        }
+
+    // recette en g (base.unit=g) pricing en ml
+    if (base.unit === 'g' && priceUnit === 'ml') {
+        const qtyMl = base.qty / density // ml = g / densité
+        console.log('[BRANCH]', name, 'CASE=density_g_to_ml', { base, density, pricePerUnit})
+        return {
+            ...outBase,
+            id: pricing.id ?? null,
+            unitPriceBuy: pricePerUnit,
+            buyPriceEur,
+            buyRefQty,
+            buyRefUnit,
+            buyLabel,
+            costRecipe: qtyMl * pricePerUnit,
+            gramsPerPiece: gramsPerPiece ?? null,
+            density_g_per_ml: density ?? null,
+            mlPerPiece: mlPerPiece ?? null,
+            priceMatched: Boolean(pricing.id),
+            priceStatus: 'ok',
+            note: 'conversion densité (g→ml)',
+        }
+    }
 }
 
-if (!name) {
-return {
-...outBase,
-id: null,
-unitPriceBuy: null,
-buyPriceEur: null,
-buyRefQty: null,
-buyRefUnit: null,
-buyLabel: null,
-costRecipe: 0,
-priceMatched: false,
-priceStatus: 'invalid',
-priceMessage: 'Nom d’ingrédient vide',
-note: 'nom vide',
-}
-}
-
-// ⚠️ preferUnitRaw = l’unité recette pour choisir un record compatible si plusieurs
-const pricing = await getIngredientPriceByName(name, unitRaw)
-console.log('[PRICING DEBUG]', name, {
- unitRaw,
- priceUnit: pricing?.unit,
- buyRefUnit: pricing?.buyRefUnit,
- buyRefQty: pricing?.buyRefQty,
- nombre: pricing?.count,
- gramsPerPiece: pricing?.gramsPerPiece,
-});
-
-if (!pricing) {
-return {
-...outBase,
-id: null,
-unitPriceBuy: null,
-buyPriceEur: null,
-buyRefQty: null,
-buyRefUnit: null,
-buyLabel: null,
-costRecipe: 0,
-priceMatched: false,
-priceStatus: 'not_found',
-priceMessage: "Ingrédient non trouvé dans la base",
-note: 'non trouvé dans la base',
-}
-}
-
-// ✅ Prix d'achat pack + infos pack (si airtable.js les renvoie)
-const buyPriceEur = pickNumber(pricing, ['buyPrice', 'buyPriceEur', 'buy_price', 'purchasePrice', 'purchase_price'])
-const buyRefQty = pickNumber(pricing, ['refQty', 'buyRefQty', 'referenceQty', 'ref_quantity', 'reference_quantity'])
-const buyRefUnit = pickString(pricing, ['refUnit', 'buyRefUnit', 'referenceUnit', 'ref_unit', 'reference_unit'])
-const buyLabel = formatPackLabel(buyRefQty, buyRefUnit)
-
-const priceUnit = pricing.unit // 'g' | 'ml' | 'piece'
-const pricePerUnit = Number(pricing.pricePerUnit)
-
-
-const gramsPerPiece = Number(pricing.gramsPerPiece)
-const density = Number(pricing.density_g_per_ml) // g/ml
-const mlPerPiece = Number(pricing.mlPerPiece)
-
-const gramsPerPieceOut = Number.isFinite(gramsPerPiece) && gramsPerPiece > 0 ? gramsPerPiece : null
-const densityOut = Number.isFinite(density) && density > 0 ? density: null
-const mlPerPieceOut = Number.isFinite(mlPerPiece) && mlPerPiece > 0 ? mlPerPiece : null
-
-// ✅ Cas "prix manquant" côté Airtable (PPU introuvable)
-// (airtable.js renvoie pricePerUnit=null + priceStatus=missing_price)
-if (!Number.isFinite(pricePerUnit) || pricePerUnit <= 0) {
-const msg =
-pricing?.priceMessage ||
-(pricing?.priceStatus === 'missing_price'
-? 'Prix manquant pour cet ingrédient'
-: 'Prix unitaire invalide')
-
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: null,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: 0,
-priceMatched: Boolean(pricing.id),
-priceStatus: pricing?.priceStatus === 'missing_price' ? 'missing_price' : 'invalid_price',
-priceMessage: msg,
-note: 'pricePerUnit invalide',
-gramsPerPiece: gramsPerPieceOut,
-density_g_per_ml : densityOut,
-mlPerPiece: mlPerPieceOut,
-}
-}
-
-// 1) Conversion simple vers base
-const base = convertRecipeToPricingUnit(quantity, unitRaw, priceUnit)
-if (!base || !base.unit || !Number.isFinite(base.qty)) {
+    // 5) Sinon: pas de conversion trouvée
 return {
 ...outBase,
 id: pricing.id ?? null,
@@ -275,113 +440,9 @@ buyRefQty,
 buyRefUnit,
 buyLabel,
 costRecipe: 0,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'conversion_failed',
-priceMessage: "Conversion d’unité impossible",
-note: 'conversion de base impossible',
-}
-}
-
-// 2) Cas direct: base.unit === priceUnit
-if (base.unit === priceUnit) {
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: base.qty * pricePerUnit,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'ok',
-}
-}
-
-// 3) Cas "piece" recette → pricing en g/ml via gramsPerPiece/mlPerPiece
-if (base.unit === 'piece' && priceUnit === 'g' && Number.isFinite(gramsPerPiece) && gramsPerPiece > 0) {
-const qtyG = base.qty * gramsPerPiece
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: qtyG * pricePerUnit,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'ok',
-note: 'conversion piece→g (gramsPerPiece)',
-}
-}
-
-if (base.unit === 'piece' && priceUnit === 'ml' && Number.isFinite(mlPerPiece) && mlPerPiece > 0) {
-const qtyMl = base.qty * mlPerPiece
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: qtyMl * pricePerUnit,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'ok',
-note: 'conversion piece→ml (mlPerPiece)',
-}
-}
-
-// 4) Cas densité g<->ml
-if (Number.isFinite(density) && density > 0) {
-// recette en ml (base.unit=ml) pricing en g
-if (base.unit === 'ml' && priceUnit === 'g') {
-const qtyG = base.qty * density // g = ml * densité
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: qtyG * pricePerUnit,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'ok',
-note: 'conversion densité (ml→g)',
-}
-}
-
-// recette en g (base.unit=g) pricing en ml
-if (base.unit === 'g' && priceUnit === 'ml') {
-const qtyMl = base.qty / density // ml = g / densité
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: qtyMl * pricePerUnit,
-priceMatched: Boolean(pricing.id),
-priceStatus: 'ok',
-note: 'conversion densité (g→ml)',
-}
-}
-}
-
-// 5) Sinon: pas de conversion trouvée
-return {
-...outBase,
-id: pricing.id ?? null,
-unitPriceBuy: pricePerUnit,
-buyPriceEur,
-buyRefQty,
-buyRefUnit,
-buyLabel,
-costRecipe: 0,
+gramsPerPiece: gramsPerPiece ?? null,
+density_g_per_ml: density ?? null,
+mlPerPiece: mlPerPiece ?? null,
 priceMatched: Boolean(pricing.id),
 priceStatus: 'incompatible_unit',
 priceMessage: "Unité incompatible (conversion manquante)",

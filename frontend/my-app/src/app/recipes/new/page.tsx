@@ -119,10 +119,14 @@ function toBaseQtyFront(qty: number, unitRaw: string): { qty: number; unit: 'g' 
 }
 
 function computeCostCourses(ing: Line): number | null {
- const buyPrice = typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null
+ const buyPrice = 
+  typeof ing.buyPriceEur === 'number' 
+    ? ing.buyPriceEur
+      : null
+
  const refQty = typeof ing.buyRefQty === 'number' ? ing.buyRefQty : null
  const refUnit = typeof ing.buyRefUnit === 'string' ? ing.buyRefUnit : null
- if (!buyPrice || !refQty || !refUnit) return null
+ if (buyPrice == null || refQty == null || refUnit == null) return null
 
  // base recette + base pack
  let qBase = toBaseQtyFront(Number(ing.quantity || 0), String(ing.unit || ''))
@@ -561,7 +565,7 @@ function NewRecipeInner() {
          note: typeof e.note === 'string' ? e.note : undefined,
        } as any
      }
-
+     console.log("FRONT ENRICHED", enriched)
      return copy
    })
  }
@@ -583,6 +587,7 @@ function NewRecipeInner() {
            name,
            quantity: Number(i.quantity || 0) || 0,
            unit: String(i.unit || '').trim(),
+           ingredientBaseId: (i as any).ingredientBaseId ?? null,
          }
        })
        .filter(Boolean) as Array<{ name: string; quantity: number; unit: string }>
@@ -981,8 +986,7 @@ function NewRecipeInner() {
 
        <div className="mt-4 grid gap-3">
          {ingredients.map((ing, idx) => {
-           const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
-
+           const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'   
            return (
              <div
                key={idx}

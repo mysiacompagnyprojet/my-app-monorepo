@@ -59,6 +59,7 @@ export function IngredientPicker({
             }    
 
             const json = await res.json()
+            console.log('[FRONT ingredients sample]', json?.ingredients?.[0])
             if (!res.ok) throw new Error(json?.error || `Erreur API suggest (${res.status})`)
 
             setItems(json.items || [])
