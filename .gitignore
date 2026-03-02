@@ -25,4 +25,4 @@ DerivedData
 .log
 token.txt
 /src/@prisma/client
-.vercel
+.vercel.env.local
