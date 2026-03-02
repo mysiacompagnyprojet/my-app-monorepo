@@ -1,10 +1,11 @@
 // frontend/my-app/src/app/import/ocr/page.tsx
 'use client'
 
-import { Suspense, useMemo, useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { Suspense, useMemo, useState, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import type { OcrDraft } from 'src/types/recipe'
+import { createClient } from '@supabase/supabase-js'
 
 type ImportOcrResponse =
 | { ok: true; draft: OcrDraft }
@@ -12,82 +13,116 @@ type ImportOcrResponse =
 | { ok: false; error: string; message?: string }
 
 const MAX_FILES = 10
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 function OcrPageInner() {
-const router = useRouter()
-const search = useSearchParams()
-const isDebug = search.get('debug') === '1'
+    const router = useRouter()
+    const isDebug = process.env.NEXT_PUBLIC_DEBUG === 'true'
 
-const [files, setFiles] = useState<File[]>([])
-const [status, setStatus] = useState('')
-const [isRunning, setIsRunning] = useState(false)
-const [debugOut, setDebugOut] = useState<any>(null)
-const [draft, setDraft] = useState<OcrDraft | null>(null)
+    const [files, setFiles] = useState<File[]>([])
+    const [status, setStatus] = useState('')
+    const [isRunning, setIsRunning] = useState(false)
+    const [debugOut, setDebugOut] = useState<any>(null)
+    const [draft, setDraft] = useState<OcrDraft | null>(null)
 
-const canRun = useMemo(
-() => files.length >= 1 && files.length <= MAX_FILES && !isRunning,
-[files, isRunning]
-)
+    const [sessionReady, setSessionReady] = useState(false)
 
-async function run() {
-try {
-setDebugOut(null)
-setDraft(null)
-setStatus('')
+    const supabase = useMemo(() => {
+        if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
+        return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+    }, [])
 
-if (!files.length) {
-setStatus('❌ Ajoute au moins 1 image.')
-return
-}
+    useEffect(() => {
+        let mounted = true
 
-if (files.length > MAX_FILES) {
-setStatus(`❌ Trop d'images : ${MAX_FILES} maximum.`)
-return
-}
+        async function check() {
+            if(!supabase) {
+                if(mounted) setSessionReady(true)
+                    return
+            }
 
-setIsRunning(true)
-setStatus('OCR en cours…')
+            const { data } = await supabase.auth.getSession()
+            if (!data.session) {
+                router.replace('/')
+                return
+            }
+            
+            if (mounted) setSessionReady(true)
+        }
 
-const form = new FormData()
-for (const f of files) form.append('files', f)
+        check()
 
-const qs = isDebug ? '?debug=1' : ''
+        return () => {
+            mounted = false
+        }
+    }, [supabase, router])
 
-const data = await apiFetch<ImportOcrResponse>(`/import/ocr${qs}`, {
-method: 'POST',
-headers: { 'Accept-Language': navigator.language || 'fr-FR' },
-body: form,
-})
+    if (!sessionReady) return null
 
-// Erreur API
-if ((data as any)?.ok === false) {
-setStatus(
-'❌ ' +
-((data as any)?.message ||
-(data as any)?.error ||
-'Erreur OCR')
-)
-return
-}
+    const canRun = useMemo(
+        () => files.length >= 1 && files.length <= MAX_FILES && !isRunning,
+        [files, isRunning]
+    )
 
-// Mode debug (pas de redirection)
-if ('debug' in data) {
-setDebugOut((data as any).debug)
-setStatus('✅ Debug reçu (aucune redirection)')
-return
-}
+    async function run() {
+        try {
+            setDebugOut(null)
+            setDraft(null)
+            setStatus('')
 
-// Draft OK
-if ('draft' in data) {
-setDraft(data.draft)
-sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
-router.push('/recipes/new?from=ocr')
-return
-}
+            if (!files.length) {
+                setStatus('❌ Ajoute au moins 1 image.')
+                return
+            }
 
-setStatus('❌ Réponse inattendue du serveur.')
-} catch (e: any) {
-setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
+            if (files.length > MAX_FILES) {
+                setStatus(`❌ Trop d'images : ${MAX_FILES} maximum.`)
+                return
+            }
+
+            setIsRunning(true)
+            setStatus('OCR en cours…')
+
+            const form = new FormData()
+            for (const f of files) form.append('files', f)
+
+            const data = await apiFetch<ImportOcrResponse>(`/import/ocr`, {
+                method: 'POST',
+                headers: { 'Accept-Language': navigator.language || 'fr-FR' },
+                body: form,
+            })
+
+            // Erreur API
+            if ((data as any)?.ok === false) {
+                setStatus(
+                    '❌ ' +
+                    ((data as any)?.message ||
+                        (data as any)?.error ||
+                        'Erreur OCR'
+                    )
+                )
+                return
+            }
+
+            // Mode debug (pas de redirection)
+            if (isDebug && 'debug' in data) {
+                setDebugOut((data as any).debug)
+                setStatus('✅ Debug reçu (aucune redirection)')
+                return
+            }
+
+            // Draft OK
+            if ('draft' in data) {
+                setDraft(data.draft)
+                sessionStorage.setItem('recipeDraft', JSON.stringify(data.draft))
+                router.push('/recipes/new?from=ocr')
+                return
+            }
+
+            setStatus('❌ Réponse inattendue du serveur.')
+            } catch (e: any) {
+                setStatus('❌ ' + (e?.message || 'Erreur inconnue'))
 } finally {
 setIsRunning(false)
 }
