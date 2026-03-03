@@ -502,6 +502,7 @@ font-weight: 800;
 
 /* Optionnel : sur mobile, le bouton passe dessous proprement */
 @media (max-width: 640px) {
+    .app-shell { padding: 14px; }
 .ingredients-recalc {
 width: 100%;
 min-width: 0;
