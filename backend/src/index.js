@@ -93,7 +93,7 @@ app.use('/auth', authRouter) // /auth/*
 app.use('/import', importUrlRouter) // POST /import/url
 app.use('/import', importOcrRouter) // POST /import/ocr
 app.use('/recipes', recipesRouter) // GET/POST /recipes
-app.use('/recipe-categories, recipeCategoriesRouter')
+app.use('/recipe-categories', recipeCategoriesRouter)
 app.use('/shopping-list', shoppingListRouter) // POST /shopping-list
 
 // 13) Root (petite page d’accueil JSON)
