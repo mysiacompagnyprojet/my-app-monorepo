@@ -113,7 +113,7 @@ function LoginCard({ nextPath }: { nextPath: string }) {
             <h2 className="text-lg font-extrabold app-title">Connexion</h2>
 
             <p className="mt-1 app-muted text-sm">
-                Accède à la bêta de Mysia par lien magique pour tester l’import de recettes et le calcul du budget.
+                Accède à la bêta de MySia par lien magique pour tester l’import de recettes et le calcul du budget.
             </p>
 
             <div className="mt-4 grid gap-2">

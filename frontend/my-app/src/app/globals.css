@@ -254,7 +254,7 @@ border: 1px solid var(--border);
 }
 
 /* =========================
-Branding global Mysia.app
+Branding global Mysia-app
 ========================= */
 
 .app-header {
@@ -293,10 +293,10 @@ box-shadow: 0 8px 22px rgba(60,40,20,0.06);
 display: flex;
 align-items: center;
 gap: 4px;
-font-family: var(--font-playfair);/*color: var(--text);  police mysia.app*/ 
+font-family: var(--font-playfair);/*color: var(--text);  police mysia-app*/ 
 color: #5B4D49;/*#5a3a22 var(--primary);*/ /* couleur  */
 font-weight: 650;
-font-size: 20px; /* taille de mysia.app*/
+font-size: 20px; /* taille de mysia-app*/
 line-height: 1;/*letter-spacing: 0.25px;*/
 opacity: 0.95;
 text-decoration: none;

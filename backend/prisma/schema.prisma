@@ -9,31 +9,33 @@ datasource db {
 }
 
 model User {
-  id                 String        @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  email              String        @unique
-  passwordHash       String        @default("")
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email              String           @unique
+  passwordHash       String           @default("")
   stripeCustomerId   String?
-  subscriptionEndsAt DateTime?     @db.Timestamptz(6)
-  subscriptionStatus String?       @default("trialing") @map("subscriptionstatus")
-  createdAt          DateTime      @default(now()) @map("createdat") @db.Timestamptz(6)
-  updatedAt          DateTime      @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+  subscriptionEndsAt DateTime?        @db.Timestamptz(6)
+  subscriptionStatus String?          @default("trialing") @map("subscriptionstatus")
+  createdAt          DateTime         @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt          DateTime         @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
   ImportLimit        ImportLimit?
   Recipes            Recipe[]
   RecipeDrafts       RecipeDraft[]
+  RecipeCategories   RecipeCategory[]
 }
 
 model Recipe {
-  id          String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String       @db.Uuid
+  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId      String             @db.Uuid
   title       String
-  servings    Int          @default(1)
-  steps       Json         @default("[]")
+  servings    Int                @default(1)
+  steps       Json               @default("[]")
   imageUrl    String?
-  notes       String?      @default("")
-  createdAt   DateTime     @default(now()) @map("createdat") @db.Timestamptz(6)
-  updatedAt   DateTime     @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+  notes       String?            @default("")
+  createdAt   DateTime           @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt   DateTime           @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
   ingredients Ingredient[]
-  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  categories  RecipeOnCategory[]
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@index([userId], map: "idx_recipe_user")
 }
@@ -114,3 +116,34 @@ model ingredients_base {
   id                                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 }
 
+model RecipeCategory {
+  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId   String  @db.Uuid
+  name     String
+  parentId String? @db.Uuid
+
+  createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  parent   RecipeCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children RecipeCategory[] @relation("CategoryTree")
+
+  recipes RecipeOnCategory[]
+
+  @@unique([userId, parentId, name], map: "uniq_recipecategory_user_parent_name")
+  @@index([userId], map: "idx_recipecategory_user")
+  @@index([parentId], map: "idx_recipecategory_parent")
+}
+
+model RecipeOnCategory {
+  recipeId   String @db.Uuid
+  categoryId String @db.Uuid
+
+  recipe   Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
+  category RecipeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([recipeId, categoryId])
+  @@index([categoryId], map: "idx_recipeoncategory_category")
+}

@@ -101,9 +101,18 @@ return Number.isFinite(total) ? total : 0
 router.get('/', needAuth, async (req, res) => {
 try {
 const { userId } = req.user
+const { cat } = req.query
 
 const recipesRaw = await prisma.recipe.findMany({
-where: { userId },
+where: { userId,
+  ...(cat && {
+    categories: {
+      some: {
+        categoryId: String(cat),
+      },
+    },
+  })
+},
 orderBy: { createdAt: 'desc' },
     select: {
         id: true,
@@ -498,6 +507,54 @@ return res.json({ ok: true, recipe })
 console.error('GET /recipes/:id error:', e)
 return res.status(500).json({ ok: false, error: 'internal error' })
 }
+})
+
+// ─────────────────────────────────────────────
+// POST /recipes/:id/categories
+// body: { categoryId: string }
+// ─────────────────────────────────────────────
+router.post('/:id/categories', needAuth, async (req, res) => {
+ try {
+   const { id } = req.params
+   const { userId } = req.user
+   const { categoryId } = req.body ?? {}
+
+   if (!categoryId) {
+     return res.status(400).json({ ok: false, error: 'categoryId requis' })
+   }
+
+   // Vérifie que la recette appartient au user
+   const recipe = await prisma.recipe.findFirst({
+     where: { id, userId },
+     select: { id: true },
+   })
+
+   if (!recipe) {
+     return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
+   }
+
+   // Vérifie que la catégorie appartient au user
+   const category = await prisma.recipeCategory.findFirst({
+     where: { id: categoryId, userId },
+     select: { id: true },
+   })
+
+   if (!category) {
+     return res.status(404).json({ ok: false, error: 'CATEGORY_NOT_FOUND' })
+   }
+
+   await prisma.recipeOnCategory.create({
+     data: {
+       recipeId: id,
+       categoryId,
+     },
+   })
+
+   return res.json({ ok: true })
+ } catch (e) {
+   console.error('POST /recipes/:id/categories error:', e)
+   return res.status(500).json({ ok: false, error: 'internal error' })
+ }
 })
 
 module.exports = router

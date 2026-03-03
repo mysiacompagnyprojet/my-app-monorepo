@@ -21,7 +21,7 @@ weight: ['400', '600', '700'],
 })
 
 export const metadata: Metadata = {
-title: 'MySia.app',
+title: 'MySia-app',
 description: 'Application de recettes et budget',
 }
 
@@ -40,7 +40,7 @@ return (
 
 {/* ✅ Branding discret en bas (comme sur la story) */}
 <footer className="app-footer app-container">
-<span className="app-footer-brand">MySia.app</span>
+<span className="app-footer-brand">MySia-app</span>
 </footer>
 </div>
 </body>
