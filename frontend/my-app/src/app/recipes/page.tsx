@@ -1,7 +1,7 @@
 // frontend/my-app/src/app/recipes/page.tsx
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
@@ -25,7 +25,17 @@ function formatEur(v: unknown): string | null {
  return n.toFixed(2).replace('.', ',')
 }
 
-export default function RecipesListPage() {
+// ✅ 1) wrapper Suspense obligatoire
+export default function RecipesPage() {
+ return (
+   <Suspense fallback={null}>
+     <RecipesInner />
+   </Suspense>
+ )
+}
+
+// ✅ 2) ici seulement on lit useSearchParams
+function RecipesInner() {
  const searchParams = useSearchParams()
  const cat = searchParams.get('cat') || ''
 
@@ -33,10 +43,9 @@ export default function RecipesListPage() {
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
 
- // ✅ (optionnel) label du filtre (pour l’instant on affiche l’id)
  const filterLabel = useMemo(() => {
    if (!cat) return null
-   return cat
+   return cat // (plus tard: label de catégorie)
  }, [cat])
 
  useEffect(() => {
@@ -121,7 +130,6 @@ export default function RecipesListPage() {
        </div>
      </section>
 
-     {/* ✅ Bandeau filtre actif */}
      {cat && (
        <section
          className="app-card p-4"
@@ -200,13 +208,8 @@ export default function RecipesListPage() {
                    <Link
                      href={`/recipes/${r.id}`}
                      className="block recipe-card-link"
-                     style={{
-                       padding: 16,
-                       textDecoration: 'none',
-                       color: 'inherit',
-                       cursor: 'pointer',
-                     }}
-                     >
+                     style={{ padding: 16, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
+                >
                      {r.imageUrl ? (
                        <img
                          src={r.imageUrl}
@@ -234,19 +237,12 @@ export default function RecipesListPage() {
                            justifyContent: 'center',
                            marginBottom: 10,
                          }}
-                        >
+                         >
                          <span className="app-muted text-sm">Recette importée</span>
                        </div>
                      )}
 
-                     <div
-                       className="font-semibold"
-                       style={{
-                         color: 'var(--primary)',
-                         marginBottom: 10,
-                         lineHeight: 1.25,
-                       }}
-                       >
+                     <div className="font-semibold" style={{ color: 'var(--primary)', marginBottom: 10, lineHeight: 1.25 }}>
                        {r.title}
                      </div>
 
