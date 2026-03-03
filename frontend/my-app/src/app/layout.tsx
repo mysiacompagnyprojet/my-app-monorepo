@@ -5,6 +5,7 @@ import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
 import AuthTokenBridge from './_auth-bridge'
 import HeaderClient from './header-client'
+import { Suspense } from 'react'
 
 // ✅ Police STRUCTURE / APPLICATION (global)
 const inter = Inter({
@@ -32,7 +33,9 @@ return (
 <AuthTokenBridge />
 
 {/* ✅ Header géré côté client (menu / compact selon la page) */}
-<HeaderClient />
+<Suspense fallback={null}>
+    <HeaderClient />
+</Suspense>
 
 {/* ✅ Shell global */}
 <div className="app-shell">
@@ -47,3 +50,4 @@ return (
 </html>
 )
 }
+
