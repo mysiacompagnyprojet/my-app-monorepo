@@ -157,6 +157,13 @@ img { max-width: 100%; height: auto; }
         width: 100%;
     }
 
+    .app-nav-actions{
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
     @media (max-width: 540px) {
         .app-header-nav{
             flex-wrap: nowrap;
