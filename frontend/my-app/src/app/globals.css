@@ -164,7 +164,7 @@ img { max-width: 100%; height: auto; }
         gap: 10px;
     }
 
-    @media (max-width: 540px) {
+    @media (max-width: 40px) {
         .app-header-nav{
             flex-wrap: nowrap;
             gap: 10px;
