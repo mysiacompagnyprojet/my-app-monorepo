@@ -1,5 +1,4 @@
 // frontend/my-app/src/app/layout.tsx
-
 import type { Metadata } from 'next'
 import { Inter, Playfair_Display } from 'next/font/google'
 import './globals.css'
@@ -7,54 +6,50 @@ import AuthTokenBridge from './_auth-bridge'
 import HeaderClient from './header-client'
 import { Suspense } from 'react'
 
-// ✅ Police STRUCTURE / APPLICATION (global)
 const inter = Inter({
-subsets: ['latin'],
-variable: '--font-inter',
-weight: ['400', '500', '600', '700'],
+ subsets: ['latin'],
+ variable: '--font-inter',
+ weight: ['400', '500', '600', '700'],
 })
 
-// ✅ Police TITRES recettes (à utiliser seulement quand tu veux)
 const playfair = Playfair_Display({
-subsets: ['latin'],
-variable: '--font-playfair',
-weight: ['400', '600', '700'],
+ subsets: ['latin'],
+ variable: '--font-playfair',
+ weight: ['400', '600', '700'],
 })
 
 export const metadata: Metadata = {
-title: 'MySia-app',
-description: 'Application de recettes et budget',
+ title: 'MySia-app',
+ description: 'Application de recettes et budget',
 }
 
 export const viewport = {
-    width: 'device-width',
-    initialScale: 1,
+ width: 'device-width',
+ initialScale: 1,
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-return (
-<html lang="fr">
-<body className={`${inter.variable} ${playfair.variable} ${inter.className} antialiased`}>
-<AuthTokenBridge />
+ return (
+   <html lang="fr">
+     <body className={`${inter.variable} ${playfair.variable} ${inter.className} antialiased`}>
+       <AuthTokenBridge />
 
-{/* ✅ Header géré côté client (menu / compact selon la page) */}
-<Suspense fallback={null}>
-    <HeaderClient />
-</Suspense>
+       {/* ✅ Shell global */}
+       <div className="app-shell">
+         {/* ✅ UN SEUL container commun : header + pages + footer */}
+         <div className="app-container">
+           <Suspense fallback={null}>
+             <HeaderClient />
+           </Suspense>
 
-{/* ✅ Shell global */}
-<div className="app-shell">
-    <div className="app-container">
-        {children}
-    </div>    
+           {children}
 
-    {/* ✅ Branding discret en bas (comme sur la story) */}
-    <footer className="app-footer app-container">
-        <span className="app-footer-brand">MySia-app</span>
-    </footer>
-</div>
-</body>
-</html>
-)
+           <footer className="app-footer">
+             <span className="app-footer-brand">MySia-app</span>
+           </footer>
+         </div>
+       </div>
+     </body>
+   </html>
+ )
 }
-

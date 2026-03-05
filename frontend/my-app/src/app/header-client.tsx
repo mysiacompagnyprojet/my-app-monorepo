@@ -133,7 +133,7 @@ export default function HeaderClient() {
 
  return (
    <>
-     <header className={`app-card app-container app-header ${isNewRecipe ? 'app-header--compact' : ''}`}>
+     <header className={`app-card app-header ${isNewRecipe ? 'app-header--compact' : ''}`}>
        <nav className="app-header-nav"> 
          <a href="/" className="app-brand">
            <Image src="/brand/logo.png" alt="MySia logo" width={56} height={56} priority />
