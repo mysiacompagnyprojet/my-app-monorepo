@@ -138,7 +138,7 @@ export default function HeaderClient() {
          <a href="/" className="app-brand flex items-center gap-2">
            <Image src="/brand/logo.png" alt="MySia logo" width={56} height={56} priority />
            <span>
-             MySia<span className="app-brand-suffix">.app</span>
+             MySia<span className="app-brand-suffix">-app</span>
            </span>
          </a>
 
