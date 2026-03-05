@@ -134,8 +134,8 @@ export default function HeaderClient() {
  return (
    <>
      <header className={`app-card app-container app-header ${isNewRecipe ? 'app-header--compact' : ''}`}>
-       <nav className="flex items-center gap-3" style={{ width: '100%', justifyContent: 'space-between' }}>
-         <a href="/" className="app-brand flex items-center gap-2">
+       <nav className="app-header-nav"> 
+         <a href="/" className="app-brand">
            <Image src="/brand/logo.png" alt="MySia logo" width={56} height={56} priority />
            <span>
              MySia<span className="app-brand-suffix">-app</span>
@@ -155,8 +155,8 @@ export default function HeaderClient() {
                📜 Mes recettes
              </button>
 
-             <a href="/import/ocr">📷 Import OCR</a>
-             <a href="/recipes/new">➕ Nouvelle recette</a>
+             <a className="app-btn app-btn-utility" href="/import/ocr">📷 Import OCR</a>
+             <a className="app-btn app-btn-utility" href="/recipes/new">➕ Nouvelle recette</a>
            </div>
          )}
        </nav>
