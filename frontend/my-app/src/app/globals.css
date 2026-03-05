@@ -186,11 +186,6 @@ img { max-width: 100%; height: auto; }
         white-space: nowrap;
     }
 
-    .app-header img {
-        width: 44px;
-        height: 44px;
-    }
-
     .app-brand{
         flex: 0 0 auto;
     }
