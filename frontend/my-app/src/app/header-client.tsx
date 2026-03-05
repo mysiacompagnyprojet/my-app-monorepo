@@ -143,7 +143,7 @@ export default function HeaderClient() {
          </a>
 
          {!isNewRecipe && (
-           <div className="flex items-center gap-3">
+           <div className="app-nav-actions">
              <button
                type="button"
                className="app-btn app-btn-utility"

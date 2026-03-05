@@ -101,7 +101,7 @@ function RecipesInner() {
  }, [cat])
 
  return (
-   <main className="app-container" style={{ margin: '24px auto' }}>
+   <main style={{ marginTop: 24 }}>
      <section className="app-card p-6">
        <div className="flex flex-wrap items-center justify-between gap-3">
          <div>

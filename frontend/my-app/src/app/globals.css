@@ -159,7 +159,7 @@ margin: 0 auto;
 padding-left: 16px;
 padding-right: 16px;
 }
-@media (min-width: 98px) {
+@media (min-width: 980px) {
     .app-container{
         padding-left: 0;
         padding-right: 0;
@@ -320,23 +320,42 @@ font-feature-settings: "ss01" 1;
 
 @media (max-width: 640px) {
     .app-header nav{
-        flex-wrap: wrap;
-        gap: 10px;
+        flex-wrap: nowrap;
+        gap: 8px;
         justify-content: space-between;
+        align-items: center;
     }
-    .app-brand{
-        font-size: 18px;
+     .app-brand{
+        flex: 0 0 auto;
     }
+
+    .app-header .app-nav-actions{
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: nowrap;
+
+        flex: 1 1 auto;
+        min-width: 0;
+
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        justify-content: flex-end;
+    }
+
+    .app-header .app-nav-actions > a,
+    .app-header .app-nav-actions > button{
+        flex: 0 0 auto;
+        font-size: 13px;
+        padding: 8px 10px;
+        white-space: nowrap;
+    }
+
     .app-header img {
         width: 44px;
         height: 44px;
     }
-    .app-header a,
-    .app-header button{
-        font-size: 14px;
-        padding: 10px 12px;
-        white-space: nowrap;
-    }
+    
 }
 
 .app-brand-suffix {
