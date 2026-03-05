@@ -8,6 +8,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const { prisma } = require('../lib/prisma');
+const { getPricingPolicy, incrementUsage, LIMIT_KEYS } = require('../services/importLimits');
 //stringUtils
 const { normSpaces, stripDiacritics, stripBulletPrefix, normalizeLoose, normalizeTitleCandidate, sanitizePickedTitle } = require('../utils/stringUtils');
 //ocrTitle
@@ -816,6 +818,37 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     draft.ingredients = priced.ingredients; 
     draft.totalCostEur = priced.totalCostEur; 
 
+ // ─────────────────────────────────────────────
+   // ✅ Bêta: limite pricing (10 recettes) dès l’aperçu OCR
+   // ─────────────────────────────────────────────
+   let pricingPolicy = null
+   try {
+     const userId = req.user?.userId || req.userId
+
+     if (userId) {
+       const u = await prisma.user.findUnique({
+         where: { id: userId },
+         select: { subscriptionStatus: true },
+       })
+
+       const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free'
+
+       // policy AVANT incrément
+       const before = await getPricingPolicy({ userId, plan })
+
+       // si free et pas encore flouté -> on consomme 1 vue pricing
+       if (plan === 'free' && before.blurPrices === false) {
+         await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1)
+       }
+
+       // policy APRÈS incrément (pour compteur/blur exact)
+       pricingPolicy = await getPricingPolicy({ userId, plan })
+     }
+   } catch (e) {
+     // ne bloque jamais l’OCR si la limite plante
+     pricingPolicy = null
+   }
+
     //console log a supprimer
    dlog('[TITLE][PIPELINE]', {
       guessedFromLines,
@@ -874,7 +907,46 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       });
     }
     
-    return res.json({ ok: true, draft });
+    // --- PAYWALL PRICING (Free: 10 recettes visibles) ---
+
+// 1) déterminer le plan
+// IMPORTANT: selon ton auth middleware, adapte la façon de lire l'userId.
+// Le plus probable chez toi : req.user.id
+// Important: flou à partir de la 11e => on calcule blur AVANT incrément.
+
+const userId = req.userId || req.user?.userId;
+
+if (!userId) {
+ return res.json({ ok: true, draft, pricingPolicy });
+}
+
+// Plan premium si subscriptionStatus === 'active'
+const u = await prisma.user.findUnique({
+ where: { id: userId },
+ select: { subscriptionStatus: true },
+});
+const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+
+// Policy AVANT incrément (détermine le blur pour cette réponse)
+const policy = await getPricingPolicy({ userId, plan });
+const blurPrices = policy.blurPrices;
+
+// Si c'est visible (donc encore dans les 10), on consomme 1 crédit
+let usage = policy;
+if (plan !== 'premium' && !blurPrices) {
+ usage = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1);
+}
+
+return res.json({
+ ok: true,
+ draft,
+ limits: {
+   blurPrices, // basé sur l'état AVANT incrément => flou à partir de la 11e
+   used: usage.used,
+   limit: usage.limit,
+   remaining: Math.max(0, usage.limit - usage.used),
+ },
+});
   } catch (e) {
     console.error(e);
     return res.status(500).json({ ok: false, error: 'OCR_FAILED', message: e?.message || 'Erreur OCR' });

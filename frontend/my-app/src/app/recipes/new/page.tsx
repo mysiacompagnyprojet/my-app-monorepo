@@ -8,6 +8,7 @@ import { apiFetch } from 'src/lib/api'
 import type { OcrDraft, IngredientLine } from 'src/types/recipe'
 import { IngredientPicker } from '@/components/IngredientPicker'
 import Cropper from 'react-easy-crop'
+import Price from '@/components/Price'
 
 type Line = IngredientLine & {
  unitPriceBuy?: number | null
@@ -78,8 +79,8 @@ function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | n
  const u0 = String(uRaw || '').trim().toLowerCase()
  if (!u0) return null
 
- if (u0 === 'càs' || u0 === 'cas' || u0 === 'cs' || u0.includes('cuill') && u0.includes('soupe')) return 'tbsp'
- if (u0 === 'càc' || u0 === 'cac' || u0 === 'cc' || u0.includes('cuill') && u0.includes('cafe')) return 'tsp'
+ if ((u0 === 'càs' || u0 === 'cas' || u0 === 'cs' || (u0.includes('cuill') && u0.includes('soupe')))) return 'tbsp'
+ if ((u0 === 'càc' || u0 === 'cac' || u0 === 'cc' || (u0.includes('cuill') && u0.includes('cafe')))) return 'tsp'
 
  if (u0 === 'g' || u0 === 'gr' || u0 === 'gramme' || u0 === 'grammes') return 'g'
  if (u0 === 'kg' || u0 === 'kilo' || u0 === 'kilos') return 'g'
@@ -89,7 +90,7 @@ function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | n
  if (u0 === 'cl') return 'ml'
  if (u0 === 'dl') return 'ml'
 
- if (u0  === 'piece' || u0 === 'pièce' || u0 === 'pièces' || u0 === 'pcs') return 'piece'
+ if (u0 === 'piece' || u0 === 'pièce' || u0 === 'pièces' || u0 === 'pcs') return 'piece'
  return null
 }
 
@@ -119,10 +120,7 @@ function toBaseQtyFront(qty: number, unitRaw: string): { qty: number; unit: 'g' 
 }
 
 function computeCostCourses(ing: Line): number | null {
- const buyPrice = 
-  typeof ing.buyPriceEur === 'number' 
-    ? ing.buyPriceEur
-      : null
+ const buyPrice = typeof ing.buyPriceEur === 'number' ? ing.buyPriceEur : null
 
  const refQty = typeof ing.buyRefQty === 'number' ? ing.buyRefQty : null
  const refUnit = typeof ing.buyRefUnit === 'string' ? ing.buyRefUnit : null
@@ -204,12 +202,6 @@ function formatQtyForInput(n: number, quantityRaw?: string): string {
  return String(n)
 }
 
-function fmtEur(v: any): string {
- const n = typeof v === 'string' ? Number(String(v).replace(',', '.')) : Number(v)
- if (!Number.isFinite(n)) return '—'
- return `${n.toFixed(2)} €`
-}
-
 // Nettoyage nom ingrédient pour lookup (muscade râpée (selon...) => muscade)
 function normalizeIngredientForLookup(raw: string): string {
  let s = String(raw || '').trim()
@@ -219,7 +211,7 @@ function normalizeIngredientForLookup(raw: string): string {
  s = s.replace(/\bselon\b.*$/gi, ' ') // retire "selon ..."
  s = s.replace(/[,;:].*$/g, ' ') // retire après virgule/;/: (souvent commentaires)
  s = s.replace(
-   /\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|ciselé(e)?|décortiqué(e)?)\b/gi, //enlever car ça bloqué crème frîche dans les ingrédient |fraîche
+   /\b(râpée?|haché(e)?|émincé(e)?|moulu(e)?|en\s+poudre|frais|ciselé(e)?|décortiqué(e)?)\b/gi,
    ' '
  )
 
@@ -234,7 +226,6 @@ function isNotFoundLine(ing: Line): boolean {
  if (ing.ingredientBaseId) return false
 
  if (ing.priceMatched === false) return true
- //if (!(ing as any).id) return true
 
  const note = String(ing.note || '').toLowerCase()
  if (note.includes('non trouvé') || note.includes('introuvable')) return true
@@ -308,8 +299,6 @@ function NewRecipeInner() {
  const router = useRouter()
  const search = useSearchParams()
 
- //const [draft, setDraft] = useState<OcrDraft | null>(null)
-
  const [title, setTitle] = useState('')
  const [servings, setServings] = useState(1)
  const [imageUrl, setImageUrl] = useState('')
@@ -321,6 +310,14 @@ function NewRecipeInner() {
  const [status, setStatus] = useState<string>('')
 
  const [isRepricing, setIsRepricing] = useState(false)
+
+ // ✅ NEW: floutage selon policy locale
+ const [blurPrices, setBlurPrices] = useState(false)
+ useEffect(() => {
+   try {
+     setBlurPrices(localStorage.getItem('pricing_blur') === '1')
+   } catch {}
+ }, [])
 
  // Crop UI
  const [isCropping, setIsCropping] = useState(false)
@@ -350,10 +347,10 @@ function NewRecipeInner() {
 
  const totalProducts = useMemo(() => {
    return ingredients.reduce((acc, ing) => {
-    const v = computeCostCourses(ing)
-    return acc + (typeof v === 'number' ? v : 0)
+     const v = computeCostCourses(ing)
+     return acc + (typeof v === 'number' ? v : 0)
    }, 0)
-  }, [ingredients])
+ }, [ingredients])
 
  // 1) Pré-remplissage depuis OCR
  useEffect(() => {
@@ -364,7 +361,6 @@ function NewRecipeInner() {
 
    try {
      const d = JSON.parse(raw) as OcrDraft
-     //setDraft(d)
 
      setTitle(String((d as any).title || ''))
      setServings(Number((d as any).servings || 1) || 1)
@@ -492,15 +488,15 @@ function NewRecipeInner() {
 
  function setIngredient(idx: number, patch: Partial<Line>) {
    setIngredients((prev) => {
-      const copy = [...prev]
-      copy[idx] = { 
-        ...copy[idx], 
-        ...patch, 
-        buyRecalced: false,
-      }
+     const copy = [...prev]
+     copy[idx] = {
+       ...copy[idx],
+       ...patch,
+       buyRecalced: false,
+     }
      return copy
-    })
-  }
+   })
+ }
 
  function setQtyInput(idx: number, raw: string) {
    setQtyInputs((prev) => {
@@ -561,11 +557,11 @@ function NewRecipeInner() {
          density_g_per_ml: typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
          mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
 
-
          note: typeof e.note === 'string' ? e.note : undefined,
        } as any
      }
-     console.log("FRONT ENRICHED", enriched)
+
+     console.log('FRONT ENRICHED', enriched)
      return copy
    })
  }
@@ -715,8 +711,7 @@ function NewRecipeInner() {
    }
  }
 
- const statusKind =
-   status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
+ const statusKind = status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
 
  const smallXBtnStyle: React.CSSProperties = {
    width: 30,
@@ -751,14 +746,21 @@ function NewRecipeInner() {
          placeholder="Titre de la recette"
          className="recipe-title editable-title"
          style={{
-          background: 'transparent',
-          border: 'none',
-          outline: 'none',
-          width: '100%',
+           background: 'transparent',
+           border: 'none',
+           outline: 'none',
+           width: '100%',
          }}
        />
 
        <p className="recipe-color-1">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
+
+       {/* ✅ NEW */}
+       {blurPrices && (
+         <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
+           ⚠️ Limite atteinte : les prix sont floutés.
+         </p>
+       )}
      </section>
 
      {trash.trim() && (
@@ -767,7 +769,9 @@ function NewRecipeInner() {
            <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
              🗑️ Corbeille (texte non-recette détecté)
            </summary>
-           <p className="mt-2 text-sm app-muted">Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.</p>
+           <p className="mt-2 text-sm app-muted">
+             Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+           </p>
            <textarea
              value={trash}
              onChange={(e) => setTrash(e.target.value)}
@@ -859,7 +863,7 @@ function NewRecipeInner() {
                <div
                  style={{
                    display: 'grid',
-                   gap: 16,
+                   gap: 10,
                  }}
                  >
                  <img
@@ -869,7 +873,7 @@ function NewRecipeInner() {
                      width: '100%',
                      borderRadius: 14,
                      objectFit: 'cover',
-                     maxHeight: 260,
+                     maxHeight: 250,
                    }}
                  />
 
@@ -911,26 +915,34 @@ function NewRecipeInner() {
                    +
                  </div>
 
-                 <div className="recipe-color-2" style={{ fontWeight: 700, marginBottom: 6 }}>Ajouter une image</div>
+                 <div className="recipe-color-2" style={{ fontWeight: 700, marginBottom: 6 }}>
+                   Ajouter une image
+                 </div>
 
-                 <div className="recipe-color-1" style={{ fontSize: 13, opacity: 0.6, marginBottom: 16 }}>Clique sur le + pour choisir une photo</div>
+                 <div className="recipe-color-1" style={{ fontSize: 13, opacity: 0.6, marginBottom: 16 }}>
+                   Clique sur le + pour choisir une photo
+                 </div>
                </>
              )}
            </label>
 
-           {/* ✅ MODIF: on déplace les 2 coûts ICI, sous “Ajouter une image” */}
+           {/* ✅ MODIF: coûts + flou */}
            <div className="cost-summary" style={{ justifyContent: 'flex-start' }}>
              <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
                <div className="cost-pill-row cost-pill-row-recipe">
                  <span className="cost-pill-label recipe-color-2">Coût recette</span>
-                 <span className="amount">≈ {totalCost.toFixed(2)} €</span>
+                 <span className="amount">
+                   ≈ <Price value={totalCost} blur={blurPrices} />
+                 </span>
                </div>
              </div>
 
              <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
                <div className="cost-pill-row cost-pill-row-courses">
                  <span className="cost-pill-label recipe-color-2">Coût courses</span>
-                 <span className="amount">≈ {totalProducts.toFixed(2)} €</span>
+                 <span className="amount">
+                   ≈ <Price value={totalProducts} blur={blurPrices} />
+                 </span>
                </div>
              </div>
            </div>
@@ -940,10 +952,11 @@ function NewRecipeInner() {
 
      {/* Ingrédients */}
      <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
-       {/* Bandeau du haut : titre (gauche) + action (droite) */}
        <div className="ingredients-top">
          <div className="ingredients-head grid gap-1 text-sm font-semibold" style={{ marginBottom: 0 }}>
-           <h2 className="recipe-color-2" style={sectionTitleStyle}>Ingrédients</h2>
+           <h2 className="recipe-color-2" style={sectionTitleStyle}>
+             Ingrédients
+           </h2>
            <p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
          </div>
 
@@ -951,42 +964,39 @@ function NewRecipeInner() {
            onClick={() => recalcPrices({ silent: false })}
            disabled={isRepricing}
            className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
-           type="button">
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <span
-                aria-hidden="true"
-                className={isRepricing ? 'icon-spin' : ''}
-                style={{ 
-                  width: 18, 
-                  height: 18, 
-                  display: 'inline-flex', 
-                  alignItems: 'center', 
-                  justifyContent: 'center' 
-                }}
-              >
-                <svg 
-                  viewBox="0 0 24 24" 
-                  width="18" 
-                  height="18" 
-                  fill="none" 
-                  stroke="#68650A" 
-                  strokeWidth="2"
-                >
-                  <rect x="6" y="3" width="12" height="18" rx="2"/>
-                    <path d="M8 7h8" />
-                    <path d="M9 11h1M12 11h1M15 11h1" />
-                    <path d="M9 14h1M12 14h1M15 14h1" />
-                    <path d="M9 17h1M12 17h1M15 17h1" />
-                </svg>
-              </span>
-              <span>{isRepricing ? 'Recalcul…' : 'Recalculer les prix'}</span>
-            </span>
+           type="button"
+             >
+           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+             <span
+               aria-hidden="true"
+               className={isRepricing ? 'icon-spin' : ''}
+               style={{
+                 width: 18,
+                 height: 18,
+                 display: 'inline-flex',
+                 alignItems: 'center',
+                 justifyContent: 'center',
+               }}
+               >
+               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#68650A" strokeWidth="2">
+                 <rect x="6" y="3" width="12" height="18" rx="2" />
+                 <path d="M8 7h8" />
+                 <path d="M9 11h1M12 11h1M15 11h1" />
+                 <path d="M9 14h1M12 14h1M15 14h1" />
+                 <path d="M9 17h1M12 17h1M15 17h1" />
+               </svg>
+             </span>
+             <span>{isRepricing ? 'Recalcul…' : 'Recalculer les prix'}</span>
+           </span>
          </button>
        </div>
 
        <div className="mt-4 grid gap-3">
          {ingredients.map((ing, idx) => {
-           const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'   
+           const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
+           const costCourses = isBuyPriceReady ? computeCostCourses(ing) : null
+           const costRecipe = typeof (ing as any).costEur === 'number' ? ((ing as any).costEur as number) : null
+
            return (
              <div
                key={idx}
@@ -1034,15 +1044,17 @@ function NewRecipeInner() {
                    <IngredientPicker
                      querySeed={normalizeIngredientForLookup(ing.name)}
                      onPick={(item) => {
-                       setIngredient(idx, {
-                         name: item.nom,
-                         ingredientBaseId: item.id,
-                         id: item.id as any,
-                         //priceMatched: true,
-                         note: undefined,
-                       } as any)
+                       setIngredient(
+                         idx,
+                         {
+                           name: item.nom,
+                           ingredientBaseId: item.id,
+                           id: item.id as any,
+                           note: undefined,
+                         } as any
+                       )
                        setTimeout(() => {
-                        recalcPrices({ silent: true})
+                         recalcPrices({ silent: true })
                        }, 0)
                      }}
                      buttonLabel="Voir les produits"
@@ -1073,8 +1085,8 @@ function NewRecipeInner() {
                    style={{
                      minWidth: 0,
                      display: 'flex',
-                     justifyContent: 'center',//'flex-end'
-                     gap: 6, //50
+                     justifyContent: 'center',
+                     gap: 6,
                      alignItems: 'center',
                      fontSize: 13,
                      fontWeight: 800,
@@ -1082,15 +1094,18 @@ function NewRecipeInner() {
                    >
                    <div style={{ textAlign: 'center' }}>
                      <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût recette</div>
-                     <div className='cost-pill-row-recipe' style={{ fontSize: 13, fontWeight: 800 }}>
-                       {fmtEur(typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null)}
+                     <div className="cost-pill-row-recipe" style={{ fontSize: 13, fontWeight: 800 }}>
+                       <Price value={costRecipe} blur={blurPrices} />
                      </div>
                    </div>
 
                    <div style={{ textAlign: 'center' }}>
                      <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût courses</div>
-                     <div className='cost-pill-row-courses' style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}>
-                       {isBuyPriceReady ? fmtEur(computeCostCourses(ing)) : '—'}
+                     <div
+                       className="cost-pill-row-courses"
+                       style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}
+                    >
+                       <Price value={costCourses} blur={blurPrices} />
                      </div>
                    </div>
                  </div>
@@ -1105,6 +1120,7 @@ function NewRecipeInner() {
                    ✕
                  </button>
                </div>
+
                {isNotFoundLine(ing) && (
                  <div
                    style={{
@@ -1118,7 +1134,7 @@ function NewRecipeInner() {
                      padding: '6px 10px',
                    }}
                    >
-                   ⚠️ Ingrédient non trouvé — prix mis à 0,00 € (tu peux quand même enregistrer).
+                   ⚠️ Ingrédient non trouvé — tu peux quand même enregistrer.
                  </div>
                )}
              </div>
@@ -1148,7 +1164,7 @@ function NewRecipeInner() {
          {steps.map((s, idx) => (
            <div
              key={idx}
-             className="p-3"//app-card
+             className="p-3"
              style={{
                boxShadow: 'none',
                background: 'rgba(255, 255, 255, 0.95)',
@@ -1162,51 +1178,49 @@ function NewRecipeInner() {
                    display: 'flex',
                    alignItems: 'center',
                    gap: 15,
-                   fontSize: 15,//11
+                   fontSize: 15,
                    fontWeight: 700,
-                   color: 'var(--primary)',//'rgba(117, 99, 94, 0.7)'
+                   color: 'var(--primary)',
                    letterSpacing: 0.2,
-                   //background: 'rgba(120, 120, 120, 0.12)',
-                   //borderRadius: 1,
-                   //padding: '4px 8px',
                  }}
                  >
-                  <div
-                    style={{
-                      width: 32,
-                      height:32,
-                      borderRadius: '50%',
-                      background: 'rgba(176, 188, 140, 0.4)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 14,
-                      fontWeight: '700',
-                      color: '#75635E',
-                      lineHeight: 1,
-                    }}
+                 <div
+                   style={{
+                     width: 32,
+                     height: 32,
+                     borderRadius: '50%',
+                     background: 'rgba(176, 188, 140, 0.4)',
+                     display: 'flex',
+                     alignItems: 'center',
+                     justifyContent: 'center',
+                     fontSize: 14,
+                     fontWeight: '700',
+                     color: '#75635E',
+                     lineHeight: 1,
+                   }}
                    >
-                    {idx + 1}
-                  </div> 
-                <span
-                  style={{
-                    fontSize: 15,
-                    fontWeight: 700,
-                    color: 'var(--primary)',
-                    letterSpacing: 0.2,
-                    lineHeight: 1,
-                  }}
-                >
-                 Étape
-               </span>
-              </div>
+                   {idx + 1}
+                 </div>
+                 <span
+                   style={{
+                     fontSize: 15,
+                     fontWeight: 700,
+                     color: 'var(--primary)',
+                     letterSpacing: 0.2,
+                     lineHeight: 1,
+                   }}
+                   >
+                   Étape
+                 </span>
+               </div>
+
                <button
                  type="button"
                  onClick={() => removeStep(idx)}
                  className="app-btn app-btn-utility"
                  style={smallXBtnStyle}
                  title="Supprimer cette étape"
-                 >
+                   >
                  ✕
                </button>
              </div>
@@ -1233,25 +1247,33 @@ function NewRecipeInner() {
            </div>
          ))}
 
-         <button onClick={() => setSteps((p) => [...p, ''])} className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2" style={{ width: 220 }} type="button">
+         <button
+           onClick={() => setSteps((p) => [...p, ''])}
+           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
+           style={{ width: 220 }}
+           type="button"
+         >
            + Ajouter une étape
          </button>
        </div>
      </section>
 
      {/* Save + status */}
-     <section className="app-card p-6" style={{ marginTop: 16}}>
+     <section className="app-card p-6" style={{ marginTop: 16 }}>
        <div className="flex flex-wrap gap-3 items-center justify-center">
-         <button onClick={save} className="app-btn-sage app-btn-lg" 
-            style={{ 
-              display: 'flex', 
-              borderRadius: 14,
-              justifyContent: 'center',
-              alignItems: 'center',
-              gap: 16,
-              flexWrap: 'wrap',
-              }} 
-            type="button">
+         <button
+           onClick={save}
+           className="app-btn-sage app-btn-lg"
+           style={{
+             display: 'flex',
+             borderRadius: 14,
+             justifyContent: 'center',
+             alignItems: 'center',
+             gap: 16,
+             flexWrap: 'wrap',
+           }}
+           type="button"
+           >
            Enregistrer la recette
          </button>
 
@@ -1264,14 +1286,14 @@ function NewRecipeInner() {
                  statusKind === 'success'
                    ? 'rgba(168,184,161,0.7)'
                    : statusKind === 'error'
-                     ? 'rgba(176,0,32,0.25)'
-                     : 'var(--border)',
+                   ? 'rgba(176,0,32,0.25)'
+                   : 'var(--border)',
                background:
                  statusKind === 'success'
                    ? 'rgba(168,184,161,0.15)'
                    : statusKind === 'error'
-                     ? 'rgba(176,0,32,0.06)'
-                     : 'rgba(255,255,255,0.7)',
+                   ? 'rgba(176,0,32,0.06)'
+                   : 'rgba(255,255,255,0.7)',
                color: statusKind === 'error' ? '#b00020' : 'rgba(43,43,43,0.95)',
                fontWeight: 800,
              }}
@@ -1348,7 +1370,7 @@ function NewRecipeInner() {
 
              <div style={{ fontSize: 12, opacity: 0.7, minWidth: 42, textAlign: 'right' }}>{zoom.toFixed(2)}</div>
            </div>
-             
+
            <div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
              <button
                type="button"

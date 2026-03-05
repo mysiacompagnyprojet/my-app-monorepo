@@ -1,377 +1,411 @@
 // frontend/my-app/src/app/recipes/[id]/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { RecipeImagePreview } from '@/components/RecipeImagePreview'
+import Price from '@/components/Price'
 
 // ✅ Police UI / structure
 const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600', '700'],
+ subsets: ['latin'],
+ weight: ['400', '500', '600', '700'],
 })
 
 // ✅ Police titres recettes uniquement
 const playfair = Playfair_Display({
-  subsets: ['latin'],
-  weight: ['400', '600', '700'],
+ subsets: ['latin'],
+ weight: ['400', '600', '700'],
 })
 
 type Recipe = {
-  id: string
-  title: string
-  servings: number
-  imageUrl: string | null
-  createdAt: string
-  notes?: string | null
-  steps?: string[] | null
-  ingredients?: Array<{
-    name: string
-    quantity: number
-    unit: string
-    costRecipe?: number | null
-    // ⚠️ peut ne pas exister selon ce que renvoie le backend
-    buyPriceEur?: number | null
-  }>
+ id: string
+ title: string
+ servings: number
+ imageUrl: string | null
+ createdAt: string
+ notes?: string | null
+ steps?: string[] | null
+ ingredients?: Array<{
+   name: string
+   quantity: number
+   unit: string
+   costRecipe?: number | null
+   // ⚠️ peut ne pas exister selon ce que renvoie le backend
+   buyPriceEur?: number | null
+ }>
+}
+
+type PricingPolicyResponse = {
+ ok: boolean
+ policy?: {
+   blurPrices: boolean
+   used: number
+   limit: number
+   remaining: number
+ }
 }
 
 export default function RecipeDetailPage() {
-  const router = useRouter()
-  const params = useParams()
-  const id = String((params as any)?.id || '')
+ const router = useRouter()
+ const params = useParams()
+ const id = String((params as any)?.id || '')
 
-  const [recipe, setRecipe] = useState<Recipe | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [err, setErr] = useState<string | null>(null)
+ const [recipe, setRecipe] = useState<Recipe | null>(null)
+ const [loading, setLoading] = useState(true)
+ const [err, setErr] = useState<string | null>(null)
 
-  // ─────────────────────────────────────────────
-  // FETCH RECETTE
-  // ─────────────────────────────────────────────
-  useEffect(() => {
-    if (!id) return
+ // ✅ pricing policy (pour flouter quand limite dépassée)
+ const [pricingPolicy, setPricingPolicy] = useState<{
+   blurPrices: boolean
+   used: number
+   limit: number
+   remaining: number
+ } | null>(null)
 
-    ;(async () => {
-      try {
-        setLoading(true)
-        setErr(null)
+ // ─────────────────────────────────────────────
+ // FETCH RECETTE
+ // ─────────────────────────────────────────────
+ useEffect(() => {
+   if (!id) return
 
-        const json = await apiFetch<{ ok?: boolean; recipe?: Recipe }>(
-          `/recipes/${encodeURIComponent(id)}`,
-          { method: 'GET' }
-        )
+   ;(async () => {
+     try {
+       setLoading(true)
+       setErr(null)
 
-        const rec = (json as any)?.recipe ?? json
-        if (!rec?.id) throw new Error('Réponse backend invalide (recipe manquante)')
+       const json = await apiFetch<{ ok?: boolean; recipe?: Recipe }>(
+         `/recipes/${encodeURIComponent(id)}`,
+         { method: 'GET' }
+       )
 
-        setRecipe(rec)
-      } catch (e: any) {
-        setErr(e?.message || String(e))
-      } finally {
-        setLoading(false)
-      }
-    })()
-  }, [id])
+       const rec = (json as any)?.recipe ?? json
+       if (!rec?.id) throw new Error('Réponse backend invalide (recipe manquante)')
 
-  // ─────────────────────────────────────────────
-  // ÉTATS BLOQUANTS
-  // ─────────────────────────────────────────────
-  if (loading) {
-    return (
-      <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
-        <section className="app-card p-5">
-          <p className="app-muted">Chargement…</p>
-        </section>
-      </main>
-    )
-  }
+       setRecipe(rec)
+     } catch (e: any) {
+       setErr(e?.message || String(e))
+     } finally {
+       setLoading(false)
+     }
+   })()
+ }, [id])
 
-  if (err) {
-    return (
-      <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
-        <section
-          className="app-card p-5"
-          style={{
-            borderColor: 'rgba(176,0,32,0.25)',
-            background: 'rgba(176,0,32,0.06)',
-          }}
-        >
-          <p style={{ color: '#b00020', fontWeight: 800 }}>{err}</p>
+ // ─────────────────────────────────────────────
+ // FETCH PRICING POLICY (blur)
+ // ─────────────────────────────────────────────
+ useEffect(() => {
+   // pas bloquant : si ça échoue, on n’empêche pas l’affichage
+   ;(async () => {
+     try {
+       const json = await apiFetch<PricingPolicyResponse>(`/limits/pricing-policy`, {
+         method: 'GET',
+       })
+       const pol = (json as any)?.policy
+       if (pol && typeof pol.blurPrices === 'boolean') setPricingPolicy(pol)
+     } catch {
+       // ignore
+     }
+   })()
+ }, [])
 
-          <p className="app-muted" style={{ marginTop: 10 }}>
-            Erreur 401 : non connectée (token manquant / expiré)
-            <br />
-            Erreur 404 : recette inexistante ou pas à toi
-          </p>
+ const blurPrices = Boolean(pricingPolicy?.blurPrices)
 
-          <button
-            className="app-btn-secondary"
-            style={{ marginTop: 12 }}
-            onClick={() => router.push('/recipes')}
-          >
-            ← Retour
-          </button>
-        </section>
-      </main>
-    )
-  }
+ // ─────────────────────────────────────────────
+ // ÉTATS BLOQUANTS
+ // ─────────────────────────────────────────────
+ if (loading) {
+   return (
+     <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
+       <section className="app-card p-5">
+         <p className="app-muted">Chargement…</p>
+       </section>
+     </main>
+   )
+ }
 
-  if (!recipe) {
-    return (
-      <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
-        <section className="app-card p-5">
-          <p className="app-muted">Aucune recette trouvée</p>
-        </section>
-      </main>
-    )
-  }
+ if (err) {
+   return (
+     <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
+       <section
+         className="app-card p-5"
+         style={{
+           borderColor: 'rgba(176,0,32,0.25)',
+           background: 'rgba(176,0,32,0.06)',
+         }}
+         >
+         <p style={{ color: '#b00020', fontWeight: 800 }}>{err}</p>
 
-  // ─────────────────────────────────────────────
-  // Helpers (UI)
-  // ─────────────────────────────────────────────
-  const formatEuro = (n: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n)
+         <p className="app-muted" style={{ marginTop: 10 }}>
+           Erreur 401 : non connectée (token manquant / expiré)
+           <br />
+           Erreur 404 : recette inexistante ou pas à toi
+         </p>
 
-  const formatQty = (q: number) => {
-    const s = Number.isFinite(q) ? String(q) : ''
-    return s.replace('.', ',')
-  }
+         <button
+           className="app-btn-secondary"
+           style={{ marginTop: 12 }}
+           onClick={() => router.push('/recipes')}
+         >
+           ← Retour
+         </button>
+       </section>
+     </main>
+   )
+ }
 
-  const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
+ if (!recipe) {
+   return (
+     <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
+       <section className="app-card p-5">
+         <p className="app-muted">Aucune recette trouvée</p>
+       </section>
+     </main>
+   )
+ }
 
-  // ─────────────────────────────────────────────
-  // Totaux ingrédients
-  // ─────────────────────────────────────────────
-  const ingredients = recipe.ingredients ?? []
+ // ─────────────────────────────────────────────
+ // Helpers (UI)
+ // ─────────────────────────────────────────────
+ const formatQty = (q: number) => {
+   const s = Number.isFinite(q) ? String(q) : ''
+   return s.replace('.', ',')
+ }
 
-  const totalRecipeCost = ingredients.reduce((sum, ing: any) => {
-    return sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0)
-  }, 0)
+ const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
 
-  const totalProductsCost = ingredients.reduce((sum, ing: any) => {
-    return sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0)
-  }, 0)
+ // ─────────────────────────────────────────────
+ // Totaux ingrédients
+ // ─────────────────────────────────────────────
+ const ingredients = recipe.ingredients ?? []
 
-  const missingBuyCount = ingredients.filter((ing: any) => !isNum(ing.buyPriceEur)).length
+ // ⚠️ Totaux floutés doivent rester cohérents : on calcule quand même,
+ // mais on affiche via <Price blur />
+ const totalRecipeCost = useMemo(() => {
+   return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0), 0)
+ }, [ingredients])
 
-  // ─────────────────────────────────────────────
-  // AFFICHAGE NORMAL
-  // ─────────────────────────────────────────────
-  return (
-    <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
-      {/* Header */}
-      <section className="app-card p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-extrabold">📄 Détail recette</h1>
-            <p className="app-muted">ID : {recipe.id}</p>
-          </div>
+ const totalProductsCost = useMemo(() => {
+   return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0), 0)
+ }, [ingredients])
 
-          <button className="app-btn-secondary" onClick={() => router.push('/recipes')}>
-            ← Retour
-          </button>
-        </div>
-      </section>
+ const missingBuyCount = ingredients.filter((ing: any) => !isNum(ing.buyPriceEur)).length
 
-      {/* Image + titre */}
-      <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <RecipeImagePreview imageUrl={recipe.imageUrl}/>
+ // ─────────────────────────────────────────────
+ // AFFICHAGE NORMAL
+ // ─────────────────────────────────────────────
+ return (
+   <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
+     {/* Header */}
+     <section className="app-card p-6">
+       <div className="flex flex-wrap items-center justify-between gap-3">
+         <div>
+           <h1 className="text-2xl font-extrabold">📄 Détail recette</h1>
+           <p className="app-muted">ID : {recipe.id}</p>
+         </div>
 
-        {/* ✅ Titre recette en Playfair Display */}
-        <h2
-          className={playfair.className}
-          style={{
-            fontSize: 30,
-            fontWeight: 700,
-            lineHeight: 1.15,
-            marginBottom: 6,
-          }}
-        >
-          {recipe.title}
-        </h2>
+         <button className="app-btn-secondary" onClick={() => router.push('/recipes')}>
+           ← Retour
+         </button>
+       </div>
+     </section>
 
-        <div className="mt-2 text-sm app-muted">
-          <span className="app-badge">Portions : {recipe.servings}</span>
-          <span style={{ marginLeft: 10 }}>
-            Créée le {new Date(recipe.createdAt).toLocaleDateString('fr-FR')}
-          </span>
-        </div>
-      </section>
+     {/* Image + titre */}
+     <section className="app-card p-6" style={{ marginTop: 16 }}>
+       <RecipeImagePreview imageUrl={recipe.imageUrl} />
 
-      {/* Ingrédients */}
-      <section className="app-card p-6" style={{ marginTop: 16 }}>
-        <h3 className="text-lg font-extrabold">Ingrédients</h3>
+       {/* ✅ Titre recette en Playfair Display */}
+       <h2
+         className={playfair.className}
+         style={{
+           fontSize: 30,
+           fontWeight: 700,
+           lineHeight: 1.15,
+           marginBottom: 6,
+         }}
+         >
+         {recipe.title}
+       </h2>
 
-        {ingredients.length ? (
-          <div style={{ marginTop: 12 }}>
-            {/* En-tête */}
-            <div
-              className="app-muted"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '90px 70px 1fr 110px 110px',
-                columnGap: 12,
-                padding: '8px 10px',
-                borderBottom: '1px solid var(--border)',
-                fontSize: 12,
-              }}
-            >
-              <div style={{ textAlign: 'right' }}>Qté</div>
-              <div>Unité</div>
-              <div style={{ paddingLeft: 14 }}>Ingrédient</div>
-              <div style={{ textAlign: 'right' }}>Coût recette</div>
-              <div style={{ textAlign: 'right' }}>Coût produit</div>
-            </div>
+       <div className="mt-2 text-sm app-muted">
+         <span className="app-badge">Portions : {recipe.servings}</span>
+         <span style={{ marginLeft: 10 }}>
+           Créée le {new Date(recipe.createdAt).toLocaleDateString('fr-FR')}
+         </span>
+       </div>
 
-            {/* Lignes */}
-            <div>
-              {ingredients.map((ing: any, i: number) => (
-                <div
-                  key={i}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: '90px 70px 1fr 110px 110px',
-                    columnGap: 12,
-                    padding: '10px 10px',
-                    borderBottom: '1px solid rgba(0,0,0,0.06)',
-                    alignItems: 'baseline',
-                  }}
-                >
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {formatQty(ing.quantity)}
-                  </div>
+       {/* ✅ compteur (si policy dispo) */}
+       {pricingPolicy && Number.isFinite(pricingPolicy.limit) && pricingPolicy.limit !== Infinity && (
+         <div className="mt-3 text-sm app-muted">
+           Pricing gratuit : {pricingPolicy.used}/{pricingPolicy.limit} • reste {pricingPolicy.remaining}
+         </div>
+       )}
+     </section>
 
-                  <div style={{ opacity: 0.85 }}>{ing.unit}</div>
+     {/* Ingrédients */}
+     <section className="app-card p-6" style={{ marginTop: 16 }}>
+       <h3 className="text-lg font-extrabold">Ingrédients</h3>
 
-                  <div style={{ paddingLeft: 14 }}>{ing.name}</div>
+       {ingredients.length ? (
+         <div style={{ marginTop: 12 }}>
+           {/* En-tête */}
+           <div
+             className="app-muted"
+             style={{
+               display: 'grid',
+               gridTemplateColumns: '90px 70px 1fr 110px 110px',
+               columnGap: 12,
+               padding: '8px 10px',
+               borderBottom: '1px solid var(--border)',
+               fontSize: 12,
+             }}
+             >
+             <div style={{ textAlign: 'right' }}>Qté</div>
+             <div>Unité</div>
+             <div style={{ paddingLeft: 14 }}>Ingrédient</div>
+             <div style={{ textAlign: 'right' }}>Coût recette</div>
+             <div style={{ textAlign: 'right' }}>Coût produit</div>
+           </div>
 
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {isNum(ing.costRecipe) ? formatEuro(ing.costRecipe) : '—'}
-                  </div>
+           {/* Lignes */}
+           <div>
+             {ingredients.map((ing: any, i: number) => (
+               <div
+                 key={i}
+                 style={{
+                   display: 'grid',
+                   gridTemplateColumns: '90px 70px 1fr 110px 110px',
+                   columnGap: 12,
+                   padding: '10px 10px',
+                   borderBottom: '1px solid rgba(0,0,0,0.06)',
+                   alignItems: 'baseline',
+                 }}
+                 >
+                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                   {formatQty(ing.quantity)}
+                 </div>
 
-                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                    {isNum(ing.buyPriceEur) ? formatEuro(ing.buyPriceEur) : '—'}
-                  </div>
-                </div>
-              ))}
-            </div>
+                 <div style={{ opacity: 0.85 }}>{ing.unit}</div>
 
-            {/* Totaux */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '90px 70px 1fr 110px 110px',
-                columnGap: 12,
-                padding: '12px 10px 0',
-                alignItems: 'baseline',
-              }}
-            >
-              <div />
-              <div />
-              <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
+                 <div style={{ paddingLeft: 14 }}>{ing.name}</div>
 
-              <div style={{ textAlign: 'right', fontWeight: 800 }}>
-                {formatEuro(totalRecipeCost)}
-              </div>
+                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                   <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
+                 </div>
 
-              <div style={{ textAlign: 'right', fontWeight: 800 }}>
-                {formatEuro(totalProductsCost)}
-              </div>
-            </div>
+                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                   <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
+                 </div>
+               </div>
+             ))}
+           </div>
 
-            {missingBuyCount > 0 && (
-              <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
-                ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s) (pas encore enrichi ou pas trouvé).
-              </p>
-            )}
-          </div>
-        ) : (
-          <p className="app-muted" style={{ marginTop: 10 }}>
-            Aucun ingrédient
-          </p>
-        )}
-      </section>
+           {/* Totaux */}
+           <div
+             style={{
+               display: 'grid',
+               gridTemplateColumns: '90px 70px 1fr 110px 110px',
+               columnGap: 12,
+               padding: '12px 10px 0',
+               alignItems: 'baseline',
+             }}
+             >
+             <div />
+             <div />
+             <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
 
-      {/* Étapes */}
-      <section className="app-card p-6" style={{ marginTop: 16 }}>
-        <h3 className="text-lg font-extrabold">Étapes</h3>
+             <div style={{ textAlign: 'right', fontWeight: 800 }}>
+               <Price value={totalRecipeCost} blur={blurPrices} />
+             </div>
 
-        {recipe.steps?.length ? (
-          <div style={{ marginTop: 12 }}>
-            {recipe.steps.map((s, i) => {
-              const isAlt = i % 2 === 1
+             <div style={{ textAlign: 'right', fontWeight: 800 }}>
+               <Price value={totalProductsCost} blur={blurPrices} />
+             </div>
+           </div>
 
-              return (
-                <div
-                  key={i}
-                  className={`recipe-step-card${isAlt ? ' is-alt' : ''}`}
-                  style={{
-                    // ✅ alignées à gauche
-                    margin: '0 0 16px 0',
+           {missingBuyCount > 0 && (
+             <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
+               ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s) (pas encore enrichi ou pas
+               trouvé).
+             </p>
+           )}
 
-                    // ✅ une seule largeur maîtrisée (plus long qu'avant, mais pas full width)
-                    width: '100%',
-                    maxWidth: 650,
+           {blurPrices && (
+             <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
+               🔒 Limite gratuite atteinte : les prix sont floutés.
+             </p>
+           )}
+         </div>
+       ) : (
+         <p className="app-muted" style={{ marginTop: 10 }}>
+           Aucun ingrédient
+         </p>
+       )}
+     </section>
 
-                    // ✅ fond identique à l’app (pas de gris/violet)
-                    background: 'var(--bg)',
+     {/* Étapes */}
+     <section className="app-card p-6" style={{ marginTop: 16 }}>
+       <h3 className="text-lg font-extrabold">Étapes</h3>
 
-                    // ✅ bordure douce de l’app
-                    border: '1px solid var(--border)',
+       {recipe.steps?.length ? (
+         <div style={{ marginTop: 12 }}>
+           {recipe.steps.map((s, i) => {
+             const isAlt = i % 2 === 1
 
-                    // ✅ arrondi simple et élégant
-                    borderRadius: 20,
+             return (
+               <div
+                 key={i}
+                 className={`recipe-step-card${isAlt ? ' is-alt' : ''}`}
+                 style={{
+                   margin: '0 0 16px 0',
+                   width: '100%',
+                   maxWidth: 650,
+                   background: 'var(--bg)',
+                   border: '1px solid var(--border)',
+                   borderRadius: 20,
+                   padding: '12px 14px',
+                 }}
+                 >
+                 <div style={{ marginBottom: 8 }}>
+                   <span
+                     style={{
+                       display: 'inline-block',
+                       fontSize: 11,
+                       fontWeight: 500,
+                       lineHeight: '18px',
+                       padding: '0 8px',
+                       borderRadius: 999,
+                       background: 'rgba(122, 92, 67, 0.10)',
+                       border: '1px solid rgba(122, 92, 67, 0.14)',
+                       color: 'var(--primary)',
+                       verticalAlign: 'middle',
+                     }}
+                     >
+                     Étape {i + 1}
+                   </span>
+                 </div>
 
-                    // ✅ bloc moins haut/plus compact
-                    padding: '12px 14px',
-                  }}
-                >
-                  <div style={{ marginBottom: 8 }}>
-                    {/* ✅ Badge plus petit, fond plus clair, moins haut */}
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        fontSize: 11,
-                        fontWeight: 500,
-                        lineHeight: '18px',
-                        padding: '0 8px',
-                        borderRadius: 999,
-
-                        // plus clair que app-badge classique, dans le ton beige/brun
-                        background: 'rgba(122, 92, 67, 0.10)',
-                        border: '1px solid rgba(122, 92, 67, 0.14)',
-                        color: 'var(--primary)',
-
-                        // évite que ça “gonfle”
-                        verticalAlign: 'middle',
-                      }}
-                    >
-                      Étape {i + 1}
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      whiteSpace: 'pre-wrap',
-                      lineHeight: 1.65, // ✅ plus aéré
-                      fontSize: 14,
-                    }}
-                  >
-                    {String(s)}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          <p className="app-muted" style={{ marginTop: 10 }}>
-            Aucune étape
-          </p>
-        )}
-      </section>
-    </main>
-  )
+                 <div
+                   style={{
+                     whiteSpace: 'pre-wrap',
+                     lineHeight: 1.65,
+                     fontSize: 14,
+                   }}
+                   >
+                   {String(s)}
+                 </div>
+               </div>
+             )
+           })}
+         </div>
+       ) : (
+         <p className="app-muted" style={{ marginTop: 10 }}>
+           Aucune étape
+         </p>
+       )}
+     </section>
+   </main>
+ )
 }
-
-

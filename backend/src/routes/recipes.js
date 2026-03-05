@@ -17,6 +17,8 @@ const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../ut
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs');
 const { canonUnit } = require('../utils/units');
+
+const { getPricingPolicy } = require('../services/importLimits');
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
@@ -101,6 +103,20 @@ return Number.isFinite(total) ? total : 0
 router.get('/', needAuth, async (req, res) => {
 try {
 const { userId } = req.user
+const u = await prisma.user.findUnique({
+ where: { id: userId },
+ select: { subscriptionStatus: true },
+});
+const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+
+const policy = await getPricingPolicy({ userId, plan });
+
+const limits = {
+ blurPrices: policy.blurPrices, // flou à partir de la 11e
+ used: policy.used,
+ limit: policy.limit,
+ remaining: Math.max(0, policy.limit - policy.used),
+};
 const { cat } = req.query
 
 const recipesRaw = await prisma.recipe.findMany({
@@ -147,7 +163,7 @@ totalCostEur: computeTotalCostEur(enrichedIngredients),
 })
 )
 
-return res.json({ ok: true, recipes })
+return res.json({ ok: true, recipes, limits })
 } catch (e) {
 console.error('GET /recipes error:', e)
 return res.status(500).json({ ok: false, error: 'internal error' })
@@ -463,6 +479,20 @@ return res.status(500).json({ ok: false, error: 'internal error', message: e?.me
 router.get('/:id', needAuth, async (req, res) => {
 try {
 const { id } = req.params
+const u = await prisma.user.findUnique({
+ where: { id: userId },
+ select: { subscriptionStatus: true },
+});
+const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+
+const policy = await getPricingPolicy({ userId, plan });
+
+const limits = {
+ blurPrices: policy.blurPrices, // flou à partir de la 11e
+ used: policy.used,
+ limit: policy.limit,
+ remaining: Math.max(0, policy.limit - policy.used),
+};
 const { userId } = req.user
 
 const recipeRaw = await prisma.recipe.findFirst({
@@ -502,7 +532,7 @@ ingredients: enrichedIngredients,
 totalCostEur: computeTotalCostEur(enrichedIngredients),
 }
 
-return res.json({ ok: true, recipe })
+return res.json({ ok: true, recipe, limits })
 } catch (e) {
 console.error('GET /recipes/:id error:', e)
 return res.status(500).json({ ok: false, error: 'internal error' })

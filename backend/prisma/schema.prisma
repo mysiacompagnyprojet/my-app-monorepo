@@ -67,6 +67,7 @@ model ImportLimit {
   createdAt   DateTime @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime @default(now()) @db.Timestamptz(6)
   user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  pricingVisible Int @default(0)
 }
 
 model RecipeDraft {

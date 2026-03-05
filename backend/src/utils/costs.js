@@ -183,9 +183,9 @@ async function enrichIngredientWithCost(i) {
             buyLabel: null,
             costRecipe: 0,
             priceMatched: false,
-            gramsPerPiece: gramsPerPiece ?? null,
-            density_g_per_ml: density ?? null,
-            mlPerPiece: mlPerPiece ?? null,
+            gramsPerPiece: null, //gramsPerPiece ??
+            density_g_per_ml: null,//density ??
+            mlPerPiece: null, //mlPerPiece ??
             priceStatus: 'invalid',
             priceMessage: 'Nom d’ingrédient vide',
             note: 'nom vide',
@@ -217,9 +217,9 @@ async function enrichIngredientWithCost(i) {
             buyLabel: null,
 
             costRecipe: 0,
-            gramsPerPiece: gramsPerPiece ?? null,
-            density_g_per_ml: density ?? null,
-            mlPerPiece: mlPerPiece ?? null,
+            gramsPerPiece: null, //gramsPerPiece ??
+            density_g_per_ml: null,//density ??
+            mlPerPiece: null, //mlPerPiece ??
             priceMatched: false,
             priceStatus: 'not_found',
             priceMessage: "Ingrédient non trouvé dans la base",

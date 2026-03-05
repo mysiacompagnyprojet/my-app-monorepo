@@ -5,6 +5,7 @@ import { Suspense, useEffect, useMemo, useState } from 'react'
 import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
+import Price from '@/components/Price'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -20,7 +21,12 @@ type Recipe = {
 }
 
 function formatEur(v: unknown): string | null {
- const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(v.replace(',', '.')) : NaN
+ const n =
+   typeof v === 'number'
+     ? v
+     : typeof v === 'string'
+     ? Number(v.replace(',', '.'))
+     : NaN
  if (!Number.isFinite(n)) return null
  return n.toFixed(2).replace('.', ',')
 }
@@ -42,6 +48,9 @@ function RecipesInner() {
  const [recipes, setRecipes] = useState<Recipe[]>([])
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
+
+ // ✅ NEW: pricing policy (flou prix)
+ const [blurPrices, setBlurPrices] = useState(false)
 
  const filterLabel = useMemo(() => {
    if (!cat) return null
@@ -69,6 +78,11 @@ function RecipesInner() {
          window.location.href = '/login?next=/recipes'
          return
        }
+
+       // ✅ NEW: policy depuis le localStorage (mis à jour par import/ocr et import/url)
+       try {
+         setBlurPrices(localStorage.getItem('pricing_blur') === '1')
+       } catch {}
 
        const token = session.access_token
        const url = new URL(`${API}/recipes`)
@@ -107,6 +121,13 @@ function RecipesInner() {
          <div>
            <h1 className="text-2xl font-extrabold app-title">📖 Mes recettes</h1>
            <p className="mt-1 app-muted">Retrouve tes recettes dans un espace clair et organisé.</p>
+
+           {/* ✅ NEW: info freemium */}
+           {blurPrices && (
+             <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
+               ⚠️ Limite atteinte : les prix sont floutés.
+             </p>
+           )}
          </div>
 
          <a
@@ -201,15 +222,21 @@ function RecipesInner() {
              }}
              >
              {recipes.map((r) => {
-               const costStr = formatEur(r.totalCostEur)
+               // on garde ton helper (utile ailleurs), mais ici on passe par <Price />
+               const _costStr = formatEur(r.totalCostEur)
 
                return (
                  <li key={r.id} className="app-card p-4" style={{ padding: 0 }}>
                    <Link
                      href={`/recipes/${r.id}`}
                      className="block recipe-card-link"
-                     style={{ padding: 16, textDecoration: 'none', color: 'inherit', cursor: 'pointer' }}
-                >
+                     style={{
+                       padding: 16,
+                       textDecoration: 'none',
+                       color: 'inherit',
+                       cursor: 'pointer',
+                     }}
+                     >
                      {r.imageUrl ? (
                        <img
                          src={r.imageUrl}
@@ -242,17 +269,28 @@ function RecipesInner() {
                        </div>
                      )}
 
-                     <div className="font-semibold" style={{ color: 'var(--primary)', marginBottom: 10, lineHeight: 1.25 }}>
+                     <div
+                       className="font-semibold"
+                       style={{
+                         color: 'var(--primary)',
+                         marginBottom: 10,
+                         lineHeight: 1.25,
+                       }}
+                       >
                        {r.title}
                      </div>
 
                      <div className="text-sm" style={{ marginTop: -6, marginBottom: 10 }}>
-                       <span className="app-muted">Coût estimé : {costStr ? `~${costStr} €` : '—'}</span>
+                       <span className="app-muted">
+                         Coût estimé : ~<Price value={r.totalCostEur} blur={blurPrices} />
+                       </span>
                      </div>
 
                      <div className="mt-1 text-sm app-muted">
                        <span className="app-badge">Portions : {r.servings}</span>
-                       <span style={{ marginLeft: 8 }}>{new Date(r.createdAt).toLocaleDateString('fr-FR')}</span>
+                       <span style={{ marginLeft: 8 }}>
+                         {new Date(r.createdAt).toLocaleDateString('fr-FR')}
+                       </span>
                      </div>
                    </Link>
                  </li>
