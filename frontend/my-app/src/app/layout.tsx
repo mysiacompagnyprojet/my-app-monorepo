@@ -39,7 +39,8 @@ return (
 
 {/* ✅ Shell global */}
 <div className="app-shell">
-<div className="app-container">{children}</div>
+{/*<div className="app-container">*/}
+    {children}
 
 {/* ✅ Branding discret en bas (comme sur la story) */}
 <footer className="app-footer app-container">
