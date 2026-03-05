@@ -163,11 +163,8 @@ img { max-width: 100%; height: auto; }
             gap: 10px;
         }
     
-        .app-header .app-nav-actions{
-            display: flex;
-            align-items: center;
+        .app-nav-actions{
             gap: 8px;
-            flex-wrap: nowrap;
 
             flex: 1 1 auto;
             min-width: 0;
@@ -177,11 +174,9 @@ img { max-width: 100%; height: auto; }
             justify-content: flex-end;
         }
 
-        .app-header .app-nav-actions > a,
-        .app-header .app-nav-actions > button{
+        .app-nav-actions > a,
+        .app-nav-actions > button{
             flex: 0 0 auto;
-            font-size: 13px;
-            padding: 8px 10px;
             white-space: nowrap;
         }
 
