@@ -138,6 +138,8 @@ Donc on NE MET PAS de @media (prefers-color-scheme: dark) ici. */
 Composants réutilisables
 ========================= */
 
+* { box-sizing: border-box; }
+img { max-width: 100%; height: auto; }
 
 @layer components {
 .app-shell {
@@ -154,6 +156,14 @@ z-index: 2;
 width: 100%;
 max-width: 980px;
 margin: 0 auto;
+padding-left: 16px;
+padding-right: 16px;
+}
+@media (min-width: 98px) {
+    .app-container{
+        padding-left: 0;
+        padding-right: 0;
+    }
 }
 
 .app-card {
@@ -293,6 +303,7 @@ box-shadow: 0 8px 22px rgba(60,40,20,0.06);
 /* Branding dans le header (petit, sobre, type “signature”) */
 .app-brand {
 display: flex;
+white-space: nowrap;
 align-items: center;
 gap: 4px;
 font-family: var(--font-playfair);/*color: var(--text);  police mysia-app*/ 
@@ -305,6 +316,27 @@ text-decoration: none;
 
 /*rendu plus doux / arrondi */
 font-feature-settings: "ss01" 1;
+}
+
+@media (max-width: 640px) {
+    .app-header nav{
+        flex-wrap: wrap;
+        gap: 10px;
+        justify-content: space-between;
+    }
+    .app-brand{
+        font-size: 18px;
+    }
+    .app-header img {
+        width: 44px;
+        height: 44px;
+    }
+    .app-header a,
+    .app-header button{
+        font-size: 14px;
+        padding: 10px 12px;
+        white-space: nowrap;
+    }
 }
 
 .app-brand-suffix {
