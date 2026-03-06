@@ -6,6 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
 import type { OcrDraft } from 'src/types/recipe'
 import Price from '@/components/Price'
+import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 type PricingPolicy = {
  blurPrices: boolean
@@ -225,6 +226,11 @@ function OcrPageInner() {
                ? 'Limite atteinte : les prix sont floutés.'
                : `Il te reste ${pricingPolicy.remaining} recette(s) avec prix visibles sur ${pricingPolicy.limit}.`}
            </div>
+         )}
+
+         {/* bloc du paywall*/}
+         {pricingPolicy?.blurPrices && (
+          <PricingPaywallNotice remaining={pricingPolicy.remaining}/>
          )}
 
          {/* Aperçu (ancienne version conservée, mais prix via <Price/> + blur) */}

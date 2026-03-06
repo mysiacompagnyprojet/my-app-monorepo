@@ -6,6 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import Price from '@/components/Price'
+import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -20,15 +21,11 @@ type Recipe = {
  totalCostEur: number | null
 }
 
-function formatEur(v: unknown): string | null {
- const n =
-   typeof v === 'number'
-     ? v
-     : typeof v === 'string'
-     ? Number(v.replace(',', '.'))
-     : NaN
- if (!Number.isFinite(n)) return null
- return n.toFixed(2).replace('.', ',')
+type Limits = {
+  blurPrices: boolean
+  used: number
+  limit: number
+  remaining: number
 }
 
 // ✅ 1) wrapper Suspense obligatoire
@@ -48,9 +45,7 @@ function RecipesInner() {
  const [recipes, setRecipes] = useState<Recipe[]>([])
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
-
- // ✅ NEW: pricing policy (flou prix)
- const [blurPrices, setBlurPrices] = useState(false)
+ const [limits, setLimits] = useState<Limits | null>(null)
 
  const filterLabel = useMemo(() => {
    if (!cat) return null
@@ -79,11 +74,6 @@ function RecipesInner() {
          return
        }
 
-       // ✅ NEW: policy depuis le localStorage (mis à jour par import/ocr et import/url)
-       try {
-         setBlurPrices(localStorage.getItem('pricing_blur') === '1')
-       } catch {}
-
        const token = session.access_token
        const url = new URL(`${API}/recipes`)
        if (cat) url.searchParams.set('cat', cat)
@@ -100,6 +90,7 @@ function RecipesInner() {
        const json = await r.json()
        if (cancelled) return
        setRecipes(json.recipes || [])
+       setLimits(json.limits || null)
      } catch (e: any) {
        if (cancelled) return
        setErr(e?.message || String(e))
@@ -123,7 +114,7 @@ function RecipesInner() {
            <p className="mt-1 app-muted">Retrouve tes recettes dans un espace clair et organisé.</p>
 
            {/* ✅ NEW: info freemium */}
-           {blurPrices && (
+           {limits?.blurPrices && (
              <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
                ⚠️ Limite atteinte : les prix sont floutés.
              </p>
@@ -194,6 +185,10 @@ function RecipesInner() {
        </section>
      )}
 
+     {!loading && !err && limits?.blurPrices && (
+      <PricingPaywallNotice remaining={limits.remaining} />
+     )}
+
      {!loading && !err && (
        <section style={{ marginTop: 16 }}>
          {recipes.length === 0 ? (
@@ -223,7 +218,6 @@ function RecipesInner() {
              >
              {recipes.map((r) => {
                // on garde ton helper (utile ailleurs), mais ici on passe par <Price />
-               const _costStr = formatEur(r.totalCostEur)
 
                return (
                  <li key={r.id} className="app-card p-4" style={{ padding: 0 }}>
@@ -282,7 +276,7 @@ function RecipesInner() {
 
                      <div className="text-sm" style={{ marginTop: -6, marginBottom: 10 }}>
                        <span className="app-muted">
-                         Coût estimé : ~<Price value={r.totalCostEur} blur={blurPrices} />
+                         Coût estimé : ~<Price value={r.totalCostEur} blur={limits?.blurPrices} />
                        </span>
                      </div>
 

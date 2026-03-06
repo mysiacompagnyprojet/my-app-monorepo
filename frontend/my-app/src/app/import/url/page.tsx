@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { apiFetch } from 'src/lib/api'
+import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 // ✅ Types
 type Limits = {
@@ -120,6 +121,10 @@ export default function Page() {
            </div>
          )}
 
+         {limits?.blurPrices && (
+          <PricingPaywallNotice remaining={limits.remaining} />
+         )}
+         
          {status && (
            <div
              className="mt-4 app-card p-3 text-sm"

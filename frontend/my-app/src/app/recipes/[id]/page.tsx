@@ -7,6 +7,7 @@ import { apiFetch } from 'src/lib/api'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 import Price from '@/components/Price'
+import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 // ✅ Police UI / structure
 const inter = Inter({
@@ -38,14 +39,11 @@ type Recipe = {
  }>
 }
 
-type PricingPolicyResponse = {
- ok: boolean
- policy?: {
-   blurPrices: boolean
-   used: number
-   limit: number
-   remaining: number
- }
+type Limits = {
+  blurPrices: boolean
+  used: number
+  limit: number
+  remaining: number
 }
 
 export default function RecipeDetailPage() {
@@ -57,13 +55,7 @@ export default function RecipeDetailPage() {
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
 
- // ✅ pricing policy (pour flouter quand limite dépassée)
- const [pricingPolicy, setPricingPolicy] = useState<{
-   blurPrices: boolean
-   used: number
-   limit: number
-   remaining: number
- } | null>(null)
+ const [limits, setLimits] = useState<Limits | null>(null)
 
  // ─────────────────────────────────────────────
  // FETCH RECETTE
@@ -76,15 +68,15 @@ export default function RecipeDetailPage() {
        setLoading(true)
        setErr(null)
 
-       const json = await apiFetch<{ ok?: boolean; recipe?: Recipe }>(
+       const json = await apiFetch<{ ok?: boolean; recipe?: Recipe; limits?: Limits }>(
          `/recipes/${encodeURIComponent(id)}`,
          { method: 'GET' }
        )
-
        const rec = (json as any)?.recipe ?? json
        if (!rec?.id) throw new Error('Réponse backend invalide (recipe manquante)')
 
        setRecipe(rec)
+       setLimits((json as any)?.limits ?? null)
      } catch (e: any) {
        setErr(e?.message || String(e))
      } finally {
@@ -93,25 +85,7 @@ export default function RecipeDetailPage() {
    })()
  }, [id])
 
- // ─────────────────────────────────────────────
- // FETCH PRICING POLICY (blur)
- // ─────────────────────────────────────────────
- useEffect(() => {
-   // pas bloquant : si ça échoue, on n’empêche pas l’affichage
-   ;(async () => {
-     try {
-       const json = await apiFetch<PricingPolicyResponse>(`/limits/pricing-policy`, {
-         method: 'GET',
-       })
-       const pol = (json as any)?.policy
-       if (pol && typeof pol.blurPrices === 'boolean') setPricingPolicy(pol)
-     } catch {
-       // ignore
-     }
-   })()
- }, [])
-
- const blurPrices = Boolean(pricingPolicy?.blurPrices)
+ const blurPrices = Boolean(limits?.blurPrices)
 
  // ─────────────────────────────────────────────
  // ÉTATS BLOQUANTS
@@ -236,13 +210,17 @@ export default function RecipeDetailPage() {
          </span>
        </div>
 
-       {/* ✅ compteur (si policy dispo) */}
-       {pricingPolicy && Number.isFinite(pricingPolicy.limit) && pricingPolicy.limit !== Infinity && (
+       {/* ✅ compteur freenium (si limits dispo) */}
+       {limits && Number.isFinite(limits.limit) && (
          <div className="mt-3 text-sm app-muted">
-           Pricing gratuit : {pricingPolicy.used}/{pricingPolicy.limit} • reste {pricingPolicy.remaining}
+           Pricing gratuit : {limits.used}/{limits.limit} • reste {limits.remaining}
          </div>
        )}
      </section>
+
+       {limits?.blurPrices && (
+        <PricingPaywallNotice remaining={limits.remaining} />
+       )}
 
      {/* Ingrédients */}
      <section className="app-card p-6" style={{ marginTop: 16 }}>

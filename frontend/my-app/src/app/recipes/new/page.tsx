@@ -9,6 +9,7 @@ import type { OcrDraft, IngredientLine } from 'src/types/recipe'
 import { IngredientPicker } from '@/components/IngredientPicker'
 import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
+import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 type Line = IngredientLine & {
  unitPriceBuy?: number | null
@@ -762,6 +763,8 @@ function NewRecipeInner() {
          </p>
        )}
      </section>
+
+     {blurPrices && <PricingPaywallNotice/>}
 
      {trash.trim() && (
        <section className="app-card p-5" style={{ marginTop: 16 }}>
