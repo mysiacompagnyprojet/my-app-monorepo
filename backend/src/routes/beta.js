@@ -12,11 +12,7 @@ const { supabaseAuth } = require('../middleware/supabaseAuth')
 const { prisma } = require('../lib/prisma')
 
 // ✅ on réutilise ta logique Supabase ImportLimit (key/used/limit)
-const {
- getPricingPolicy,
- incrementUsage,
- LIMIT_KEYS,
-} = require('../services/importLimits')
+const { getPricingPolicy } = require('../services/importLimits')
 
 // ─────────────────────────────────────────────
 // POST /beta/verify  (PUBLIC)
@@ -94,24 +90,6 @@ router.get('/pricing-policy', async (req, res) => {
    const policy = await getPricingPolicy({ userId, plan })
 
    return res.json({ ok: true, policy })
- } catch (e) {
-   return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e?.message || 'Erreur serveur.' })
- }
-})
-
-// ─────────────────────────────────────────────
-// POST /beta/pricing-usage/increment
-// optionnel : si tu veux incrémenter au moment “où on calcule les prix”
-// ─────────────────────────────────────────────
-router.post('/pricing-usage/increment', async (req, res) => {
- try {
-   const userId = req.user?.userId
-   if (!userId) return res.status(401).json({ ok: false, error: 'UNAUTHORIZED' })
-
-   // incrémente 1 “recette pricée”
-   const usage = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1)
-
-   return res.json({ ok: true, usage })
  } catch (e) {
    return res.status(500).json({ ok: false, error: 'SERVER_ERROR', message: e?.message || 'Erreur serveur.' })
  }

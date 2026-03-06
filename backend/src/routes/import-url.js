@@ -132,7 +132,7 @@ router.post('/url', needAuth, async (req, res) => {
    // ---------------- Pricing freemium limits (10 visibles) ----------------
    // IMPORTANT: flou à partir de la 11e => on calcule blur AVANT incrément.
    // On n'incrémente PRICING_VISIBLE que si ce endpoint renvoie déjà un pricing.
-   let limits = null;
+   let pricingPolicy = null;
 
    if (userId) {
      const u = await prisma.user.findUnique({
@@ -141,26 +141,26 @@ router.post('/url', needAuth, async (req, res) => {
      });
      const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
 
-     const policy = await getPricingPolicy({ userId, plan });
+     const before = await getPricingPolicy({ userId, plan });
      const blurPrices = policy.blurPrices;
 
-     let usage = policy;
+     let after = before;
 
      // N'incrémente que si pricing déjà présent dans le draft
      // (sinon ce serait injuste: URL import ne calcule souvent pas les prix)
      if (draftHasPricing(draft) && plan !== 'premium' && !blurPrices) {
-       usage = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1);
+       after = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1);
      }
 
-     limits = {
+     pricingPolicy = {
        blurPrices,
-       used: usage.used,
-       limit: usage.limit,
-       remaining: Math.max(0, usage.limit - usage.used),
+       used: after.used,
+       limit: after.limit,
+       remaining: after.remaining,
      };
    }
 
-   return res.json({ ok: true, draft, limits });
+   return res.json({ ok: true, draft, pricingPolicy });
  } catch (e) {
    console.error('POST /import/url error:', e);
    return res.status(400).json({ ok: false, error: e.message || 'parse error' });

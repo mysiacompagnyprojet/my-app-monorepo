@@ -821,33 +821,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
  // ─────────────────────────────────────────────
    // ✅ Bêta: limite pricing (10 recettes) dès l’aperçu OCR
    // ─────────────────────────────────────────────
-   let pricingPolicy = null
-   try {
-     const userId = req.user?.userId || req.userId
-
-     if (userId) {
-       const u = await prisma.user.findUnique({
-         where: { id: userId },
-         select: { subscriptionStatus: true },
-       })
-
-       const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free'
-
-       // policy AVANT incrément
-       const before = await getPricingPolicy({ userId, plan })
-
-       // si free et pas encore flouté -> on consomme 1 vue pricing
-       if (plan === 'free' && before.blurPrices === false) {
-         await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1)
-       }
-
-       // policy APRÈS incrément (pour compteur/blur exact)
-       pricingPolicy = await getPricingPolicy({ userId, plan })
-     }
-   } catch (e) {
-     // ne bloque jamais l’OCR si la limite plante
-     pricingPolicy = null
-   }
 
     //console log a supprimer
    dlog('[TITLE][PIPELINE]', {
@@ -917,7 +890,7 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 const userId = req.userId || req.user?.userId;
 
 if (!userId) {
- return res.json({ ok: true, draft, pricingPolicy });
+ return res.json({ ok: true, draft, pricingPolicy: null });
 }
 
 // Plan premium si subscriptionStatus === 'active'
@@ -928,23 +901,23 @@ const u = await prisma.user.findUnique({
 const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
 
 // Policy AVANT incrément (détermine le blur pour cette réponse)
-const policy = await getPricingPolicy({ userId, plan });
-const blurPrices = policy.blurPrices;
+const before = await getPricingPolicy({ userId, plan });
+const blurPrices = before.blurPrices;
 
 // Si c'est visible (donc encore dans les 10), on consomme 1 crédit
-let usage = policy;
+let after = before;
 if (plan !== 'premium' && !blurPrices) {
- usage = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1);
+ after = await incrementUsage(userId, LIMIT_KEYS.PRICING_VISIBLE, 1);
 }
 
 return res.json({
  ok: true,
  draft,
- limits: {
+ pricingPolicy: {
    blurPrices, // basé sur l'état AVANT incrément => flou à partir de la 11e
-   used: usage.used,
-   limit: usage.limit,
-   remaining: Math.max(0, usage.limit - usage.used),
+   used: after.used,
+   limit: after.limit,
+   remaining: after.remaining,
  },
 });
   } catch (e) {

@@ -479,6 +479,7 @@ return res.status(500).json({ ok: false, error: 'internal error', message: e?.me
 router.get('/:id', needAuth, async (req, res) => {
 try {
 const { id } = req.params
+const { userId } = req.user
 const u = await prisma.user.findUnique({
  where: { id: userId },
  select: { subscriptionStatus: true },
@@ -493,7 +494,6 @@ const limits = {
  limit: policy.limit,
  remaining: Math.max(0, policy.limit - policy.used),
 };
-const { userId } = req.user
 
 const recipeRaw = await prisma.recipe.findFirst({
 where: { id, userId },
