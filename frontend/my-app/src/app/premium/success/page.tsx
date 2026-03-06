@@ -1,3 +1,5 @@
+//frontend/my-app/src/app/premium/success/page.tsx
+
 'use client';
 
 import { useEffect, useState } from 'react';
@@ -56,8 +58,8 @@ export default function SuccessPage() {
         </p>
 
         <div className="mt-6">
-          <a href="/dashboard" className="app-btn-primary">
-            Aller au tableau de bord
+          <a href="/recipes" className="app-btn-primary">
+            Aller à mes recettes
           </a>
         </div>
       </section>

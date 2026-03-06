@@ -10,6 +10,7 @@ const { prisma } = require('../lib/prisma');
 
 const router = express.Router();
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+const { supabaseAuth } = require('../middleware/supabaseAuth');
 
 function needAuth(req, res, next) {
   if (!req.user?.userId) return res.status(401).json({ error: 'Unauthorized' });
@@ -17,7 +18,7 @@ function needAuth(req, res, next) {
 }
 
 // POST /billing/checkout { email?: string }
-router.post('/checkout', needAuth, async (req, res) => {
+router.post('/checkout', supabaseAuth, needAuth, async (req, res) => {
   const userId = req.user.userId;
   const email = req.body.email || req.user?.email || undefined;
 

@@ -11,10 +11,10 @@ async function supabaseAuth(req, res, next) {
             userId: process.env.DEV_USER_ID || 'dev-user',
             email: process.env.DEV_USER_EMAIL || 'shirley.valeton88@icloud.com',
         }
-        dlog('[auth]'), {
+        dlog('[auth]', {
             bypass: process.env.DEV_BYPASS_AUTH,
             user: req.user,
-        }
+        })
         req.userId = req.user.userId
         return next()
     }

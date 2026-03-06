@@ -1,3 +1,5 @@
+//frontend/my-app/src/app/premium/cancel/page.tsx
+
 export default function CancelPage() {
   return (
     <main className="app-container" style={{ margin: '40px auto' }}>
@@ -15,7 +17,7 @@ export default function CancelPage() {
         </p>
 
         <div className="mt-5">
-          <a href="/pricing" className="app-btn-secondary">
+          <a href="/premium" className="app-btn-secondary">
             Retour à la page tarifs
           </a>
         </div>

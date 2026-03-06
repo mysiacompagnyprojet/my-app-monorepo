@@ -1,3 +1,6 @@
+//frontend/my-app/src/app/premium/ping/page.tsx
+
+
 export default function Page() {
   return (
     <main className="app-container" style={{ margin: '40px auto' }}>
