@@ -186,7 +186,7 @@ function convertUnitForPricing(name, qty, unitRecipe, priceRow) {
   const density = Number(priceRow?.density_g_per_ml);
   if (base.unit === 'ml' && targetU === 'g') {
     if (Number.isFinite(density) && density > 0) return {
-      qty: base.qty * d,
+      qty: base.qty * density,
       unit: 'g'
     };
     return null;

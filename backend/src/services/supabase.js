@@ -116,15 +116,29 @@ function getBuyPackInfo(row, unitRaw) {
  }
 
  const unitU = row?.type_unite ?? unitRaw ?? row?.unite_g_ml_piece;
- const { unit: baseU, factor } = toBaseUnit(unitU); // baseU: 'g'|'ml'|'piece'
+ const { unit: baseU, factor } = toBaseUnit(unitU);
 
- // ✅ quantité pack réelle = unite_g_ml_piece (pas quantite_de_reference)
  const packQtyRaw = toNumberLoose(row?.unite_g_ml_piece);
+ const count = toNumberLoose(row?.nombre);
+ const gramsPerPiece = toNumberLoose(row?.gramme_par_piece);
 
+ // Cas pack en pièces
  if (baseU === 'piece') {
-   // pack en pièces: on préfère nombre, sinon 1
-   const n = toNumberLoose(row?.nombre);
-   const refQty = Number.isFinite(n) && n > 0 ? n : 1;
+   // si on a un poids unitaire exploitable, on renvoie le pack en g
+   // ex: 1 filet d’ail = 3 gousses, 1 gousse = 5 g → pack = 15 g
+   if (
+     Number.isFinite(count) && count > 0 &&
+     Number.isFinite(gramsPerPiece) && gramsPerPiece > 0
+   ) {
+     return {
+       buyPrice,
+       refQty: count * gramsPerPiece,
+       refUnit: 'g',
+     };
+   }
+
+   // sinon fallback classique pack en pièces
+   const refQty = Number.isFinite(count) && count > 0 ? count : 1;
    return { buyPrice, refQty, refUnit: 'piece' };
  }
 
@@ -132,10 +146,11 @@ function getBuyPackInfo(row, unitRaw) {
    return { buyPrice, refQty: null, refUnit: baseU };
  }
 
- // si unite_g_ml_piece est en kg/l/cl/... on ramène en base via factor
- const refQty = packQtyRaw * factor;
-
- return { buyPrice, refQty, refUnit: baseU };
+ return {
+   buyPrice,
+   refQty: packQtyRaw * factor,
+   refUnit: baseU,
+ };
 }
 
 // Prix unitaire: priorité à prix_kg_l_piece, sinon fallback prix_d_achat / quantite_de_reference

@@ -142,8 +142,29 @@ function fabricateTitleFromIngredientsRows(ingredientsRows) {
 }
 
 function isUnitOnlyLine(s) {
-  const l = String(s || '').trim().toLowerCase();
-  return l === 'g' || l === 'kg' || l === 'ml' || l === 'cl' || l === 'l';
+ const l = String(s || '')
+   .trim()
+   .toLowerCase()
+   .normalize('NFD')
+   .replace(/[\u0300-\u036f]/g, '');
+
+ return [
+   'g',
+   'kg',
+   'mg',
+   'ml',
+   'cl',
+   'dl',
+   'l',
+   'cas',
+   'càc',
+   'càs',
+   'c a s',
+   'cac',
+   'c a c',
+   'cs',
+   'cc'
+ ].includes(l);
 }
 
 function uniqLines(arr) {
@@ -625,7 +646,9 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           if (typeof parsed.quantityRaw === 'string' && parsed.quantityRaw.trim()) {
             row.quantityRaw = String(parsed.quantityRaw).trim();
           }
-
+          if (isUnitOnlyLine(row.name)) {
+            return null
+          }
           return row;
         })
         .filter(Boolean)

@@ -80,8 +80,19 @@ function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | n
  const u0 = String(uRaw || '').trim().toLowerCase()
  if (!u0) return null
 
- if ((u0 === 'càs' || u0 === 'cas' || u0 === 'cs' || (u0.includes('cuill') && u0.includes('soupe')))) return 'tbsp'
- if ((u0 === 'càc' || u0 === 'cac' || u0 === 'cc' || (u0.includes('cuill') && u0.includes('cafe')))) return 'tsp'
+ if (
+   u0 === 'càs' ||
+   u0 === 'cas' ||
+   u0 === 'cs' ||
+   (u0.includes('cuill') && u0.includes('soupe'))
+ ) return 'tbsp'
+
+ if (
+   u0 === 'càc' ||
+   u0 === 'cac' ||
+   u0 === 'cc' ||
+   (u0.includes('cuill') && u0.includes('cafe'))
+ ) return 'tsp'
 
  if (u0 === 'g' || u0 === 'gr' || u0 === 'gramme' || u0 === 'grammes') return 'g'
  if (u0 === 'kg' || u0 === 'kilo' || u0 === 'kilos') return 'g'
@@ -91,10 +102,20 @@ function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | n
  if (u0 === 'cl') return 'ml'
  if (u0 === 'dl') return 'ml'
 
- if (u0 === 'piece' || u0 === 'pièce' || u0 === 'pièces' || u0 === 'pcs') return 'piece'
+ if (
+   u0 === 'piece' ||
+   u0 === 'pieces' ||
+   u0 === 'pièce' ||
+   u0 === 'pièces' ||
+   u0 === 'pcs' ||
+   u0 === 'gousse' ||
+   u0 === 'gousses' ||
+   u0 === 'tranche' ||
+   u0 === 'tranches'
+ ) return 'piece'
+
  return null
 }
-
 function toBaseQtyFront(qty: number, unitRaw: string): { qty: number; unit: 'g' | 'ml' | 'piece' } | null {
  const u0 = String(unitRaw || '').trim().toLowerCase()
  const q = Number(qty || 0)
@@ -126,7 +147,7 @@ function computeCostCourses(ing: Line): number | null {
  const refQty = typeof ing.buyRefQty === 'number' ? ing.buyRefQty : null
  const refUnit = typeof ing.buyRefUnit === 'string' ? ing.buyRefUnit : null
  if (buyPrice == null || refQty == null || refUnit == null) return null
-
+ 
  // base recette + base pack
  let qBase = toBaseQtyFront(Number(ing.quantity || 0), String(ing.unit || ''))
  const packBase = toBaseQtyFront(refQty, refUnit)

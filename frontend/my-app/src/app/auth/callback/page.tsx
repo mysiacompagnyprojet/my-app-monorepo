@@ -23,6 +23,7 @@ subscriptionStatus?: string | null
 function SupabaseCallbackInner() {
 const [msg, setMsg] = useState('Connexion en cours…')
 const searchParams = useSearchParams()
+const setup = searchParams.get('setup') === '1'
 const router = useRouter()
 
 useEffect(() => {
@@ -97,13 +98,12 @@ document.cookie = `subscription_status=${subscriptionStatus}; Path=/; Max-Age=${
 
 // ✅ NOUVEAU : redirection prioritaire vers ?next=...
 const next = (searchParams.get('next') || '').trim()
-const safeNext = next.startsWith('/') ? next : ''
+const safeNext = next.startsWith('/') ? next : '/'
 
-const dest =
-safeNext ||
-(subscriptionStatus && !['active', 'trialing'].includes(subscriptionStatus)
-? '/premium'
-: '/')
+
+
+const dest = setup? `/set-password?next=${encodeURIComponent(safeNext)}`
+:safeNext
 
 setMsg('Connexion réussie ✅ Redirection…')
 router.replace(dest)

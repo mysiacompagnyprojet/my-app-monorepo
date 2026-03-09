@@ -233,9 +233,9 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
          buyRefQty: enriched?.buyRefQty ?? null,
          buyRefUnit: enriched?.buyRefUnit ?? null,
 
-         gramsPerPiece: enriched?.gramsPerPiece?? null,
-         density_g_per_ml: enriched?.density?? null,
-         mlPerPiece: enriched?.mlPerPiece?? null,
+         gramsPerPiece: enriched?.gramsPerPiece ?? null,
+         density_g_per_ml: enriched?.density_g_per_ml ?? null,
+         mlPerPiece: enriched?.mlPerPiece ?? null,
 
          // ✅ statut/message ligne
          priceStatus: enriched?.priceStatus ?? null,
