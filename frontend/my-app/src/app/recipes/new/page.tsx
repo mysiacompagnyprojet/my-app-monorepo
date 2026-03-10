@@ -1158,6 +1158,7 @@ function NewRecipeInner() {
          
          style={{
            border: "1px solid var(--border)",
+           background:"rgba(255,255,255,0.75)",
            borderRadius: 20,
            padding: 10,
            width: '100%',
