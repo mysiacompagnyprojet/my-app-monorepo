@@ -1171,7 +1171,7 @@ function NewRecipeInner() {
          onChange={(e) => setIngredient(idx, { unit: e.target.value })}
          className="app-btn app-btn-utility"
          style={{
-           borderRadius: 12,
+           borderRadius: 20,
            padding: 10,
            width: '100%',
            justifyContent: 'flex-start',

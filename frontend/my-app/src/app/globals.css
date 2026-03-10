@@ -810,6 +810,27 @@ min-width: 0;
        border-radius: 12px;
        background: rgba(255,255,255,0.72);
    }
+
+   .ingredient-row-mobile {
+    gap: 14px;
+   }
+
+   .ingredient-mobile-pricebox {
+    padding: 10px 12px;
+   }
+
+   .ingredient-mobile-meta input {
+    min-height: 40px;
+    padding: 8px 10px; 
+   }
+
+   .ingredient-mobile-top input {
+    padding: 8px 10px;
+   }
+
+   .ingredients-recalc {
+    width: 100%;
+   }
 }
 
 .ingredient-row-desktop,
