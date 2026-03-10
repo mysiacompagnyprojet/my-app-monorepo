@@ -21,6 +21,7 @@ export default function PremiumPage() {
       const res = await apiFetch<CheckoutResponse>('/billing/checkout', {
         method: 'POST',
         body: JSON.stringify({}),
+        credentials: 'omit',
       })
 
       if (!res.url) {
