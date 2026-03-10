@@ -43,8 +43,7 @@ const allowedOrigins = [
   process.env.APP_URL || '', // ex: https://ton-app.vercel.app
 ].filter(Boolean)
 
-app.use(
-  cors({
+const corsOptions = {
     origin: (origin, cb) => {
       // Requêtes sans Origin (curl, Postman…) → OK
       if (!origin) return cb(null, true)
@@ -61,15 +60,18 @@ app.use(
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
-  })
-)
+}
+ app.use(cors(corsOptions))
+ app;options('*', cors(corsOptions))
 
 // 6) JSON pour le reste
 app.use(express.json())
 
 // 7) Force la réponse en UTF-8 (évite les soucis d’accents côté clients/outils)
-app.use((_req, res, next) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS'){
+    return res.sendStatus(204)
+  }
   next()
 })
 
