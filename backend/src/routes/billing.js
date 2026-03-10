@@ -29,7 +29,6 @@ router.post('/checkout', supabaseAuth, needAuth, async (req, res) => {
     customer_email: email,
     line_items: [{ price: process.env.STRIPE_PRICE_ID, quantity: 1 }],
     subscription_data: {
-      trial_period_days: parseInt(process.env.TRIAL_DAYS || '14', 10),
       metadata: { app_user_id: userId }, // 👈 important pour le webhook
     },
     // (on retire metadata au niveau session, pas utile ici)
