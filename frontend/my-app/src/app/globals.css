@@ -794,9 +794,6 @@ min-width: 0;
        display: grid;
        grid-template-columns: 1fr 1fr;
        gap: 10px;
-       border: 1px solid var(--border);
-       background: rgba(255,255,255,0.75);
-       border-radius: 20;
    }
 
    .ingredient-mobile-prices {
