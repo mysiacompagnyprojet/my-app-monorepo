@@ -26,34 +26,47 @@ Passe en Premium pour voir :
 Passe en Premium pour débloquer le vrai prix de toutes tes recettes.`
 
  return (
-   <div
-     className="app-card p-4"
-     style={{
-       boxShadow: 'none',
-       borderColor: 'rgba(139,106,79,0.18)',
-       background: 'rgba(139,106,79,0.06)',
-       marginTop: 12,
-     }}
-     >
-     <div style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: 6 }}>
-       Limite gratuite atteinte
-     </div>
-
-     <p className="app-muted" style={{ margin: 0, whiteSpace: 'pre-line' }}>
-       {message}
-     </p>
-
-     {showRemaining && (
-       <p className="app-muted" style={{ marginTop: 8, marginBottom: 0 }}>
-         Recettes restantes avec prix visibles : {remaining}
-       </p>
-     )}
-
-     <div style={{ marginTop: 12 }}>
-       <Link href="/premium" className="app-btn-primary">
-         Débloquer les prix
-       </Link>
-     </div>
+ <div
+   className="app-card p-4"
+   style={{
+     boxShadow: 'none',
+     borderColor: 'rgba(139,106,79,0.18)',
+     background: 'rgba(139,106,79,0.06)',
+     marginTop: 12,
+   }}
+   >
+   <div style={{ fontWeight: 800, color: 'var(--primary)', marginBottom: 8 }}>
+     Limite gratuite atteinte
    </div>
- )
+
+   {context === 'import' ? (
+     <p className="app-muted" style={{ margin: 0, lineHeight: 1.6 }}>
+       Tu as utilisé tes 10 recettes gratuites avec prix visibles.
+       <br />
+       Passe en Premium pour voir :
+       <br />• le prix réel des recettes
+       <br />• le coût des courses
+       <br />• le détail des ingrédients et de leurs prix
+     </p>
+   ) : (
+     <p className="app-muted" style={{ margin: 0, lineHeight: 1.6 }}>
+       Tu as utilisé tes 10 recettes gratuites avec prix visibles.
+       <br />
+       Passe en Premium pour débloquer les vrais prix de toutes tes recettes.
+     </p>
+   )}
+
+   {showRemaining && (
+     <p className="app-muted" style={{ marginTop: 8, marginBottom: 0 }}>
+       Recettes restantes avec prix visibles : {remaining}
+     </p>
+   )}
+
+   <div style={{ marginTop: 12 }}>
+     <Link href="/premium" className="app-btn-primary">
+       Débloquer les prix
+     </Link>
+   </div>
+ </div>
+)
 }

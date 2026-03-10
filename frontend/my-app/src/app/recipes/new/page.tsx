@@ -760,642 +760,394 @@ function NewRecipeInner() {
  }
 
  return (
-   <main className="app-container" style={{ margin: '40px auto' }}>
-     <section style={{ marginBottom: 16 }}>
-       <input
-         value={title}
-         onChange={(e) => setTitle(e.target.value)}
-         placeholder="Titre de la recette"
-         className="recipe-title editable-title"
-         style={{
-           background: 'transparent',
-           border: 'none',
-           outline: 'none',
-           width: '100%',
-         }}
-       />
+ <main className="app-container" style={{ margin: '40px auto' }}>
+   {/* ============================= */}
+   {/* TITRE                         */}
+   {/* ============================= */}
 
-       <p className="recipe-color-1">Remplis l’essentiel. Tu peux toujours ajuster plus tard.</p>
+   <section style={{ marginBottom: 16 }}>
+     <input
+       value={title}
+       onChange={(e) => setTitle(e.target.value)}
+       placeholder="Titre de la recette"
+       className="recipe-title editable-title"
+       style={{
+         background: 'transparent',
+         border: 'none',
+         outline: 'none',
+         width: '100%',
+       }}
+     />
 
-       {/* ✅ NEW */}
-       {blurPrices && (
-         <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
-           ⚠️ Limite atteinte : les prix sont floutés.
+     <p className="recipe-color-1">
+       Remplis l’essentiel. Tu peux toujours ajuster plus tard.
+     </p>
+
+     {blurPrices && (
+       <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
+         ⚠️ Limite atteinte : les prix sont floutés.
+       </p>
+     )}
+   </section>
+
+   {blurPrices && <PricingPaywallNotice context="import" />}
+
+   {/* ============================= */}
+   {/* CORBEILLE OCR                 */}
+   {/* ============================= */}
+
+   {trash.trim() && (
+     <section className="app-card p-5" style={{ marginTop: 16 }}>
+       <details>
+         <summary
+           style={{
+             cursor: 'pointer',
+             fontWeight: 800,
+             color: 'var(--primary)',
+           }}
+           >
+           🗑️ Corbeille (texte non-recette détecté)
+         </summary>
+
+         <p className="mt-2 text-sm app-muted">
+           Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été
+           filtré.
          </p>
-       )}
+
+         <textarea
+           value={trash}
+           onChange={(e) => setTrash(e.target.value)}
+           rows={6}
+           className="mt-3 w-full"
+           style={{
+             background: 'white',
+             border: '1px solid var(--border)',
+             borderRadius: 12,
+             padding: 12,
+           }}
+         />
+       </details>
      </section>
+   )}
 
-     {blurPrices && <PricingPaywallNotice context="import"/>}
+   {/* ============================= */}
+   {/* INFOS + IMAGE                 */}
+   {/* ============================= */}
 
-     {trash.trim() && (
-       <section className="app-card p-5" style={{ marginTop: 16 }}>
-         <details>
-           <summary style={{ cursor: 'pointer', fontWeight: 800, color: 'var(--primary)' }}>
-             🗑️ Corbeille (texte non-recette détecté)
-           </summary>
-           <p className="mt-2 text-sm app-muted">
-             Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
-           </p>
+   <section className="app-card p-6" style={{ marginTop: 16 }}>
+     <div className="recipe-form-top-grid">
+       {/* -------- LEFT -------- */}
+
+       <div style={{ display: 'grid', gap: 21 }}>
+         <label className="grid gap-1 text-sm font-semibold recipe-color-2">
+           Portions
+
+           <input
+             type="number"
+             min={1}
+             value={servings}
+             onChange={(e) => setServings(Number(e.target.value || 1))}
+             className="app-btn app-btn-utility"
+             style={{ width: 120 }}
+           />
+         </label>
+
+         <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
+           Notes
+
            <textarea
-             value={trash}
-             onChange={(e) => setTrash(e.target.value)}
+             value={notes}
+             onChange={(e) => setNotes(e.target.value)}
              rows={6}
-             className="mt-3 w-full"
-             style={{
-               background: 'white',
-               border: '1px solid var(--border)',
-               borderRadius: 12,
-               padding: 12,
+             style={{ minHeight: 170 }}
+           />
+         </label>
+       </div>
+
+       {/* -------- RIGHT -------- */}
+
+       <div style={{ display: 'grid', gap: 14 }}>
+         <label
+           style={{
+             border: '1px dashed var(--border)',
+             borderRadius: 18,
+             padding: 28,
+             textAlign: 'center',
+             cursor: 'pointer',
+             display: 'block',
+           }}
+           >
+           <input
+             type="file"
+             accept="image/*"
+             style={{ display: 'none' }}
+             onChange={(e) => {
+               const file = e.target.files?.[0]
+               if (!file) return
+
+               const localUrl = URL.createObjectURL(file)
+               setImageUrl(localUrl)
              }}
            />
-         </details>
-       </section>
-     )}
 
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <div className="recipe-form-top-grid">
-         {/* ========================= */}
-         {/* COLONNE GAUCHE            */}
-         {/* ========================= */}
-         <div style={{ display: 'grid', gap: 21 }}>
-           {/* Portions */}
-           <label className="grid gap-1 text-sm font-semibold recipe-color-2">
-             Portions
-             <input
-               type="number"
-               className="app-btn app-btn-utility"
-               min={1}
-               value={servings}
-               onChange={(e) => setServings(Number(e.target.value || 1))}
-               style={{
-                 width: 120,
-               }}
-             />
-           </label>
-
-           {/* Notes */}
-           <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
-             Notes
-             <textarea
-               value={notes}
-               onChange={(e) => setNotes(e.target.value)}
-               rows={6}
-               style={{
-                 minHeight: 170,
-               }}
-             />
-           </label>
-         </div>
-
-         {/* ========================= */}
-         {/* COLONNE DROITE            */}
-         {/* ========================= */}
-         <div style={{ display: 'grid', gap: 14 }}>
-           {/* Bloc image */}
-           <label
-             style={{
-               border: '1px dashed var(--border)',
-               borderRadius: 18,
-               padding: 28,
-               textAlign: 'center',
-               cursor: 'pointer',
-               display: 'block',
-             }}
-             >
-             <input
-               type="file"
-               accept="image/*"
-               style={{ display: 'none' }}
-               onChange={(e) => {
-                 const file = e.target.files?.[0]
-                 if (!file) return
-
-                 const localUrl = URL.createObjectURL(file)
-                 setImageUrl(localUrl)
-               }}
-             />
-
-             {imageUrl ? (
-               <div
+           {imageUrl ? (
+             <div style={{ display: 'grid', gap: 10 }}>
+               <img
+                 src={imageUrl}
+                 alt="preview"
                  style={{
-                   display: 'grid',
-                   gap: 10,
+                   width: '100%',
+                   borderRadius: 14,
+                   objectFit: 'cover',
+                   maxHeight: 250,
+                 }}
+               />
+
+               <input
+                 value={imageUrl}
+                 onClick={(e) => e.stopPropagation()}
+                 onChange={(e) => setImageUrl(e.target.value)}
+                 style={{
+                   ...inputStyle,
+                   whiteSpace: 'nowrap',
+                   overflow: 'hidden',
+                   textOverflow: 'ellipsis',
+                 }}
+               />
+
+               <button
+                 type="button"
+                 className="app-btn app-btn-sage recipe-color-2"
+                 onClick={(e) => {
+                   e.preventDefault()
+                   setCrop({ x: 0, y: 0 })
+                   setZoom(1)
+                   setCroppedAreaPixels(null)
+                   setIsCropping(true)
                  }}
                  >
-                 <img
-                   src={imageUrl}
-                   alt="preview"
-                   style={{
-                     width: '100%',
-                     borderRadius: 14,
-                     objectFit: 'cover',
-                     maxHeight: 250,
-                   }}
-                 />
-
-                 <input
-                   value={imageUrl}
-                   onClick={(e) => e.stopPropagation()}
-                   onChange={(e) => setImageUrl(e.target.value)}
-                   style={inputStyle}
-                 />
-
-                 <button
-                   type="button"
-                   className="app-btn app-btn-sage recipe-color-2"
-                   onClick={(e) => {
-                     e.preventDefault()
-                     setCrop({ x: 0, y: 0 })
-                     setZoom(1)
-                     setCroppedAreaPixels(null)
-                     setIsCropping(true)
-                   }}
-                   >
-                   Recadrer l’image
-                 </button>
-               </div>
-             ) : (
-               <>
-                 <div
-                   style={{
-                     width: 60,
-                     height: 60,
-                     borderRadius: '50%',
-                     background: 'rgba(176, 188, 140, 0.4)',
-                     display: 'grid',
-                     placeItems: 'center',
-                     margin: '0 auto 16px auto',
-                     fontSize: 28,
-                   }}
-                   >
-                   +
-                 </div>
-
-                 <div className="recipe-color-2" style={{ fontWeight: 700, marginBottom: 6 }}>
-                   Ajouter une image
-                 </div>
-
-                 <div className="recipe-color-1" style={{ fontSize: 13, opacity: 0.6, marginBottom: 16 }}>
-                   Clique sur le + pour choisir une photo
-                 </div>
-               </>
-             )}
-           </label>
-
-           {/* ✅ MODIF: coûts + flou */}
-           <div className="cost-summary" style={{ justifyContent: 'flex-start' }}>
-             <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
-               <div className="cost-pill-row cost-pill-row-recipe">
-                 <span className="cost-pill-label recipe-color-2">Coût recette</span>
-                 <span className="amount">
-                   ≈ <Price value={totalCost} blur={blurPrices} />
-                 </span>
-               </div>
+                 Recadrer l’image
+               </button>
              </div>
-
-             <div className="cost-pill paper-ui" style={{ minWidth: 0 }}>
-               <div className="cost-pill-row cost-pill-row-courses">
-                 <span className="cost-pill-label recipe-color-2">Coût courses</span>
-                 <span className="amount">
-                   ≈ <Price value={totalProducts} blur={blurPrices} />
-                 </span>
+           ) : (
+             <>
+               <div
+                 style={{
+                   width: 60,
+                   height: 60,
+                   borderRadius: '50%',
+                   background: 'rgba(176,188,140,0.4)',
+                   display: 'grid',
+                   placeItems: 'center',
+                   margin: '0 auto 16px auto',
+                   fontSize: 28,
+                 }}
+                >
+                 +
                </div>
+
+               <div
+                 className="recipe-color-2"
+                 style={{ fontWeight: 700, marginBottom: 6 }}
+                 >
+                 Ajouter une image
+               </div>
+
+               <div
+                 className="recipe-color-1"
+                 style={{ fontSize: 13, opacity: 0.6 }}
+                 >
+                 Clique sur le + pour choisir une photo
+               </div>
+             </>
+           )}
+         </label>
+
+         {/* coûts */}
+
+         <div className="cost-summary">
+           <div className="cost-pill paper-ui">
+             <div className="cost-pill-row cost-pill-row-recipe">
+               <span className="cost-pill-label recipe-color-2">
+                 Coût recette
+               </span>
+
+               <span className="amount">
+                 ≈ <Price value={totalCost} blur={blurPrices} />
+               </span>
+             </div>
+           </div>
+
+           <div className="cost-pill paper-ui">
+             <div className="cost-pill-row cost-pill-row-courses">
+               <span className="cost-pill-label recipe-color-2">
+                 Coût courses
+               </span>
+
+               <span className="amount">
+                 ≈ <Price value={totalProducts} blur={blurPrices} />
+               </span>
              </div>
            </div>
          </div>
        </div>
-     </section>
+     </div>
+   </section>
 
-     {/* Ingrédients */}
-     <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
-       <div className="ingredients-top">
-         <div className="ingredients-head grid gap-1 text-sm font-semibold" style={{ marginBottom: 0 }}>
-           <h2 className="recipe-color-2" style={sectionTitleStyle}>
-             Ingrédients
-           </h2>
-           <p className="mt-2 text-sm app-muted">Un ingrédient par ligne : nom, quantité, unité, prix.</p>
-         </div>
+   {/* ============================= */}
+   {/* INGREDIENTS                   */}
+   {/* ============================= */}
 
-         <button
-           onClick={() => recalcPrices({ silent: false })}
-           disabled={isRepricing}
-           className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
-           type="button"
-             >
-           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-             <span
-               aria-hidden="true"
-               className={isRepricing ? 'icon-spin' : ''}
-               style={{
-                 width: 18,
-                 height: 18,
-                 display: 'inline-flex',
-                 alignItems: 'center',
-                 justifyContent: 'center',
-               }}
-               >
-               <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#68650A" strokeWidth="2">
-                 <rect x="6" y="3" width="12" height="18" rx="2" />
-                 <path d="M8 7h8" />
-                 <path d="M9 11h1M12 11h1M15 11h1" />
-                 <path d="M9 14h1M12 14h1M15 14h1" />
-                 <path d="M9 17h1M12 17h1M15 17h1" />
-               </svg>
-             </span>
-             <span>{isRepricing ? 'Recalcul…' : 'Recalculer les prix'}</span>
-           </span>
-         </button>
+   <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
+     <div className="ingredients-top">
+       <div className="ingredients-head grid gap-1 text-sm font-semibold">
+         <h2 className="recipe-color-2" style={sectionTitleStyle}>
+           Ingrédients
+         </h2>
+
+         <p className="mt-2 text-sm app-muted">
+           Un ingrédient par ligne : nom, quantité, unité, prix.
+         </p>
        </div>
 
-       <div className="mt-4 grid gap-3">
-         {ingredients.map((ing, idx) => {
-           const isBuyPriceReady = ing.buyRecalced === true && typeof ing.buyPriceEur === 'number'
-           const costCourses = isBuyPriceReady ? computeCostCourses(ing) : null
-           const costRecipe = typeof (ing as any).costEur === 'number' ? ((ing as any).costEur as number) : null
+       <button
+         onClick={() => recalcPrices({ silent: false })}
+         disabled={isRepricing}
+         className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
+         type="button"
+           >
+         {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
+       </button>
+     </div>
 
-           return (
+     <div className="mt-4 grid gap-3">
+       {ingredients.map((ing, idx) => {
+         const costCourses = computeCostCourses(ing)
+         const costRecipe =
+           typeof (ing as any).costEur === 'number'
+             ? (ing as any).costEur
+             : null
+
+         return (
+           <div key={idx} className="app-card p-3">
+             {/* nom + produit */}
+
              <div
-               key={idx}
                style={{
-                 boxShadow: 'none',
-                 background: 'rgba(255,255,255,0.7)',
-                 borderColor: 'var(--border)',
+                 display: 'flex',
+                 gap: 8,
+                 alignItems: 'center',
+                 marginBottom: 8,
                }}
-               >
-               <div className="recipe-ingredient-row">
-                 <div
-                   className="app-card p-3 paper-ui"
-                   style={{
-                     display: 'flex',
-                     alignItems: 'center',
-                     gap: 8,
-                     background: 'white',
-                     border: '1px solid var(--border)',
-                     borderRadius: 12,
-                     padding: '0 8px',
-                     minWidth: 0,
-                   }}
-                   >
-                   <input
-                     placeholder="Nom de l'ingrédient..."
-                     value={ing.name}
-                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     style={{
-                       flex: 1,
-                       minWidth: 0,
-                       background: 'transparent',
-                       border: 'none',
-                       outline: 'none',
-                       padding: 11,
-                     }}
-                   />
+              >
+               <input
+                 placeholder="Nom de l'ingrédient..."
+                 value={ing.name}
+                 onChange={(e) =>
+                   setIngredient(idx, { name: e.target.value })
+                 }
+                 style={{
+                   flex: 1,
+                   border: '1px solid var(--border)',
+                   borderRadius: 12,
+                   padding: 10,
+                 }}
+               />
 
-                   <IngredientPicker
-                     querySeed={normalizeIngredientForLookup(ing.name)}
-                     onPick={(item) => {
-                       setIngredient(
-                         idx,
-                         {
-                           name: item.nom,
-                           ingredientBaseId: item.id,
-                           id: item.id as any,
-                           note: undefined,
-                         } as any
-                       )
-                       setTimeout(() => {
-                         recalcPrices({ silent: true })
-                       }, 0)
-                     }}
-                     buttonLabel="Voir les produits"
-                   />
+               <IngredientPicker
+                 querySeed={normalizeIngredientForLookup(ing.name)}
+                 onPick={(item) => {
+                   setIngredient(idx, {
+                     name: item.nom,
+                     ingredientBaseId: item.id,
+                     id: item.id as any,
+                   })
+
+                   setTimeout(() => {
+                     recalcPrices({ silent: true })
+                   }, 0)
+                 }}
+                 buttonLabel="Voir les produits"
+               />
+             </div>
+
+             {/* quantité unité */}
+
+             <div className="ingredient-mobile-meta">
+               <input
+                 placeholder="Qté"
+                 value={qtyInputs[idx] ?? ''}
+                 onChange={(e) => setQtyInput(idx, e.target.value)}
+                 style={{
+                   borderRadius: 12,
+                   padding: 10,
+                 }}
+               />
+
+               <input
+                 placeholder="Unité"
+                 value={ing.unit}
+                 onChange={(e) =>
+                   setIngredient(idx, { unit: e.target.value })
+                 }
+                 style={{
+                   borderRadius: 12,
+                   padding: 10,
+                 }}
+               />
+             </div>
+
+             {/* prix */}
+
+             <div className="ingredient-mobile-prices">
+               <div className="ingredient-mobile-pricebox">
+                 <div style={{ fontSize: 12, opacity: 0.6 }}>
+                   Coût recette
                  </div>
 
-                 <input
-                   placeholder="Qté"
-                   value={qtyInputs[idx] ?? ''}
-                   onChange={(e) => setQtyInput(idx, e.target.value)}
-                   style={{
-                     borderRadius: 12,
-                     padding: 11,
-                   }}
-                 />
-
-                 <input
-                   placeholder="Unité"
-                   value={ing.unit}
-                   onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                   style={{
-                     borderRadius: 12,
-                     padding: 11,
-                   }}
-                 />
-
-                 <div
-                   style={{
-                     minWidth: 0,
-                     display: 'flex',
-                     justifyContent: 'center',
-                     gap: 6,
-                     alignItems: 'center',
-                     fontSize: 13,
-                     fontWeight: 800,
-                   }}
-                   >
-                   <div style={{ textAlign: 'center' }}>
-                     <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût recette</div>
-                     <div className="cost-pill-row-recipe" style={{ fontSize: 13, fontWeight: 800 }}>
-                       <Price value={costRecipe} blur={blurPrices} />
-                     </div>
-                   </div>
-
-                   <div style={{ textAlign: 'center' }}>
-                     <div style={{ fontSize: 13, opacity: 0.6, fontWeight: 800, lineHeight: '12px' }}>Coût courses</div>
-                     <div
-                       className="cost-pill-row-courses"
-                       style={{ fontSize: 13, fontWeight: 800, opacity: isBuyPriceReady ? 1 : 0.35 }}
-                    >
-                       <Price value={costCourses} blur={blurPrices} />
-                     </div>
-                   </div>
-                 </div>
-
-                 <button
-                   type="button"
-                   onClick={() => removeIngredient(idx)}
-                   className="app-btn app-btn-utility"
-                   style={smallXBtnStyle}
-                   title="Supprimer cette ligne"
-                   >
-                   ✕
-                 </button>
+                 <Price value={costRecipe} blur={blurPrices} />
                </div>
 
-               {isNotFoundLine(ing) && (
-                 <div
-                   style={{
-                     marginTop: 6,
-                     fontSize: 12,
-                     fontWeight: 600,
-                     color: 'rgba(90, 70, 50, 0.85)',
-                     background: 'rgba(255, 193, 7, 0.06)',
-                     border: '1px solid rgba(255, 193, 7, 0.25)',
-                     borderRadius: 10,
-                     padding: '6px 10px',
-                   }}
-                   >
-                   ⚠️ Ingrédient non trouvé — tu peux quand même enregistrer.
+               <div className="ingredient-mobile-pricebox">
+                 <div style={{ fontSize: 12, opacity: 0.6 }}>
+                   Coût courses
                  </div>
-               )}
-             </div>
-           )
-         })}
 
-         <button
-           onClick={() => {
-             setIngredients((p) => [...p, { name: '', quantity: 0, unit: '', buyRecalced: false }])
-             setQtyInputs((p) => [...p, ''])
-           }}
-           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-           style={{ width: 'min(260px, 100%' }}
-           type="button"
-           >
-           + Ajouter un ingrédient
-         </button>
-       </div>
-     </section>
-
-     {/* Étapes */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <h2 style={sectionTitleStyle}>Étapes</h2>
-       <p className="mt-2 text-sm app-muted">1 étape = 1 bloc. Garde les phrases courtes.</p>
-
-       <div className="mt-4 grid gap-3">
-         {steps.map((s, idx) => (
-           <div
-             key={idx}
-             className="p-3"
-             style={{
-               boxShadow: 'none',
-               background: 'rgba(255, 255, 255, 0.95)',
-               borderColor: 'var(--border)',
-               borderRadius: 12,
-             }}
-             >
-             <div className="flex items-center justify-between gap-2 mb-2">
-               <div
-                 style={{
-                   display: 'flex',
-                   alignItems: 'center',
-                   gap: 15,
-                   fontSize: 15,
-                   fontWeight: 700,
-                   color: 'var(--primary)',
-                   letterSpacing: 0.2,
-                 }}
-                 >
-                 <div
-                   style={{
-                     width: 32,
-                     height: 32,
-                     borderRadius: '50%',
-                     background: 'rgba(176, 188, 140, 0.4)',
-                     display: 'flex',
-                     alignItems: 'center',
-                     justifyContent: 'center',
-                     fontSize: 14,
-                     fontWeight: '700',
-                     color: '#75635E',
-                     lineHeight: 1,
-                   }}
-                   >
-                   {idx + 1}
-                 </div>
-                 <span
-                   style={{
-                     fontSize: 15,
-                     fontWeight: 700,
-                     color: 'var(--primary)',
-                     letterSpacing: 0.2,
-                     lineHeight: 1,
-                   }}
-                   >
-                   Étape
-                 </span>
+                 <Price value={costCourses} blur={blurPrices} />
                </div>
 
                <button
                  type="button"
-                 onClick={() => removeStep(idx)}
+                 onClick={() => removeIngredient(idx)}
                  className="app-btn app-btn-utility"
                  style={smallXBtnStyle}
-                 title="Supprimer cette étape"
-                   >
+                 >
                  ✕
                </button>
              </div>
-
-             <textarea
-               value={s}
-               onChange={(e) =>
-                 setSteps((prev) => {
-                   const copy = [...prev]
-                   copy[idx] = e.target.value
-                   return copy
-                 })
-               }
-               rows={3}
-               style={{
-                 width: '100%',
-                 background: 'white',
-                 border: '1px solid var(--border)',
-                 borderRadius: 12,
-                 padding: 14,
-                 minHeight: 90,
-               }}
-             />
            </div>
-         ))}
+         )
+       })}
 
-         <button
-           onClick={() => setSteps((p) => [...p, ''])}
-           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-           style={{ width: 'min(220px, 100%' }}
-           type="button"
-         >
-           + Ajouter une étape
-         </button>
-       </div>
-     </section>
+       <button
+         onClick={() => {
+           setIngredients((p) => [
+             ...p,
+             { name: '', quantity: 0, unit: '', buyRecalced: false },
+           ])
 
-     {/* Save + status */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <div className="flex flex-wrap gap-3 items-center justify-center">
-         <button
-           onClick={save}
-           className="app-btn-sage app-btn-lg"
-           style={{
-             display: 'flex',
-             borderRadius: 14,
-             justifyContent: 'center',
-             alignItems: 'center',
-             gap: 16,
-             flexWrap: 'wrap',
-           }}
-           type="button"
-           >
-           Enregistrer la recette
-         </button>
-
-         {status && (
-           <span
-             className="app-card px-3 py-2 text-sm"
-             style={{
-               boxShadow: 'none',
-               borderColor:
-                 statusKind === 'success'
-                   ? 'rgba(168,184,161,0.7)'
-                   : statusKind === 'error'
-                   ? 'rgba(176,0,32,0.25)'
-                   : 'var(--border)',
-               background:
-                 statusKind === 'success'
-                   ? 'rgba(168,184,161,0.15)'
-                   : statusKind === 'error'
-                   ? 'rgba(176,0,32,0.06)'
-                   : 'rgba(255,255,255,0.7)',
-               color: statusKind === 'error' ? '#b00020' : 'rgba(43,43,43,0.95)',
-               fontWeight: 800,
-             }}
-             >
-             {status}
-           </span>
-         )}
-       </div>
-     </section>
-
-     {/* MODAL CROP */}
-     {isCropping && imageUrl?.trim() && (
-       <div
-         style={{
-           position: 'fixed',
-           inset: 0,
-           background: 'rgba(0,0,0,0.55)',
-           display: 'grid',
-           placeItems: 'center',
-           zIndex: 50,
-           padding: 16,
+           setQtyInputs((p) => [...p, ''])
          }}
+         className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
+         style={{ width: 'min(260px, 100%)' }}
+         type="button"
          >
-         <div
-           style={{
-             width: 'min(920px, 95vw)',
-             background: 'white',
-             borderRadius: 14,
-             border: '1px solid var(--border)',
-             overflow: 'hidden',
-           }}
-           >
-           <div style={{ padding: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-             <div style={{ fontWeight: 800 }}>Recadrer l’image</div>
-             <button type="button" className="app-btn app-btn-secondary" onClick={() => setIsCropping(false)}>
-               Fermer
-             </button>
-           </div>
-
-           <div style={{ position: 'relative', width: '100%', height: 480, background: '#111' }}>
-             <Cropper
-               image={imageUrl}
-               crop={crop}
-               zoom={zoom}
-               onCropChange={setCrop}
-               onZoomChange={setZoom}
-               onCropComplete={onCropComplete}
-               aspect={4 / 3}
-               cropShape="rect"
-               showGrid
-             />
-           </div>
-
-           <div
-             style={{
-               padding: 12,
-               display: 'flex',
-               alignItems: 'center',
-               gap: 12,
-               borderTop: '1px solid var(--border)',
-             }}
-             >
-             <div style={{ fontSize: 12, opacity: 0.7, minWidth: 40 }}>Zoom</div>
-
-             <input
-               type="range"
-               min={1}
-               max={3}
-               step={0.01}
-               value={zoom}
-               onChange={(e) => setZoom(Number(e.target.value))}
-               style={{ width: '100%' }}
-             />
-
-             <div style={{ fontSize: 12, opacity: 0.7, minWidth: 42, textAlign: 'right' }}>{zoom.toFixed(2)}</div>
-           </div>
-
-           <div style={{ padding: 12, display: 'flex', justifyContent: 'flex-end', gap: 10, alignItems: 'center' }}>
-             <button
-               type="button"
-               className="app-btn-primary"
-               onClick={confirmCrop}
-               disabled={isUploadingCrop || !croppedAreaPixels}
-               style={{ minWidth: 220, opacity: isUploadingCrop ? 0.7 : 1 }}
-              >
-               {isUploadingCrop ? 'Upload…' : 'Valider le recadrage'}
-             </button>
-           </div>
-         </div>
-       </div>
-     )}
-   </main>
- )
+         + Ajouter un ingrédient
+       </button>
+     </div>
+   </section>
+ </main>
+)
 }
 
 export default function Page() {

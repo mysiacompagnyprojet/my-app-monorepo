@@ -160,6 +160,7 @@ img { max-width: 100%; height: auto; }
         display: flex;
         align-items: center;
         gap: 10px;
+        flex-wrap: wrap;
     }
 
    /* ✅ Mobile : pas de chevauchement, pas de scroll horizontal, actions sur 2 lignes */
@@ -201,7 +202,7 @@ img { max-width: 100%; height: auto; }
     position: relative;
     z-index: 2;
     width: 100%;
-    max-width: 980px;
+    max-width: 1180px;
     margin: 0 auto;
     padding-left: 16px;
     padding-right: 16px;
@@ -348,11 +349,11 @@ Branding global Mysia-app
 
 .app-header {
     margin-top: 16px;
-    padding: 10px 12px;
-    background: rgba(255,255,255,0.70);/*#FFFFFF;*/
-    border: 1px solid rgba(230,220,210,0.70);/*#E5E1DA;*/
-    border-radius: 18px;
-    box-shadow: 0 8px 22px rgba(60,40,20,0.06);
+    padding: 14px 18px;
+    background: rgba(255,255,255,0.72);/*#FFFFFF;*/
+    border: 1px solid rgba(230,220,210,0.78);/*#E5E1DA;*/
+    border-radius: 20px;
+    box-shadow: 0 10px 24px rgba(60,40,20,0.07);
 }
 
 .app-header--compact {
@@ -487,6 +488,13 @@ transition:
     border-color 180ms ease;
 }
 
+@media (max-width: 760px) {
+    .recipe-title {
+        font-size: 22px;
+        line-height: 1.2;
+    }
+}
+
 /*Hover desktop uniquement*/
 @media (hover: hover) {
     .recipe-card-link:hover {
@@ -546,43 +554,45 @@ min-width: 240px;
 opacity: 1;
 }
 
-/* Coûts : alignés à gauche (comme le design cible) */
-.cost-summary {    
-display: flex;
-gap: 12px;
-justify-content: flex-start;
-flex-wrap: nowrap;
-margin: 0;
-}
+@media (max-width: 760px) {
+    /* Coûts : alignés à gauche (comme le design cible) */
+    .cost-summary {    
+        display: flex;
+        gap: 12px;
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        margin: 0;
+    }
 
-/* Pill */
-.cost-pill {    
-/*background: rgba(255, 255, 255, 0.75);*/
-border: 1px solid var(--border);
-border-radius: 14px;
-padding: 35px 20px; /* 10px 14px */
-min-width: 190px;
-box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
-}
+    /* Pill */
+    .cost-pill {    
+        /*background: rgba(255, 255, 255, 0.75);*/
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 35px 20px; /* 10px 14px */
+        min-width: 190px;
+        box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+    }
 
-/* Label + montant sur la même ligne */
-.cost-pill-row {
-display: flex;
-align-items: baseline;
-justify-content: space-between;
-gap: 10px;
-white-space: nowrap;
-}
+    /* Label + montant sur la même ligne */
+    .cost-pill-row {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 10px;
+        white-space: nowrap;
+    }
 
-.cost-pill-label {
-font-size: 30px;
-font-weight: 700;
-opacity: 0.75;
-}
+    .cost-pill-label {
+        font-size: 30px;
+        font-weight: 700;
+        opacity: 0.75;
+    }   
 
-.cost-pill-row .amount {
-font-size: 25px;
-font-weight: 800;
+    .cost-pill-row .amount {
+        font-size: 25px;
+        font-weight: 800;
+    }
 }
 
 .cost-pill-row-courses {
@@ -698,5 +708,41 @@ min-width: 0;
    .ingredients-recalc {
        width: 100%;
        min-width: 0;
+   }
+}
+
+.ingredient-mobile-meta {
+   display: flex;
+   gap: 10px;
+}
+
+.ingredient-mobile-prices {
+   display: flex;
+   align-items: center;
+   justify-content: space-between;
+   gap: 12px;
+}
+
+.ingredient-mobile-pricebox {
+   flex: 1;
+   text-align: center;
+   padding: 8px 10px;
+   border: 1px solid var(--border);
+   border-radius: 12px;
+   background: rgba(255,255,255,0.72);
+}
+
+@media (max-width: 760px) {
+   .ingredient-mobile-meta {
+       display: grid;
+       grid-template-columns: 1fr 1fr;
+       gap: 10px;
+   }
+
+   .ingredient-mobile-prices {
+       display: grid;
+       grid-template-columns: 1fr 1fr auto;
+       gap: 10px;
+       align-items: stretch;
    }
 }
