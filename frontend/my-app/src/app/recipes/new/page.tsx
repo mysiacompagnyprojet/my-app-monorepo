@@ -1033,43 +1033,43 @@ function NewRecipeInner() {
              {/* nom + produit */}
 
              <div
-               style={{
-                 display: 'flex',
-                 gap: 8,
-                 alignItems: 'center',
-                 marginBottom: 8,
-               }}
-              >
-               <input
-                 placeholder="Nom de l'ingrédient..."
-                 value={ing.name}
-                 onChange={(e) =>
-                   setIngredient(idx, { name: e.target.value })
-                 }
-                 style={{
-                   flex: 1,
-                   border: '1px solid var(--border)',
-                   borderRadius: 12,
-                   padding: 10,
-                 }}
-               />
+ style={{
+   display: 'flex',
+   gap: 8,
+   alignItems: 'center',
+   marginBottom: 8,
+ }}
+ >
+ <input
+   placeholder="Nom de l'ingrédient..."
+   value={ing.name}
+   onChange={(e) =>
+     setIngredient(idx, { name: e.target.value })
+   }
+   style={{
+     flex: 1,
+     border: '1px solid var(--border)',
+     borderRadius: 12,
+     padding: 10,
+   }}
+ />
 
-               <IngredientPicker
-                 querySeed={normalizeIngredientForLookup(ing.name)}
-                 onPick={(item) => {
-                   setIngredient(idx, {
-                     name: item.nom,
-                     ingredientBaseId: item.id,
-                     id: item.id as any,
-                   })
+ <IngredientPicker
+   querySeed={normalizeIngredientForLookup(ing.name)}
+   onPick={(item) => {
+     setIngredient(idx, {
+       name: item.nom,
+       ingredientBaseId: item.id,
+       id: item.id as any,
+     })
 
-                   setTimeout(() => {
-                     recalcPrices({ silent: true })
-                   }, 0)
-                 }}
-                 buttonLabel="Voir les produits"
-               />
-             </div>
+     setTimeout(() => {
+       recalcPrices({ silent: true })
+     }, 0)
+   }}
+   buttonLabel="Voir les produits"
+ />
+</div>
 
              {/* quantité unité */}
 

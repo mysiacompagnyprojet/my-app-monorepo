@@ -746,3 +746,40 @@ min-width: 0;
        align-items: stretch;
    }
 }
+
+.ingredient-top-row {
+   display: flex;
+   gap: 8px;
+   align-items: center;
+   margin-bottom: 8px;
+}
+
+.ingredient-name-input {
+   flex: 1;
+   min-width: 0;
+}
+
+.ingredient-picker-wrap {
+   flex: 0 0 auto;
+}
+
+@media (max-width: 760px) {
+   .ingredient-top-row {
+       flex-direction: column;
+       align-items: stretch;
+   }
+
+   .ingredient-name-input {
+       width: 100%;
+   }
+
+   .ingredient-picker-wrap {
+       width: 100%;
+   }
+
+   .ingredient-picker-wrap button,
+   .ingredient-picker-wrap a {
+       width: 100%;
+       justify-content: center;
+   }
+}
