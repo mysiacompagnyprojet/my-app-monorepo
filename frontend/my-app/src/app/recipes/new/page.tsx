@@ -1169,10 +1169,13 @@ function NewRecipeInner() {
          placeholder="Unité"
          value={ing.unit}
          onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+         className="app-btn app-btn-utility"
          style={{
            borderRadius: 12,
            padding: 10,
            width: '100%',
+           justifyContent: 'flex-start',
+           fontWeight: 500,
          }}
        />
      </div>
