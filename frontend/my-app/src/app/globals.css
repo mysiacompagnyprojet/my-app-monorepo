@@ -820,8 +820,9 @@ min-width: 0;
    }
 
    .ingredient-mobile-meta input {
-    min-height: 20px;
+    min-height: 34px;
     padding: 6px 8px; 
+    font-size: 14px;
    }
 
    .ingredient-mobile-top input {
