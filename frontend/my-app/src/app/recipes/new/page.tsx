@@ -1029,104 +1029,174 @@ function NewRecipeInner() {
              : null
 
          return (
-           <div key={idx} className="app-card p-3">
-             {/* nom + produit */}
+ <div key={idx} className="app-card p-3">
+   {/* DESKTOP */}
+   <div className="ingredient-row-desktop">
+     <div className="ingredient-cell-name">
+       <input
+         placeholder="Nom de l'ingrédient..."
+         value={ing.name}
+         onChange={(e) => setIngredient(idx, { name: e.target.value })}
+         style={{
+           border: '1px solid var(--border)',
+           borderRadius: 12,
+           padding: 10,
+           width: '100%',
+         }}
+       />
+     </div>
 
-             <div
- style={{
-   display: 'flex',
-   gap: 8,
-   alignItems: 'center',
-   marginBottom: 8,
- }}
- >
- <input
-   placeholder="Nom de l'ingrédient..."
-   value={ing.name}
-   onChange={(e) =>
-     setIngredient(idx, { name: e.target.value })
-   }
-   style={{
-     flex: 1,
-     border: '1px solid var(--border)',
-     borderRadius: 12,
-     padding: 10,
-   }}
- />
+     <div className="ingredient-picker-wrap">
+       <IngredientPicker
+         querySeed={normalizeIngredientForLookup(ing.name)}
+         onPick={(item) => {
+           setIngredient(idx, {
+             name: item.nom,
+             ingredientBaseId: item.id,
+             id: item.id as any,
+           })
 
- <IngredientPicker
-   querySeed={normalizeIngredientForLookup(ing.name)}
-   onPick={(item) => {
-     setIngredient(idx, {
-       name: item.nom,
-       ingredientBaseId: item.id,
-       id: item.id as any,
-     })
+           setTimeout(() => {
+             recalcPrices({ silent: true })
+           }, 0)
+         }}
+         buttonLabel="Voir les produits"
+       />
+     </div>
 
-     setTimeout(() => {
-       recalcPrices({ silent: true })
-     }, 0)
-   }}
-   buttonLabel="Voir les produits"
- />
-</div>
+     <input
+       placeholder="Qté"
+       value={qtyInputs[idx] ?? ''}
+       onChange={(e) => setQtyInput(idx, e.target.value)}
+       style={{
+         borderRadius: 12,
+         padding: 10,
+         width: '100%',
+       }}
+     />
 
-             {/* quantité unité */}
+     <input
+       placeholder="Unité"
+       value={ing.unit}
+       onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+       style={{
+         borderRadius: 12,
+         padding: 10,
+         width: '100%',
+       }}
+     />
 
-             <div className="ingredient-mobile-meta">
-               <input
-                 placeholder="Qté"
-                 value={qtyInputs[idx] ?? ''}
-                 onChange={(e) => setQtyInput(idx, e.target.value)}
-                 style={{
-                   borderRadius: 12,
-                   padding: 10,
-                 }}
-               />
+     <div className="ingredient-price-col">
+       <div className="ingredient-price-label">Coût recette</div>
+       <div className="ingredient-price-value cost-pill-row-recipe">
+         <Price value={costRecipe} blur={blurPrices} />
+       </div>
+     </div>
 
-               <input
-                 placeholder="Unité"
-                 value={ing.unit}
-                 onChange={(e) =>
-                   setIngredient(idx, { unit: e.target.value })
-                 }
-                 style={{
-                   borderRadius: 12,
-                   padding: 10,
-                 }}
-               />
-             </div>
+     <div className="ingredient-price-col">
+       <div className="ingredient-price-label">Coût courses</div>
+       <div className="ingredient-price-value cost-pill-row-courses">
+         <Price value={costCourses} blur={blurPrices} />
+       </div>
+     </div>
 
-             {/* prix */}
+     <div className="ingredient-delete-col">
+       <button
+         type="button"
+         onClick={() => removeIngredient(idx)}
+         className="app-btn app-btn-utility"
+         style={smallXBtnStyle}
+        >
+         ✕
+       </button>
+     </div>
+   </div>
 
-             <div className="ingredient-mobile-prices">
-               <div className="ingredient-mobile-pricebox">
-                 <div style={{ fontSize: 12, opacity: 0.6 }}>
-                   Coût recette
-                 </div>
+   {/* MOBILE */}
+   <div className="ingredient-row-mobile">
+     <div className="ingredient-mobile-top">
+       <input
+         placeholder="Nom de l'ingrédient..."
+         value={ing.name}
+         onChange={(e) => setIngredient(idx, { name: e.target.value })}
+         style={{
+           border: '1px solid var(--border)',
+           borderRadius: 12,
+           padding: 10,
+           width: '100%',
+         }}
+       />
 
-                 <Price value={costRecipe} blur={blurPrices} />
-               </div>
+       <div className="ingredient-picker-wrap">
+         <IngredientPicker
+           querySeed={normalizeIngredientForLookup(ing.name)}
+           onPick={(item) => {
+             setIngredient(idx, {
+               name: item.nom,
+               ingredientBaseId: item.id,
+               id: item.id as any,
+             })
 
-               <div className="ingredient-mobile-pricebox">
-                 <div style={{ fontSize: 12, opacity: 0.6 }}>
-                   Coût courses
-                 </div>
+             setTimeout(() => {
+               recalcPrices({ silent: true })
+             }, 0)
+           }}
+           buttonLabel="Voir les produits"
+         />
+       </div>
+     </div>
 
-                 <Price value={costCourses} blur={blurPrices} />
-               </div>
+     <div className="ingredient-mobile-meta">
+       <input
+         placeholder="Qté"
+         value={qtyInputs[idx] ?? ''}
+         onChange={(e) => setQtyInput(idx, e.target.value)}
+         style={{
+           borderRadius: 12,
+           padding: 10,
+           width: '100%',
+         }}
+       />
 
-               <button
-                 type="button"
-                 onClick={() => removeIngredient(idx)}
-                 className="app-btn app-btn-utility"
-                 style={smallXBtnStyle}
-                 >
-                 ✕
-               </button>
-             </div>
-           </div>
-         )
+       <input
+         placeholder="Unité"
+         value={ing.unit}
+         onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+         style={{
+           borderRadius: 12,
+           padding: 10,
+           width: '100%',
+         }}
+       />
+     </div>
+
+     <div className="ingredient-mobile-prices">
+       <div className="ingredient-mobile-pricebox">
+         <div className="ingredient-price-label">Coût recette</div>
+         <div className="ingredient-price-value cost-pill-row-recipe">
+           <Price value={costRecipe} blur={blurPrices} />
+         </div>
+       </div>
+
+       <div className="ingredient-mobile-pricebox">
+         <div className="ingredient-price-label">Coût courses</div>
+         <div className="ingredient-price-value cost-pill-row-courses">
+           <Price value={costCourses} blur={blurPrices} />
+         </div>
+       </div>
+
+       <button
+         type="button"
+         onClick={() => removeIngredient(idx)}
+         className="app-btn app-btn-utility"
+         style={smallXBtnStyle}
+         >
+         ✕
+       </button>
+     </div>
+   </div>
+ </div>
+)
        })}
 
        <button
