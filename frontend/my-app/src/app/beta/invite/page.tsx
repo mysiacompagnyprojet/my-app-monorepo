@@ -64,7 +64,7 @@ localStorage.setItem('beta_token', t)
 setStatus('✅ Accès bêta activé — connexion requise…')
 
 // ✅ IMPORTANT : on force la connexion avant d’aller sur /import/ocr
-router.push('/login?next=/import/ocr')
+router.push('/login')
 } catch (e: any) {
 setStatus('❌ ' + (e?.message || 'Erreur'))
 } finally {
