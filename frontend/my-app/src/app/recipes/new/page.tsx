@@ -1172,7 +1172,7 @@ function NewRecipeInner() {
          className="app-btn app-btn-utility"
          style={{
            borderRadius: 20,
-           padding: 5,
+           padding: "6px 10px",
            width: '100%',
            justifyContent: 'flex-start',
            fontWeight: 500,
