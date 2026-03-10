@@ -1157,6 +1157,7 @@ function NewRecipeInner() {
          onChange={(e) => setQtyInput(idx, e.target.value)}
          
          style={{
+           border: "1px solid var(--border)",
            borderRadius: 20,
            padding: 10,
            width: '100%',
