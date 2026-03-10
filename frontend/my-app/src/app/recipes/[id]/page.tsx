@@ -219,7 +219,7 @@ export default function RecipeDetailPage() {
      </section>
 
        {limits?.blurPrices && (
-        <PricingPaywallNotice remaining={limits.remaining} />
+        <PricingPaywallNotice remaining={limits.remaining} context="recipes"/>
        )}
 
      {/* Ingrédients */}

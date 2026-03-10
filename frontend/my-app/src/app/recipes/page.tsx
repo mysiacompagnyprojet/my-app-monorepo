@@ -186,7 +186,7 @@ function RecipesInner() {
      )}
 
      {!loading && !err && limits?.blurPrices && (
-      <PricingPaywallNotice remaining={limits.remaining} />
+      <PricingPaywallNotice remaining={limits.remaining} context="recipes" />
      )}
 
      {!loading && !err && (

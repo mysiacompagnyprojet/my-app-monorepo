@@ -785,7 +785,7 @@ function NewRecipeInner() {
        )}
      </section>
 
-     {blurPrices && <PricingPaywallNotice/>}
+     {blurPrices && <PricingPaywallNotice context="import"/>}
 
      {trash.trim() && (
        <section className="app-card p-5" style={{ marginTop: 16 }}>
@@ -813,15 +813,7 @@ function NewRecipeInner() {
      )}
 
      <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <div
-         style={{
-           display: 'grid',
-           gridTemplateColumns: '1fr 1fr',
-           gap: 28,
-           marginTop: 2,
-           alignItems: 'start',
-         }}
-         >
+       <div className="recipe-form-top-grid">
          {/* ========================= */}
          {/* COLONNE GAUCHE            */}
          {/* ========================= */}
@@ -1030,14 +1022,7 @@ function NewRecipeInner() {
                  borderColor: 'var(--border)',
                }}
                >
-               <div
-                 style={{
-                   display: 'grid',
-                   gridTemplateColumns: '1fr 65px 70px 200px 44px',
-                   gap: 10,
-                   alignItems: 'center',
-                 }}
-                 >
+               <div className="recipe-ingredient-row">
                  <div
                    className="app-card p-3 paper-ui"
                    style={{
@@ -1171,7 +1156,7 @@ function NewRecipeInner() {
              setQtyInputs((p) => [...p, ''])
            }}
            className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-           style={{ width: 260 }}
+           style={{ width: 'min(260px, 100%' }}
            type="button"
            >
            + Ajouter un ingrédient
@@ -1274,7 +1259,7 @@ function NewRecipeInner() {
          <button
            onClick={() => setSteps((p) => [...p, ''])}
            className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-           style={{ width: 220 }}
+           style={{ width: 'min(220px, 100%' }}
            type="button"
          >
            + Ajouter une étape

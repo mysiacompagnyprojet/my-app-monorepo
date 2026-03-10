@@ -6,11 +6,24 @@ import Link from 'next/link'
 
 type Props = {
  remaining?: number | null
+ context?: 'recipes' | 'import'
 }
 
-export default function PricingPaywallNotice({ remaining }: Props) {
+export default function PricingPaywallNotice({ remaining, context = 'recipes' }: Props) {
  const showRemaining =
    typeof remaining === 'number' && Number.isFinite(remaining) && remaining >= 0
+
+ const message =
+   context === 'import'
+     ? `Tu as utilisé tes 10 recettes gratuites avec prix visibles.
+
+Passe en Premium pour voir :
+• le vrai prix des recettes
+• le coût des courses
+• le détail des ingrédients et de leurs prix`
+     : `Tu as utilisé tes 10 recettes gratuites avec prix visibles.
+
+Passe en Premium pour débloquer le vrai prix de toutes tes recettes.`
 
  return (
    <div
@@ -26,9 +39,8 @@ export default function PricingPaywallNotice({ remaining }: Props) {
        Limite gratuite atteinte
      </div>
 
-     <p className="app-muted" style={{ margin: 0 }}>
-       Tu as atteint la limite gratuite de 10 recettes avec prix visibles.
-       Passe à Premium pour voir les prix sans limite.
+     <p className="app-muted" style={{ margin: 0, whiteSpace: 'pre-line' }}>
+       {message}
      </p>
 
      {showRemaining && (
@@ -39,7 +51,7 @@ export default function PricingPaywallNotice({ remaining }: Props) {
 
      <div style={{ marginTop: 12 }}>
        <Link href="/premium" className="app-btn-primary">
-         Voir Premium
+         Débloquer les prix
        </Link>
      </div>
    </div>

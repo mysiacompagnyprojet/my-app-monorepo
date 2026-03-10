@@ -34,16 +34,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
      <body className={`${inter.variable} ${playfair.variable} ${inter.className} antialiased`}>
        <AuthTokenBridge />
 
-       {/* ✅ Shell global */}
        <div className="app-shell">
-         {/* ✅ UN SEUL container commun : header + pages + footer */}
          <div className="app-container">
            <Suspense fallback={null}>
              <HeaderClient />
            </Suspense>
+         </div>
 
-           {children}
+         {children}
 
+         <div className="app-container">
            <footer className="app-footer">
              <span className="app-footer-brand">MySia-app</span>
            </footer>

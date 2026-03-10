@@ -194,7 +194,7 @@ function OcrPageInner() {
          )}
 
          {/* CTA */}
-         <div className="mt-4 flex items-center gap-3">
+         <div className="mt-4 ocr-actions">
            <button
              onClick={run}
              disabled={!canRun}
@@ -202,6 +202,7 @@ function OcrPageInner() {
              style={{
                width: '100%',
                maxWidth: 420,
+               alignSelf: 'stretch',
                paddingTop: 12,
                paddingBottom: 12,
                borderRadius: 12,
@@ -230,7 +231,7 @@ function OcrPageInner() {
 
          {/* bloc du paywall*/}
          {pricingPolicy?.blurPrices && (
-          <PricingPaywallNotice remaining={pricingPolicy.remaining}/>
+          <PricingPaywallNotice remaining={pricingPolicy.remaining} context="import" />
          )}
 
          {/* Aperçu (ancienne version conservée, mais prix via <Price/> + blur) */}

@@ -122,7 +122,7 @@ export default function Page() {
          )}
 
          {limits?.blurPrices && (
-          <PricingPaywallNotice remaining={limits.remaining} />
+          <PricingPaywallNotice remaining={limits.remaining} context="import" />
          )}
          
          {status && (

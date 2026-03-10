@@ -48,24 +48,24 @@ export default function Home() {
  if (checking) return null
 
  return (
-   <div className="flex flex-col gap-6">
-     <section className="app-card p-5">
-       <div className="mt-2">
-         <section className="app-card p-5">
-           <h2 className="text-lg font-extrabold app-title">Connexion</h2>
+ <main className="app-container" style={{ margin: '20px auto 40px' }}>
+   <section className="app-card p-5 home-login-card">
+     <h2 className="text-lg font-extrabold app-title">Connexion</h2>
 
-           <p className="mt-1 app-muted text-sm">
-             Connecte-toi pour accéder à MySia, enregistrer tes recettes et retrouver tes imports.
-           </p>
+     <p className="mt-1 app-muted text-sm">
+       Connecte-toi pour accéder à MySia, enregistrer tes recettes et retrouver tes imports.
+     </p>
 
-           <div className="mt-4">
-             <Link href="/login" className="app-btn-secondary w-full" style={{ display: 'inline-block', textAlign: 'center' }}>
-               Se connecter
-             </Link>
-           </div>
-         </section>
-       </div>
-     </section>
-   </div>
- )
+     <div className="mt-4">
+       <Link
+         href="/login"
+         className="app-btn app-btn-secondary"
+         style={{ width: '100%', textAlign: 'center' }}
+        >
+         Se connecter
+       </Link>
+     </div>
+   </section>
+ </main>
+)
 }
