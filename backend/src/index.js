@@ -35,6 +35,8 @@ const allowedOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:5173',
+  'https://mysia-app.fr',
+  'https://www.mysia-app.fr',
   'https://my-app-monorepo.vercel.app',
   process.env.FRONTEND_URL || '',
   process.env.FRONTEND_VERCEL_URL || '',
