@@ -1155,7 +1155,7 @@ function NewRecipeInner() {
          placeholder="Qté"
          value={qtyInputs[idx] ?? ''}
          onChange={(e) => setQtyInput(idx, e.target.value)}
-         className="app-btn"
+         className="app-btn-utility"
          style={{
            borderRadius: 20,
            padding: 10,
