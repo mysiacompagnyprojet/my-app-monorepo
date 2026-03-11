@@ -40,6 +40,7 @@ export default function HeaderClient() {
  const search = useSearchParams()
 
  const isNewRecipe = pathname?.startsWith('/recipes/new')
+ const [isLoggedIn, setIsLoggedIn] = useState(false)
 
  // Drawer states
  const [drawerOpen, setDrawerOpen] = useState(false)
@@ -58,6 +59,30 @@ export default function HeaderClient() {
  useEffect(() => {
    saveCats(cats)
  }, [cats])
+
+ useEffect(() => {
+ function checkAuth() {
+   try {
+     const hasSbToken =
+       Object.keys(localStorage).some(k=>k.includes('supabase'))
+
+     const hasUserIdCookie =
+       typeof document !== 'undefined' &&
+       document.cookie.includes('sb-')
+
+     setIsLoggedIn(hasSbToken || hasUserIdCookie)
+   } catch {
+     setIsLoggedIn(false)
+   }
+ }
+
+ checkAuth()
+ window.addEventListener('focus', checkAuth)
+
+ return () => {
+   window.removeEventListener('focus', checkAuth)
+ }
+}, [])
 
  const parents = useMemo(() => cats.filter((c) => !c.parentId), [cats])
  const childrenByParent = useMemo(() => {
@@ -143,22 +168,39 @@ export default function HeaderClient() {
          </a>
 
          {!isNewRecipe && (
-           <div className="app-nav-actions">
-             <button
-               type="button"
-               className="app-btn app-btn-utility"
-               onClick={() => {
-                 setPanel('menu')
-                 setDrawerOpen(true)
-               }}
-               >
-               📜 Mes recettes
-             </button>
+ <div className="app-nav-actions">
+   {isLoggedIn ? (
+     <>
+       <button
+         type="button"
+         className="app-btn app-btn-utility"
+         onClick={() => {
+           setPanel('menu')
+           setDrawerOpen(true)
+         }}
+         >
+         📜 Mes recettes
+       </button>
 
-             <a className="app-btn app-btn-utility" href="/import/ocr">📷 Import OCR</a>
-             <a className="app-btn app-btn-utility" href="/recipes/new">➕ Nouvelle recette</a>
-           </div>
-         )}
+       <a className="app-btn app-btn-utility" href="/import/ocr">
+         📷 Import OCR
+       </a>
+
+       <a className="app-btn app-btn-utility" href="/recipes/new">
+         ➕ Nouvelle recette
+       </a>
+     </>
+   ) : (
+     <button
+       type="button"
+       className="app-btn app-btn-sage"
+       onClick={() => router.push('/login')}
+    >
+       Se connecter / Créer un compte gratuit
+     </button>
+   )}
+ </div>
+)}
        </nav>
      </header>
 
