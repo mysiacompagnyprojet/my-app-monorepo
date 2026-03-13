@@ -111,8 +111,8 @@ model ingredients_base {
   quantite_de_reference                      Int?
   prix_d_achat                               Decimal? @db.Decimal
   synonyme                                   String?
-  gramme_par_piece                           Decimal? @default(dbgenerated("\nCASE\n    WHEN ((unite_g_ml_piece IS NULL) OR (nombre IS NULL) OR (nombre = (0)::numeric)) THEN NULL::numeric\n    ELSE (unite_g_ml_piece / nombre)\nEND")) @db.Decimal(14, 6)
-  prix_kg_l_piece                            Decimal? @default(dbgenerated("\nCASE\n    WHEN ((type_unite IS NULL) OR (prix_d_achat IS NULL) OR (unite_g_ml_piece IS NULL) OR (unite_g_ml_piece = (0)::numeric)) THEN NULL::numeric\n    WHEN (type_unite = 'mg'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000000)::numeric)\n    WHEN (type_unite = 'g'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000)::numeric)\n    WHEN (type_unite = 'kg'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'ml'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (1000)::numeric)\n    WHEN (type_unite = 'cl'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (100)::numeric)\n    WHEN (type_unite = 'dl'::text) THEN ((prix_d_achat / unite_g_ml_piece) * (10)::numeric)\n    WHEN (type_unite = 'l'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'piece'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    WHEN (type_unite = 'botte'::text) THEN (prix_d_achat / unite_g_ml_piece)\n    ELSE NULL::numeric\nEND")) @db.Decimal(14, 6)
+  gramme_par_piece                           Decimal? @db.Decimal(14, 6)
+  prix_kg_l_piece                            Decimal? @db.Decimal(14, 6)
   recommandation_pour_x2_x3_ou_plus_portions String?
   id                                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 }

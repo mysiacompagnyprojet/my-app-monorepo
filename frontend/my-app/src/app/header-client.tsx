@@ -4,34 +4,12 @@
 import Image from 'next/image'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
+import { apiFetch } from 'src/lib/api'
 
 type Category = {
  id: string
  name: string
  parentId: string | null
-}
-
-const LS_KEY = 'mysia_recipe_categories_v1'
-
-function uid() {
- return Math.random().toString(16).slice(2) + '-' + Date.now().toString(16)
-}
-
-function loadCats(): Category[] {
- try {
-   const raw = localStorage.getItem(LS_KEY)
-   if (!raw) return []
-   const v = JSON.parse(raw)
-   return Array.isArray(v) ? v : []
- } catch {
-   return []
- }
-}
-
-function saveCats(list: Category[]) {
- try {
-   localStorage.setItem(LS_KEY, JSON.stringify(list))
- } catch {}
 }
 
 export default function HeaderClient() {
@@ -40,7 +18,7 @@ export default function HeaderClient() {
  const search = useSearchParams()
 
  const isNewRecipe = pathname?.startsWith('/recipes/new')
- const isRecipesPage = pathname?.startsWith('/recipes)')
+ const isRecipesPage = pathname?.startsWith('/recipes')
  const [isLoggedIn, setIsLoggedIn] = useState(false)
  
 
@@ -54,14 +32,38 @@ export default function HeaderClient() {
  const [newName, setNewName] = useState('')
  const [parentForSub, setParentForSub] = useState<string>('')
 
- useEffect(() => {
-   setCats(loadCats())
- }, [])
+ async function refreshCats() {
+  try {
+    const json = await apiFetch<{ ok?: boolean; categories?: any[] }>('/recipe-categories', {
+      method: 'GET',
+    })
 
- useEffect(() => {
-   saveCats(cats)
- }, [cats])
+    const raw = Array.isArray((json as any)?.categories) ? (json as any).categories : []
 
+    const flat: Category[] = raw.flatMap((parent: any) => {
+      const parentCat: Category = {
+        id: String(parent.id),
+        name: String(parent.name),
+        parentId: null,
+      }
+
+      const children: Category[] = Array.isArray(parent.children)
+      ? parent.children.map((child: any) => ({
+          id: String(child.id),
+          name: String(child.name),
+          parentId: String(parent.id),
+        }))
+        : []
+
+        return [parentCat, ...children]
+    })
+
+    setCats(flat)
+  } catch (e) {
+    console.error('refreshCats error', e)
+    setCats([])
+  }
+  }
  useEffect(() => {
  function checkAuth() {
    try {
@@ -90,7 +92,12 @@ export default function HeaderClient() {
  return () => {
    window.removeEventListener('focus', checkAuth)
  }
-}, [])
+  }, [])
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    refreshCats()
+  }, [isLoggedIn])
 
  const parents = useMemo(() => cats.filter((c) => !c.parentId), [cats])
  const childrenByParent = useMemo(() => {
@@ -110,9 +117,9 @@ export default function HeaderClient() {
    router.push('/recipes')
  }
 
- function goRecipesCategory(_categoryId: string) {
+ function goRecipesCategory(categoryId: string) {
    setDrawerOpen(false)
-   router.push(`/recipes`)
+   router.push(`/recipes?cat=${encodeURIComponent(categoryId)}`)
  }
 
  function handleRecipesClick() {
@@ -126,10 +133,10 @@ export default function HeaderClient() {
  }
 
  // ✅ Amélioration: ne pas pousser ?sub tant que le backend ne gère pas /recipes?sub=
- function goRecipesSubCategory(_subCategoryId: string) {
+ function goRecipesSubCategory(subCategoryId: string) {
    // TODO: quand prêt côté backend -> router.push(`/recipes?sub=${encodeURIComponent(subCategoryId)}`)
    setDrawerOpen(false)
-   router.push('/recipes')
+   router.push(`/recipes?cat=${encodeURIComponent(subCategoryId)}`)
  }
 
  function startAdd() {
@@ -139,24 +146,28 @@ export default function HeaderClient() {
    setParentForSub(parents[0]?.id || '')
  }
 
- function submitAdd() {
-   const name = newName.trim()
-   if (!name) return
+ async function submitAdd() {
+ const name = newName.trim()
+ if (!name) return
 
-   if (addMode === 'category') {
-     const next: Category = { id: uid(), name, parentId: null }
-     setCats((p) => [...p, next])
-     setNewName('')
-     setPanel('menu')
-     return
-   }
+ try {
+   const body =
+     addMode === 'category'
+       ? { name, parentId: null }
+       : { name, parentId: parentForSub || null }
 
-   if (!parentForSub) return
-   const next: Category = { id: uid(), name, parentId: parentForSub }
-   setCats((p) => [...p, next])
+   await apiFetch('/recipe-categories', {
+     method: 'POST',
+     body: JSON.stringify(body),
+   })
+
    setNewName('')
    setPanel('menu')
+   await refreshCats()
+ } catch (e: any) {
+   console.error('submitAdd error', e)
  }
+}
 
  function deleteCat(id: string) {
    setCats((p) => p.filter((c) => c.id !== id && c.parentId !== id))
@@ -433,13 +444,8 @@ export default function HeaderClient() {
                    </button>
                  </div>
                </div>
-
-               <div className="app-muted" style={{ fontSize: 12, marginTop: 10 }}>
-                 (Temporaire) Les catégories sont stockées en localStorage. On branchera Supabase/Prisma après.
-               </div>
              </div>
            )}
-
            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between', alignItems: 'center' }}>
              <div className="app-muted" style={{ fontSize: 12 }}>
                Filtrage via URL: ?cat=
