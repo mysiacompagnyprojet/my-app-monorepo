@@ -146,8 +146,6 @@ function LoginInner() {
 
        <p className="mt-1 app-muted text-sm">Accès sécurisé à ton espace personnel</p>
 
-       <p className="mt-2 text-xs app-muted">API : {API_URL || '(non définie)'}</p>
-
        {/* --- Login classique --- */}
        <form onSubmit={onSubmit} className="mt-5 grid gap-4">
          <label className="grid gap-1 text-sm font-semibold">

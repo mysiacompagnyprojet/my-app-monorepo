@@ -16,7 +16,7 @@ const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../ut
 
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs');
-const { canonUnit } = require('../utils/units');
+const { canonUnit, toBaseQty } = require('../utils/units');
 
 const { getPricingPolicy } = require('../services/importLimits');
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
@@ -97,6 +97,60 @@ return acc + (Number.isFinite(n) ? n : 0)
 return Number.isFinite(total) ? total : 0
 }
 
+function computeIngredientCostCourses(ing) {
+ const buyPrice = typeof ing?.buyPriceEur === 'number' ? ing.buyPriceEur : null
+ const refQty = typeof ing?.buyRefQty === 'number' ? ing.buyRefQty : null
+ const refUnit = typeof ing?.buyRefUnit === 'string' ? ing.buyRefUnit : null
+
+ if (buyPrice == null || refQty == null || refUnit == null) return 0
+
+ let qBase = toBaseQty(Number(ing?.quantity || 0), String(ing?.unit || ''))
+ const packBase = toBaseQty(refQty, refUnit)
+
+ if (!qBase || !packBase) return 0
+
+ if (qBase.unit === packBase.unit) {
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ const gpp = typeof ing?.gramsPerPiece === 'number' ? ing.gramsPerPiece : null
+ if (qBase.unit === 'piece' && packBase.unit === 'g' && gpp && gpp > 0) {
+   qBase = { qty: qBase.qty * gpp, unit: 'g' }
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ if (qBase.unit === 'g' && packBase.unit === 'piece' && gpp && gpp > 0) {
+   qBase = { qty: qBase.qty / gpp, unit: 'piece' }
+   const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+   return packs * buyPrice
+ }
+
+ const d = typeof ing?.density_g_per_ml === 'number' ? ing.density_g_per_ml : null
+ if (d && d > 0) {
+   if (qBase.unit === 'ml' && packBase.unit === 'g') {
+     qBase = { qty: qBase.qty * d, unit: 'g' }
+     const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+     return packs * buyPrice
+   }
+
+   if (qBase.unit === 'g' && packBase.unit === 'ml') {
+     qBase = { qty: qBase.qty / d, unit: 'ml' }
+     const packs = Math.max(1, Math.ceil(qBase.qty / packBase.qty))
+     return packs * buyPrice
+   }
+ }
+
+ return 0
+}
+
+function computeTotalCoursesEur(ingredients) {
+ const list = Array.isArray(ingredients) ? ingredients : []
+ const total = list.reduce((acc, ing) => acc + computeIngredientCostCourses(ing), 0)
+ return Number.isFinite(total) ? total : 0
+}
+
 // ─────────────────────────────────────────────
 // GET /recipes → liste des recettes
 // ─────────────────────────────────────────────
@@ -159,6 +213,7 @@ return {
 ...r,
 ingredients: enrichedIngredients,
 totalCostEur: computeTotalCostEur(enrichedIngredients),
+totalCousesEur: computeTotalCoursesEur(enrichedIngredients),
 }
 })
 )
@@ -530,6 +585,7 @@ const recipe = {
 ...recipeRaw,
 ingredients: enrichedIngredients,
 totalCostEur: computeTotalCostEur(enrichedIngredients),
+totalCousesEur: computeTotalCoursesEur(enrichedIngredients),
 }
 
 return res.json({ ok: true, recipe, limits })

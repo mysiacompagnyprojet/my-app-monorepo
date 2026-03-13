@@ -18,10 +18,10 @@ const playfair = Playfair_Display({
  weight: ['400', '600', '700'],
 })
 
-export const metadata: Metadata = {
- title: 'MySia-app',
- description: 'Application de recettes et budget',
-}
+//export const metadata: Metadata = {
+ //title: 'MySia-app',
+ //description: 'Application de recettes et budget',
+//}
 
 export const viewport = {
  width: 'device-width',
@@ -42,12 +42,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
          </div>
 
          {children}
-
-         <div className="app-container">
+        <div className="app-container">
            <footer className="app-footer">
              <span className="app-footer-brand">MySia-app</span>
            </footer>
          </div>
+         
        </div>
      </body>
    </html>

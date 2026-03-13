@@ -19,6 +19,7 @@ type Recipe = {
  imageUrl: string | null
  createdAt: string
  totalCostEur: number | null
+ totalCoursesEur?: number | null
 }
 
 type Limits = {
@@ -51,6 +52,21 @@ function RecipesInner() {
    if (!cat) return null
    return cat // (plus tard: label de catégorie)
  }, [cat])
+
+ function getCostPerServing(recipe: Recipe) {
+    const total = typeof recipe.totalCostEur === 'number' ? recipe.totalCostEur : null
+    const servings = Number(recipe.servings || 0)
+
+    if (total == null || !Number.isFinite(total) || servings <= 0) return null
+      return total / servings
+    }
+
+    function getBudgetLabel(costPerServing: number | null) {
+      if (costPerServing == null) return null
+      if (costPerServing <= 2.5) return 'Budget léger'
+      if (costPerServing <= 4.5) return 'Budget moyen'
+    return 'Budget élevé'
+  }
 
  useEffect(() => {
    let cancelled = false
@@ -107,13 +123,13 @@ function RecipesInner() {
 
  return (
    <main style={{ marginTop: 24 }}>
-     <section className="app-card p-6">
+     {/*<section className="app-card p-6">
        <div className="flex flex-wrap items-center justify-between gap-3">
          <div>
            <h1 className="text-2xl font-extrabold app-title">📖 Mes recettes</h1>
            <p className="mt-1 app-muted">Retrouve tes recettes dans un espace clair et organisé.</p>
 
-           {/* ✅ NEW: info freemium */}
+           {/* ✅ NEW: info freemium 
            {limits?.blurPrices && (
              <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
                ⚠️ Limite atteinte : les prix sont floutés.
@@ -141,7 +157,7 @@ function RecipesInner() {
          </a>
        </div>
      </section>
-
+    */}
      {cat && (
        <section
          className="app-card p-4"
@@ -217,6 +233,8 @@ function RecipesInner() {
              }}
              >
              {recipes.map((r) => {
+               const costPerServing = getCostPerServing(r)
+               const budgetLabel = getBudgetLabel(costPerServing)
                // on garde ton helper (utile ailleurs), mais ici on passe par <Price />
 
                return (
@@ -274,18 +292,48 @@ function RecipesInner() {
                        {r.title}
                      </div>
 
-                     <div className="text-sm" style={{ marginTop: -6, marginBottom: 10 }}>
-                       <span className="app-muted">
-                         Coût estimé : ~<Price value={r.totalCostEur} blur={limits?.blurPrices} />
-                       </span>
-                     </div>
+                     {budgetLabel && (
+ <div style={{ marginBottom: 10 }}>
+   <span className="app-badge">{budgetLabel}</span>
+ </div>
+)}
 
-                     <div className="mt-1 text-sm app-muted">
-                       <span className="app-badge">Portions : {r.servings}</span>
-                       <span style={{ marginLeft: 8 }}>
-                         {new Date(r.createdAt).toLocaleDateString('fr-FR')}
-                       </span>
-                     </div>
+<div
+ style={{
+   fontSize: 20,
+   fontWeight: 800,
+   color: 'var(--primary)',
+   lineHeight: 1.1,
+   marginBottom: 8,
+ }}
+>
+ <Price value={costPerServing} blur={limits?.blurPrices} />/pers
+</div>
+
+<div
+ className="text-sm app-muted"
+ style={{ display: 'grid', gap: 4, marginBottom: 10 }}
+>
+ <div>
+   Coût recette : <Price value={r.totalCostEur} blur={limits?.blurPrices} />
+ </div>
+
+ <div>
+   Coût courses : <Price value={r.totalCoursesEur} blur={limits?.blurPrices} />
+ </div>
+</div>
+
+<div
+ className="text-sm app-muted"
+ style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
+>
+ <span className="app-badge">
+   {r.servings} portion{r.servings > 1 ? 's' : ''}
+ </span>
+
+ <span>{new Date(r.createdAt).toLocaleDateString('fr-FR')}</span>
+</div>
+
                    </Link>
                  </li>
                )

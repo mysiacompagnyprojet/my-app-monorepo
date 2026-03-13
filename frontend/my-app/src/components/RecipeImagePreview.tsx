@@ -1,4 +1,4 @@
-//frontend/my-app/src/components
+//frontend/my-app/src/components/RecipeImagePreview
 type Props = {
     imageUrl?: string | null
 }

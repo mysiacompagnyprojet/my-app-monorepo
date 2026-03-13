@@ -374,6 +374,41 @@ function NewRecipeInner() {
    }, 0)
  }, [ingredients])
 
+ const extraCost = useMemo(() => {
+    if (!totalProducts || !totalCost) return null
+    return totalProducts - totalCost
+  }, [totalProducts, totalCost])
+
+ const costPerServing = useMemo(() => {
+    if (!servings || servings <= 0) return null
+    if (!totalCost || totalCost <= 0) return null
+
+    return totalCost / servings
+  }, [totalCost, servings])
+
+  const topIngredients = useMemo(() => {
+    return ingredients
+   .map((ing) => ({
+     name: ing.name,
+     cost: typeof ing.costEur === 'number' ? ing.costEur : 0,
+    }))
+   .filter(i => i.name && i.cost > 0)
+   .sort((a,b) => b.cost - a.cost)
+   .slice(0,3)
+  }, [ingredients])
+
+  const economySuggestion = useMemo(() => {
+    if(topIngredients.length === 0) return null
+    const mostExpensive = topIngredients[0]
+    if(!mostExpensive.cost) return null
+    const saving = mostExpensive.cost * 0.2
+    return {
+      name: mostExpensive.name,
+      saving: saving,
+      newTotal: totalCost - saving
+    }
+  },[topIngredients,totalCost])
+
  // 1) Pré-remplissage depuis OCR
  useEffect(() => {
    if (!fromOcr) return
@@ -990,7 +1025,196 @@ function NewRecipeInner() {
              </div>
            </div>
          </div>
-       </div>
+          {/* ANALYSE MYSIA */}
+
+          {totalCost > 0 && (
+            <div
+                className="app-card p-5"
+                style={{
+                  marginTop:16,
+                  background:'rgba(176,188,140,0.08)',
+                  border:'1px solid rgba(176,188,140,0.25)'
+                }}
+              >
+
+                <h3
+                  style={{
+                    fontWeight:800,
+                    marginBottom:12,
+                    color:'var(--primary)'
+                  }}
+                >  
+                Ce que coûte vraiment cette recette
+                </h3>
+                <div 
+                  style={{
+                    fontSize:13,
+                    opacity:0.7,
+                    marginBottom:12
+                  }}  
+                >
+                  Les ingrédients les plus chers sont ceux qui font monter le budget.
+                </div>  
+                {/* prix par personne */}
+
+                {costPerServing && (
+                  <div style={{marginBottom:14}}>
+
+                    <div
+                      className="app-muted"
+                      style={{fontWeight:700}}
+                    >
+                      Prix par personne
+                    </div>
+
+                    <div style={{fontSize:20,fontWeight:800}}>
+                      <Price
+                        value={costPerServing}
+                        blur={blurPrices}
+                      />
+                    </div>
+                    <div
+                      style={{
+                        fontSize:13,
+                        opacity:0.7,
+                      }}
+                    >
+                    {servings} portions
+                    </div>    
+                  </div>
+                )}
+
+                {extraCost && extraCost > 0 && (
+                  <div style={{ marginBottom: 14 }}>
+                    <div
+                      className="app-muted"
+                      style={{ fontWeight: 700 }}
+                    >
+                      Impact courses
+                    </div>
+
+                    <div style={{ fontWeight: 700 }}>
+                      + <Price value={extraCost} blur={blurPrices} />
+                    </div>
+
+                    <div
+                      style={{
+                        fontSize: 13,
+                        opacity: 0.7,
+                      }}
+                    >  
+                      Ce que tu dois réellement dépenser en magasin.
+                    </div>
+                  </div>
+                )}
+
+                {/* top ingrédients */}
+
+                {topIngredients.length > 0 && (
+                  <div>
+
+                    <div
+                      className="app-muted"
+                      style={{
+                        fontWeight:700,
+                        marginBottom:6
+                      }}
+                    >
+                      Ce qui coûte le plus
+                    </div>
+
+                    <div style={{display:'grid',gap:4}}>
+
+                      {topIngredients.map((i,index)=>(
+                        <div
+                          key={index}
+                          style={{
+                            display:'flex',
+                            justifyContent:'space-between'
+                          }}
+                        >
+
+                          <span>
+                            #{index+1} {i.name}
+                          </span>
+
+                          <span 
+                            style={{
+                              fontWeight:700,
+                              color:'var(--primary)'
+                              }}
+                            >
+                            <Price
+                              value={i.cost}
+                              blur={blurPrices}
+                            />
+                          </span>
+                        </div>
+                      ))}
+
+                      {economySuggestion && (
+
+                        <div style={{marginTop:16}}>
+
+                          <div
+                            className="app-muted"
+                            style={{
+                              fontWeight:700,
+                              marginBottom:6
+                            }}
+                          >
+                            Option optimisation simple
+
+                          </div>
+
+                          <div 
+                            style={{
+                              background:'rgba(176,188,140,0.15)',
+                              padding:12,
+                              borderRadius:12
+                            }}
+                          >
+
+                          <div style={{marginBottom:6}}>
+
+                            Optimiser {economySuggestion.name}
+
+                          </div>
+
+                          <div style={{fontWeight:700}}>
+
+                            Économie estimée :
+                            - <Price
+                              value={economySuggestion.saving}
+                              blur={blurPrices}
+                            />
+                          </div>
+
+                          <div 
+                            style={{
+                              fontSize:13,
+                              opacity:0.7,
+                              marginTop:4
+                            }}
+                          >
+
+                            Nouveau total estimé :
+
+                            <Price
+                              value={economySuggestion.newTotal}
+                              blur={blurPrices}
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    </div>
+                  </div>
+                )}
+              </div>
+          )} 
+
+        </div>
      </div>
    </section>
 

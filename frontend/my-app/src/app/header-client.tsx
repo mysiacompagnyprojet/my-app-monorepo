@@ -40,7 +40,9 @@ export default function HeaderClient() {
  const search = useSearchParams()
 
  const isNewRecipe = pathname?.startsWith('/recipes/new')
+ const isRecipesPage = pathname?.startsWith('/recipes)')
  const [isLoggedIn, setIsLoggedIn] = useState(false)
+ 
 
  // Drawer states
  const [drawerOpen, setDrawerOpen] = useState(false)
@@ -63,14 +65,20 @@ export default function HeaderClient() {
  useEffect(() => {
  function checkAuth() {
    try {
-     const hasSbToken =
-       Object.keys(localStorage).some(k=>k.includes('supabase'))
+     const hasSupabaseStorage =
+       Object.keys(localStorage).some((key)=>key.includes('supabase')) ||
+       Object.keys(localStorage).some((key)=>key.startsWith('sb-'))
 
-     const hasUserIdCookie =
+      const hasSupabaseSession =
+       Object.keys(sessionStorage).some((key)=>key.includes('supabase')) ||
+       Object.keys(sessionStorage).some((key)=>key.startsWith('sb-'))
+
+     const hasSBCookie =
        typeof document !== 'undefined' &&
        document.cookie.includes('sb-')
 
-     setIsLoggedIn(hasSbToken || hasUserIdCookie)
+      const logged = hasSupabaseStorage || hasSupabaseSession || hasSBCookie 
+     setIsLoggedIn(logged)
    } catch {
      setIsLoggedIn(false)
    }
@@ -102,9 +110,19 @@ export default function HeaderClient() {
    router.push('/recipes')
  }
 
- function goRecipesCategory(categoryId: string) {
+ function goRecipesCategory(_categoryId: string) {
    setDrawerOpen(false)
-   router.push(`/recipes?cat=${encodeURIComponent(categoryId)}`)
+   router.push(`/recipes`)
+ }
+
+ function handleRecipesClick() {
+  if (!isRecipesPage) {
+    router.push('/recipes?menu=1')
+    return
+  }
+
+  setPanel('menu')
+  setDrawerOpen(true)
  }
 
  // ✅ Amélioration: ne pas pousser ?sub tant que le backend ne gère pas /recipes?sub=
@@ -154,17 +172,28 @@ export default function HeaderClient() {
    setDrawerOpen(false)
    setPanel('menu')
    // eslint-disable-next-line react-hooks/exhaustive-deps
- }, [pathname, search?.toString()])
+  }, [pathname, search?.toString()])
+
+  useEffect(() => {
+    if (pathname?.startsWith('/recipes') && search?.get('menu') === '1') {
+      setPanel('menu')
+      setDrawerOpen(true)
+    }
+  }, [pathname, search])
 
  return (
    <>
      <header className={`app-card app-header ${isNewRecipe ? 'app-header--compact' : ''}`}>
        <nav className="app-header-nav"> 
-         <a href="/" className="app-brand">
-           <Image src="/brand/logo.png" alt="MySia logo" width={56} height={56} priority />
-           <span>
+         <a href="/" className="app-brand-logo">
+           <Image src="/logo-mysia.PNG" alt="MySia" width={160} height={100} priority 
+           style={{
+            height: "auto", 
+            width: "auto", 
+            }}/>
+           {/*<span>
              MySia<span className="app-brand-suffix">-app</span>
-           </span>
+           </span>*/}
          </a>
 
          {!isNewRecipe && (
@@ -174,10 +203,7 @@ export default function HeaderClient() {
        <button
          type="button"
          className="app-btn app-btn-utility"
-         onClick={() => {
-           setPanel('menu')
-           setDrawerOpen(true)
-         }}
+         onClick={handleRecipesClick}
          >
          📜 Mes recettes
        </button>
@@ -355,14 +381,14 @@ export default function HeaderClient() {
                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                    <button
                      type="button"
-                     className={`app-btn app-btn-utility ${addMode === 'category' ? 'app-btn-primary' : ''}`}
+                     className={`app-btn app-btn-active ${addMode === 'category' ? 'app-btn-primary' : ''}`}
                      onClick={() => setAddMode('category')}
                     >
                      Catégorie
                    </button>
                    <button
                      type="button"
-                     className={`app-btn app-btn-utility ${addMode === 'subcategory' ? 'app-btn-primary' : ''}`}
+                     className={`app-btn app-btn-active ${addMode === 'subcategory' ? 'app-btn-primary' : ''}`}
                      onClick={() => setAddMode('subcategory')}
                      disabled={parents.length === 0}
                      title={parents.length === 0 ? 'Crée d’abord une catégorie' : undefined}

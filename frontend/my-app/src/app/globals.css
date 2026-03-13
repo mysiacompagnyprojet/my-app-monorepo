@@ -192,6 +192,15 @@ img { max-width: 100%; height: auto; }
         .app-brand {
             justify-content: flex-start;
         }
+
+        .app-brand-logo {
+            display: inline-flex;
+            
+        }
+
+        .app-brand-logo img {
+            display: block;
+        }
     }
 }
 
@@ -333,6 +342,15 @@ img { max-width: 100%; height: auto; }
     border: 1px solid var(--border);
     border-radius: 14px;
     box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+}
+
+.app-btn-active {
+    background: #6B3A26;
+    color: white;
+    border-color: #6B3A26;
+    border-radius: 14px;
+    box-shadow: 0 6px 14px rgba(0,0,0,0.06);
+    transition: all 0.15s ease;
 }
 
 .app-btn-utility:hover {
