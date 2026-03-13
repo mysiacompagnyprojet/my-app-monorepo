@@ -104,6 +104,7 @@ function RecipesInner() {
        }
 
        const json = await r.json()
+       console.log('RECIPES API', json.recipes)
        if (cancelled) return
        setRecipes(json.recipes || [])
        setLimits(json.limits || null)
@@ -226,7 +227,8 @@ function RecipesInner() {
              style={{
                display: 'grid',
                gap: 16,
-               gridTemplateColumns: 'repeat(auto-fill, minmax(260px,1fr))',
+               gridTemplateColumns: 'repeat(auto-fit, 260px)',
+               justifyContent: 'center',
                listStyle: 'none',
                padding: 0,
                margin: 0,

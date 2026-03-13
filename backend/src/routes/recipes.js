@@ -213,7 +213,7 @@ return {
 ...r,
 ingredients: enrichedIngredients,
 totalCostEur: computeTotalCostEur(enrichedIngredients),
-totalCousesEur: computeTotalCoursesEur(enrichedIngredients),
+totalCoursesEur: computeTotalCoursesEur(enrichedIngredients),
 }
 })
 )
@@ -585,7 +585,7 @@ const recipe = {
 ...recipeRaw,
 ingredients: enrichedIngredients,
 totalCostEur: computeTotalCostEur(enrichedIngredients),
-totalCousesEur: computeTotalCoursesEur(enrichedIngredients),
+totalCoursesEur: computeTotalCoursesEur(enrichedIngredients),
 }
 
 return res.json({ ok: true, recipe, limits })

@@ -29,6 +29,8 @@ type Recipe = {
  createdAt: string
  notes?: string | null
  steps?: string[] | null
+ totalCostEur?: number | null
+ totalCoursesEur?: number | null
  ingredients?: Array<{
    name: string
    quantity: number
@@ -87,6 +89,25 @@ export default function RecipeDetailPage() {
 
  const blurPrices = Boolean(limits?.blurPrices)
 
+ const ingredients = recipe?.ingredients ?? []
+
+  const formatQty = (q: number) => {
+  const s = Number.isFinite(q) ? String(q) : ''
+    return s.replace('.', ',')
+  }
+
+  const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
+
+  const totalRecipeCost = useMemo(() => {
+    return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0), 0)
+  }, [ingredients])
+
+  //const totalProductsCost = useMemo(() => {
+    //return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0), 0)
+  //}, [ingredients])
+  const totalProductsCost = recipe?.totalCoursesEur ?? 0
+  const missingBuyCount = ingredients.filter((ing: any) => !isNum(ing.buyPriceEur)).length
+
  // ─────────────────────────────────────────────
  // ÉTATS BLOQUANTS
  // ─────────────────────────────────────────────
@@ -139,33 +160,6 @@ export default function RecipeDetailPage() {
      </main>
    )
  }
-
- // ─────────────────────────────────────────────
- // Helpers (UI)
- // ─────────────────────────────────────────────
- const formatQty = (q: number) => {
-   const s = Number.isFinite(q) ? String(q) : ''
-   return s.replace('.', ',')
- }
-
- const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
-
- // ─────────────────────────────────────────────
- // Totaux ingrédients
- // ─────────────────────────────────────────────
- const ingredients = recipe.ingredients ?? []
-
- // ⚠️ Totaux floutés doivent rester cohérents : on calcule quand même,
- // mais on affiche via <Price blur />
- const totalRecipeCost = useMemo(() => {
-   return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0), 0)
- }, [ingredients])
-
- const totalProductsCost = useMemo(() => {
-   return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0), 0)
- }, [ingredients])
-
- const missingBuyCount = ingredients.filter((ing: any) => !isNum(ing.buyPriceEur)).length
 
  // ─────────────────────────────────────────────
  // AFFICHAGE NORMAL

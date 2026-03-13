@@ -1450,6 +1450,52 @@ function NewRecipeInner() {
        </button>
      </div>
    </section>
+    <section className="app-card p-5" style={{ marginTop: 16 }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: 14,
+        flexWrap: 'wrap',
+      }}
+      >
+      <div>
+        {status && (
+          <p
+            style={{
+              margin: 0,
+              fontWeight: 700,
+              color:
+                statusKind === 'success'
+                  ? '#2f6f3e'
+                  : statusKind === 'error'
+                  ? '#b00020'
+                  : 'var(--primary)',
+            }}
+          >
+            {status}
+          </p>
+        )}
+      </div>
+
+      <button
+        type="button"
+        onClick={save}
+        className="app-btn app-btn-sage"
+        style={{ 
+          minWidth: 280,
+          height: 60,
+          fontSize: 35,
+          fontWeight: 800,
+          borderRadius: 14,
+          boxShadow: "0 12px 22px rgba(176,188,140,0.35)"
+        }}
+        >
+        Enregistrer la recette
+      </button>
+    </div>
+  </section>
  </main>
 )
 }
