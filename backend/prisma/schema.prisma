@@ -19,8 +19,8 @@ model User {
   updatedAt          DateTime         @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
   ImportLimit        ImportLimit?
   Recipes            Recipe[]
-  RecipeDrafts       RecipeDraft[]
   RecipeCategories   RecipeCategory[]
+  RecipeDrafts       RecipeDraft[]
 }
 
 model Recipe {
@@ -34,8 +34,8 @@ model Recipe {
   createdAt   DateTime           @default(now()) @map("createdat") @db.Timestamptz(6)
   updatedAt   DateTime           @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
   ingredients Ingredient[]
-  categories  RecipeOnCategory[]
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  categories  RecipeOnCategory[]
 
   @@index([userId], map: "idx_recipe_user")
 }
@@ -58,16 +58,16 @@ model Ingredient {
 }
 
 model ImportLimit {
-  userId      String   @id @db.Uuid
-  breakfasts  Int      @default(0)
-  lunches     Int      @default(0)
-  snacks      Int      @default(0)
-  dinners     Int      @default(0)
-  periodStart DateTime @default(now()) @db.Timestamptz(6)
-  createdAt   DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt   DateTime @default(now()) @db.Timestamptz(6)
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  pricingVisible Int @default(0)
+  userId         String   @id @db.Uuid
+  breakfasts     Int      @default(0)
+  lunches        Int      @default(0)
+  snacks         Int      @default(0)
+  dinners        Int      @default(0)
+  periodStart    DateTime @default(now()) @db.Timestamptz(6)
+  createdAt      DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt      DateTime @default(now()) @db.Timestamptz(6)
+  pricingVisible Int      @default(0)
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model RecipeDraft {
@@ -103,35 +103,33 @@ model beta_invites {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ingredients_base {
-  nom                                        String
-  unite_g_ml_piece                           Decimal? @db.Decimal
-  type_unite                                 String?
-  nombre                                     Decimal? @db.Decimal
-  densite_g_ml                               Decimal? @db.Decimal
-  quantite_de_reference                      Int?
-  prix_d_achat                               Decimal? @db.Decimal
-  synonyme                                   String?
-  gramme_par_piece                           Decimal? @db.Decimal(14, 6)
-  prix_kg_l_piece                            Decimal? @db.Decimal(14, 6)
-  recommandation_pour_x2_x3_ou_plus_portions String?
-  id                                         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  nom                                                                                String
+  unite_g_ml_piece                                                                   Decimal?                 @db.Decimal
+  type_unite                                                                         String?
+  nombre                                                                             Decimal?                 @db.Decimal
+  densite_g_ml                                                                       Decimal?                 @db.Decimal
+  quantite_de_reference                                                              Int?
+  prix_d_achat                                                                       Decimal?                 @db.Decimal
+  synonyme                                                                           String?
+  recommandation_pour_x2_x3_ou_plus_portions                                         String?
+  id                                                                                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gramme_par_piece                                                                   Decimal?                 @default(dbgenerated("round((unite_g_ml_piece / NULLIF(nombre, (0)::numeric)), 1)")) @db.Decimal
+  prix_kg_l_piece                                                                    Decimal?                 @default(dbgenerated("round(((prix_d_achat / NULLIF(unite_g_ml_piece, (0)::numeric)) * (quantite_de_reference)::numeric), 2)")) @db.Decimal
+  substitutionsFrom IngredientSubstitution[] @relation("SubSource")
+  substitutionsTo   IngredientSubstitution[] @relation("SubTarget")
 }
 
 model RecipeCategory {
-  id       String  @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId   String  @db.Uuid
-  name     String
-  parentId String? @db.Uuid
-
-  createdAt DateTime @default(now()) @map("createdat") @db.Timestamptz(6)
-  updatedAt DateTime @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  parent   RecipeCategory?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
-  children RecipeCategory[] @relation("CategoryTree")
-
-  recipes RecipeOnCategory[]
+  id        String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId    String             @db.Uuid
+  name      String
+  parentId  String?            @db.Uuid
+  createdAt DateTime           @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt DateTime           @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+  parent    RecipeCategory?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  RecipeCategory[]   @relation("CategoryTree")
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  recipes   RecipeOnCategory[]
 
   @@unique([userId, parentId, name], map: "uniq_recipecategory_user_parent_name")
   @@index([userId], map: "idx_recipecategory_user")
@@ -139,12 +137,29 @@ model RecipeCategory {
 }
 
 model RecipeOnCategory {
-  recipeId   String @db.Uuid
-  categoryId String @db.Uuid
-
-  recipe   Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
-  category RecipeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  recipeId   String         @db.Uuid
+  categoryId String         @db.Uuid
+  category   RecipeCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  recipe     Recipe         @relation(fields: [recipeId], references: [id], onDelete: Cascade)
 
   @@id([recipeId, categoryId])
   @@index([categoryId], map: "idx_recipeoncategory_category")
+}
+
+model IngredientSubstitution {
+  id                                                                           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceIngredientId                                                           String           @db.Uuid
+  targetIngredientId                                                           String           @db.Uuid
+  label                                                                        String?          @default("Alternative possible selon la recette")
+  substitutionType                                                             String?
+  note                                                                         String?
+  rank                                                                         Int              @default(1)
+  createdAt                                                                    DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt                                                                    DateTime         @default(now()) @db.Timestamptz(6)
+  sourceIngredient ingredients_base @relation("SubSource", fields: [sourceIngredientId], references: [id], onDelete: Cascade)
+  targetIngredient ingredients_base @relation("SubTarget", fields: [targetIngredientId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceIngredientId, targetIngredientId], map: "IngredientSubstitution_source_target_key")
+  @@index([sourceIngredientId], map: "IngredientSubstitution_source_idx")
+  @@index([targetIngredientId], map: "IngredientSubstitution_target_idx")
 }

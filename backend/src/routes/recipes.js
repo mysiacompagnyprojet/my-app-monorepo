@@ -151,6 +151,106 @@ function computeTotalCoursesEur(ingredients) {
  return Number.isFinite(total) ? total : 0
 }
 
+async function buildEconomySuggestion(ingredients, totalCostEur) {
+ const list = Array.isArray(ingredients) ? ingredients : []
+
+ const priced = list
+   .map((ing) => {
+     const cost =
+       typeof ing?.costEur === 'number'
+         ? ing.costEur
+         : typeof ing?.costRecipe === 'number'
+         ? ing.costRecipe
+         : 0
+
+     const sourceIngredientId =
+       typeof ing?.ingredientBaseId === 'string' && ing.ingredientBaseId.trim()
+         ? ing.ingredientBaseId.trim()
+         : typeof ing?.id === 'string' && ing.id.trim()
+         ? ing.id.trim()
+         : null
+
+     return {
+       name: String(ing?.name || '').trim(),
+       cost,
+       sourceIngredientId,
+     }
+   })
+   .filter((ing) => ing.name && ing.cost > 0 && ing.sourceIngredientId)
+
+ if (!priced.length) return null
+
+ const mostExpensive = priced.sort((a, b) => b.cost - a.cost)[0]
+
+ const substitutions = await prisma.ingredientSubstitution.findMany({
+   where: { sourceIngredientId: mostExpensive.sourceIngredientId },
+   orderBy: { rank: 'asc' },
+   select: {
+     targetIngredientId: true,
+     label: true,
+     substitutionType: true,
+     note: true,
+     rank: true,
+   },
+ })
+
+ if (!substitutions.length) {
+   return {
+     ingredientName: mostExpensive.name,
+     substitutions: [],
+     savingEur: null,
+     newTotalEur: null,
+     label: 'Alternative possible selon la recette',
+     note: null,
+   }
+ }
+
+ const targetIds = substitutions.map((s) => s.targetIngredientId)
+
+ const targets = await prisma.ingredients_base.findMany({
+   where: { id: { in: targetIds } },
+   select: {
+     id: true,
+     nom: true,
+     prix_d_achat: true,
+   },
+ })
+
+ const targetById = new Map(targets.map((t) => [t.id, t]))
+
+ const enrichedSubs = substitutions
+   .map((s) => {
+     const target = targetById.get(s.targetIngredientId)
+     return {
+       id: s.targetIngredientId,
+       name: target?.nom || null,
+       buyPriceEur:
+         typeof target?.prix_d_achat === 'number'
+           ? target.prix_d_achat
+           : target?.prix_d_achat != null
+           ? Number(target.prix_d_achat)
+           : null,
+     }
+   })
+   .filter((s) => s.name)
+
+ // V1 honnête : économie estimée simple tant qu’on n’a pas les quantités de substitution
+ const savingEur = mostExpensive.cost * 0.2
+ const newTotalEur =
+   typeof totalCostEur === 'number' && Number.isFinite(totalCostEur)
+     ? Math.max(0, totalCostEur - savingEur)
+     : null
+
+ return {
+   ingredientName: mostExpensive.name,
+   substitutions: enrichedSubs,
+   savingEur,
+   newTotalEur,
+   label: substitutions[0]?.label || 'Alternative possible selon la recette',
+   note: substitutions[0]?.note || null,
+ }
+}
+
 // ─────────────────────────────────────────────
 // GET /recipes → liste des recettes
 // ─────────────────────────────────────────────
@@ -335,6 +435,28 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
    return res.status(200).json({ ok: true, ingredients: outError })
  }
 })
+
+
+// ─────────────────────────────────────────────
+// POST /recipes/economy-suggestion
+// body: { ingredients: [{ name, costEur, ingredientBaseId?, id? }], totalCostEur?: number }
+// ─────────────────────────────────────────────
+router.post('/economy-suggestion', needAuth, async (req, res) => {
+ try {
+   const body = req.body ?? {}
+   const ingredients = Array.isArray(body.ingredients) ? body.ingredients : []
+   const totalCostEur =
+     typeof body.totalCostEur === 'number' ? body.totalCostEur : Number(body.totalCostEur || 0)
+
+   const suggestion = await buildEconomySuggestion(ingredients, totalCostEur)
+
+   return res.json({ ok: true, suggestion })
+ } catch (e) {
+   console.error('POST /recipes/economy-suggestion error:', e)
+   return res.status(500).json({ ok: false, error: 'internal error' })
+ }
+})
+
 
 // ─────────────────────────────────────────────
 // POST /recipes/from-draft/:draftId → import OCR

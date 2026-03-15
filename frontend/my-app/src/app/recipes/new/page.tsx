@@ -72,6 +72,19 @@ type EnrichResponse =
  | { ok: true; ingredients: EnrichIngredientOut[] }
  | { ok: false; error: string; message?: string }
 
+ type EconomySuggestion = {
+ ingredientName: string
+ substitutions: Array<{
+   id: string
+   name: string
+   buyPriceEur?: number | null
+ }>
+ savingEur?: number | null
+ newTotalEur?: number | null
+ label?: string | null
+ note?: string | null
+}
+
 /* ──────────────────────────────────────────────────────────────
 Helpers quantité : accepte 1/4, 1 1/2, 1,2
 ────────────────────────────────────────────────────────────── */
@@ -332,6 +345,7 @@ function NewRecipeInner() {
  const [status, setStatus] = useState<string>('')
 
  const [isRepricing, setIsRepricing] = useState(false)
+ const [ economySuggestion, setEconomySuggestion ] = useState<EconomySuggestion | null>(null)
 
  // ✅ NEW: floutage selon policy locale
  const [blurPrices, setBlurPrices] = useState(false)
@@ -397,17 +411,47 @@ function NewRecipeInner() {
    .slice(0,3)
   }, [ingredients])
 
-  const economySuggestion = useMemo(() => {
-    if(topIngredients.length === 0) return null
-    const mostExpensive = topIngredients[0]
-    if(!mostExpensive.cost) return null
-    const saving = mostExpensive.cost * 0.2
-    return {
-      name: mostExpensive.name,
-      saving: saving,
-      newTotal: totalCost - saving
-    }
-  },[topIngredients,totalCost])
+  useEffect(() => {
+    const validIngredients = ingredients
+      .map((ing) => ({
+        name: String(ing.name || '').trim(),
+        costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
+        ingredientBaseId:
+        typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
+        id: typeof ing.id === 'string' ? ing.id : null,
+      }))
+      .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
+
+      if (!validIngredients.length || totalCost <= 0) {
+        setEconomySuggestion(null)
+        return
+      }
+
+      const timer = setTimeout(async () => {
+        try {
+          const json = await apiFetch<{
+            ok: boolean
+            suggestion?: EconomySuggestion | null
+          }>('/recipes/economy-suggestion', {
+            method: 'POST',
+            body: JSON.stringify({
+              ingredients: validIngredients,
+              totalCostEur: totalCost,
+            }),
+          })
+
+          if (json?.ok) {
+            setEconomySuggestion(json.suggestion ?? null)
+          } else {
+            setEconomySuggestion(null)
+          }
+          } catch {
+            setEconomySuggestion(null)
+          }
+      }, 300)
+
+        return () => clearTimeout(timer)
+      }, [ingredients, totalCost])
 
  // 1) Pré-remplissage depuis OCR
  useEffect(() => {
@@ -1163,7 +1207,7 @@ function NewRecipeInner() {
                               marginBottom:6
                             }}
                           >
-                            Option optimisation simple
+                            Comment réduire le coût
 
                           </div>
 
@@ -1174,37 +1218,51 @@ function NewRecipeInner() {
                               borderRadius:12
                             }}
                           >
+<div style={{ marginBottom: 8, fontWeight: 700 }}>
+ Optimiser {economySuggestion.ingredientName}
+</div>
 
-                          <div style={{marginBottom:6}}>
+{economySuggestion.substitutions?.length > 0 && (
+ <div style={{ marginBottom: 10 }}>
+   <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>
+     {economySuggestion.label || 'Alternative possible selon la recette'} :
+   </div>
 
-                            Optimiser {economySuggestion.name}
+   <div style={{ display: 'grid', gap: 4 }}>
+     {economySuggestion.substitutions.map((sub) => (
+       <div key={sub.id} style={{ fontSize: 14 }}>
+         • {sub.name}
+       </div>
+     ))}
+   </div>
+ </div>
+)}
 
-                          </div>
+{economySuggestion.note && (
+ <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
+   {economySuggestion.note}
+ </div>
+)}
 
-                          <div style={{fontWeight:700}}>
+<div
+ style={{
+   display: 'flex',
+   flexWrap: 'wrap',
+   gap: 12,
+   alignItems: 'center',
+ }}
+ >
+ <div style={{ fontWeight: 700 }}>
+   Économie estimée : ~
+   <Price value={economySuggestion.savingEur} blur={blurPrices} />
+ </div>
 
-                            Économie estimée :
-                            - <Price
-                              value={economySuggestion.saving}
-                              blur={blurPrices}
-                            />
-                          </div>
-
-                          <div 
-                            style={{
-                              fontSize:13,
-                              opacity:0.7,
-                              marginTop:4
-                            }}
-                          >
-
-                            Nouveau total estimé :
-
-                            <Price
-                              value={economySuggestion.newTotal}
-                              blur={blurPrices}
-                            />
-                          </div>
+ <div style={{ fontSize: 13, opacity: 0.8 }}>
+   Nouveau total estimé :
+   {' '}
+   <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
+ </div>
+</div>
                         </div>
                       </div>
                     )}
