@@ -935,28 +935,65 @@ function NewRecipeInner() {
 
        <div style={{ display: 'grid', gap: 21 }}>
          <label className="grid gap-1 text-sm font-semibold recipe-color-2">
-           Portions
+ Portions
 
-           <input
-             type="number"
-             min={1}
-             value={servings}
-             onChange={(e) => setServings(Number(e.target.value || 1))}
-             className="app-btn app-btn-utility"
-             style={{ width: 120 }}
-           />
-         </label>
+ <div
+   style={{
+     display: 'inline-flex',
+     alignItems: 'center',
+     gap: 8,
+     width: 'fit-content',
+   }}
+>
+   <button
+     type="button"
+     className="app-btn app-btn-utility"
+     onClick={() => setServings((prev) => Math.max(1, prev - 1))}
+     aria-label="Réduire le nombre de portions"
+     style={{
+       width: 44,
+       height: 44,
+       padding: 0,
+       fontSize: 22,
+       fontWeight: 800,
+       lineHeight: 1,
+     }}
+     >
+     −
+   </button>
 
-         <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
-           Notes
+   <input
+     type="number"
+     min={1}
+     inputMode="numeric"
+     value={servings}
+     onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
+     className="app-btn app-btn-utility"
+     style={{
+       width: 84,
+       textAlign: 'center',
+       fontWeight: 700,
+     }}
+   />
 
-           <textarea
-             value={notes}
-             onChange={(e) => setNotes(e.target.value)}
-             rows={6}
-             style={{ minHeight: 170 }}
-           />
-         </label>
+   <button
+     type="button"
+     className="app-btn app-btn-utility"
+     onClick={() => setServings((prev) => prev + 1)}
+     aria-label="Augmenter le nombre de portions"
+     style={{
+       width: 44,
+       height: 44,
+       padding: 0,
+       fontSize: 22,
+       fontWeight: 800,
+       lineHeight: 1,
+     }}
+     >
+     +
+   </button>
+ </div>
+</label>
        </div>
 
        {/* -------- RIGHT -------- */}

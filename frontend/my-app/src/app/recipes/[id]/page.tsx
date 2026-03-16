@@ -238,7 +238,38 @@ export default function RecipeDetailPage() {
 
      {limits?.blurPrices && <PricingPaywallNotice remaining={limits.remaining} context="recipes" />}
 
-     {/* Analyse */}
+
+       {/* Coûts visibles en haut */}
+<section className="app-card p-6" style={{ marginTop: 16 }}>
+ <div className="cost-summary">
+   <div className="cost-pill paper-ui">
+     <div className="cost-pill-row cost-pill-row-recipe">
+       <span className="cost-pill-label recipe-color-2">
+         Coût recette
+       </span>
+
+       <span className="amount">
+         ≈ <Price value={totalRecipeCost} blur={blurPrices} />
+       </span>
+     </div>
+   </div>
+
+   <div className="cost-pill paper-ui">
+     <div className="cost-pill-row cost-pill-row-courses">
+       <span className="cost-pill-label recipe-color-2">
+         Coût courses
+       </span>
+
+       <span className="amount">
+         ≈ <Price value={totalProductsCost} blur={blurPrices} />
+       </span>
+     </div>
+   </div>
+ </div>
+</section>
+
+
+     {/* Analyse recette*/}
      {totalRecipeCost > 0 && (
        <section
          className="app-card p-6"

@@ -1227,3 +1227,14 @@ Fiche recette - ingrédients responsive
    gap: 12px;
  }
 }
+/* Cache les flèches natives des input number */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+ -webkit-appearance: none;
+ margin: 0;
+}
+
+input[type="number"] {
+ -moz-appearance: textfield;
+ appearance: textfield;
+}

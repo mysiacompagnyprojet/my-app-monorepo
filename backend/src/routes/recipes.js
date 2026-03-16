@@ -53,15 +53,13 @@ buyRefQty: null,
 buyRefUnit: null,
 priceStatus: 'invalid',
 priceMessage: 'Nom d’ingrédient vide',
-}
-}
+}}
 
 // On réutilise la même source de vérité que l'import (costs.js / Airtable)
 const enriched = await enrichIngredientWithCost(base)
 
 return {
 ...ing,
-
 // On garde les champs existants si déjà présents en DB, sinon on prend l'enrichissement
 id: enriched?.id ?? ing?.id ?? null,
 unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
@@ -73,6 +71,11 @@ buyLabel: enriched?.buyLabel ?? null,
 buyRefQty: enriched?.buyRefQty ?? null,
 buyRefUnit: enriched?.buyRefUnit ?? null,
 
+gramsPerPiece: enriched?.gramsPerPiece ?? ing?.gramsPerPiece ?? null,
+density_g_per_ml: enriched?.density_g_per_ml ?? ing?.density_g_per_ml ?? null,
+mlPerPiece: enriched?.mlPerPiece ?? ing?.mlPerPiece ?? null,
+
+
 // ✅ Pour affichage UX si besoin
 priceStatus: enriched?.priceStatus ?? null,
 priceMessage: enriched?.priceMessage ?? null,
@@ -80,8 +83,7 @@ priceMessage: enriched?.priceMessage ?? null,
 ...(enriched?.note ? { note: enriched.note } : {}),
 }
 })
-)
-}
+)}
 
 /**
 * ✅ totalCostEur "à la volée" (SANS migration DB)
@@ -141,7 +143,6 @@ function computeIngredientCostCourses(ing) {
      return packs * buyPrice
    }
  }
-
  return 0
 }
 
