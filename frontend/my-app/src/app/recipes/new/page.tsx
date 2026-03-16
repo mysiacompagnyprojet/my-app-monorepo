@@ -1313,7 +1313,7 @@ function NewRecipeInner() {
  </div>
 
  <div style={{ fontSize: 13, opacity: 0.8 }}>
-   Nouveau total estimé :
+   Nouveau prix/personne :
    {' '}
    <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
  </div>

@@ -61,6 +61,23 @@ html, body {
 body {
     margin: 0;
     background: transparent;
+    position: relative;
+}
+
+body::before{
+    content:"";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+
+    background-image: url("/LOGO-MYSIA-SANS-BASELINE.PNG");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: min(680px, 72vw);
+
+    opacity: 0.03;
+    filter: blur(2.4px) saturate(0.92);
 }
 
 html::before{
@@ -608,7 +625,7 @@ opacity: 1;
     }   
 
     .cost-pill-row .amount {
-        font-size: 25px;
+        font-size: 30px;
         font-weight: 800;
     }
 }
@@ -692,7 +709,7 @@ min-width: 0;
    }
 
    .cost-pill-label {
-       font-size: 20px;
+       font-size: 25px;
    }
 
    .cost-pill-row .amount {
@@ -1099,4 +1116,18 @@ min-width: 0;
     align-items: center;
     gap: 10px;
     margin-bottom: 12px;
+}
+
+.cost-pill-row .amount {
+   font-size: 22px !important;
+   font-weight: 900 !important;
+   letter-spacing: -0.3px;
+   font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 760px) {
+   .cost-pill-row .amount {
+       font-size: 22px !important;
+       font-weight: 900 !important;
+   }
 }
