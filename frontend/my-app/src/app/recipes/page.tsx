@@ -213,7 +213,7 @@ function RecipesInner() {
              <h2 className="text-lg font-extrabold app-title">Aucune recette pour le moment</h2>
              <p className="mt-2 app-muted">Commence par importer ou créer ta première recette.</p>
              <div className="mt-5">
-               <a href="/recipes/import" className="app-btn-secondary">
+               <a href="/import/ocr" className="app-btn-secondary">
                  Importer une recette
                </a>
                <span style={{ display: 'inline-block', width: 10 }} />

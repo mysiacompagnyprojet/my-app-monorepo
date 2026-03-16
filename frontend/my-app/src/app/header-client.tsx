@@ -5,6 +5,11 @@ import Image from 'next/image'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from 'src/lib/api'
+import { createClient } from '@supabase/supabase-js'
+
+// --- Lecture des variables d'environnement (côté client) ---
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 type Category = {
  id: string
@@ -65,34 +70,34 @@ export default function HeaderClient() {
   }
   }
  useEffect(() => {
- function checkAuth() {
+ const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+
+ let unsub: { subscription?: { unsubscribe: () => void } } | null = null
+
+ async function syncSession() {
    try {
-     const hasSupabaseStorage =
-       Object.keys(localStorage).some((key)=>key.includes('supabase')) ||
-       Object.keys(localStorage).some((key)=>key.startsWith('sb-'))
+     const {
+       data: { session },
+     } = await supabase.auth.getSession()
 
-      const hasSupabaseSession =
-       Object.keys(sessionStorage).some((key)=>key.includes('supabase')) ||
-       Object.keys(sessionStorage).some((key)=>key.startsWith('sb-'))
-
-     const hasSBCookie =
-       typeof document !== 'undefined' &&
-       document.cookie.includes('sb-')
-
-      const logged = hasSupabaseStorage || hasSupabaseSession || hasSBCookie 
-     setIsLoggedIn(logged)
+     setIsLoggedIn(Boolean(session))
    } catch {
      setIsLoggedIn(false)
    }
  }
 
- checkAuth()
- window.addEventListener('focus', checkAuth)
+ syncSession()
+
+ const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+   setIsLoggedIn(Boolean(session))
+ })
+
+ unsub = data
 
  return () => {
-   window.removeEventListener('focus', checkAuth)
+   unsub?.subscription?.unsubscribe()
  }
-  }, [])
+}, [])
 
   useEffect(() => {
     if (!isLoggedIn) return

@@ -388,17 +388,33 @@ function NewRecipeInner() {
    }, 0)
  }, [ingredients])
 
- const extraCost = useMemo(() => {
-    if (!totalProducts || !totalCost) return null
-    return totalProducts - totalCost
-  }, [totalProducts, totalCost])
-
  const costPerServing = useMemo(() => {
     if (!servings || servings <= 0) return null
     if (!totalCost || totalCost <= 0) return null
 
     return totalCost / servings
   }, [totalCost, servings])
+
+  function getBudgetLevel(pricePerPerson: number | null) {
+    if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
+
+    if (pricePerPerson < 3) {
+      return 'smart'
+    }
+
+    if (pricePerPerson <= 5) {
+      return 'medium'
+    }
+
+    if (pricePerPerson <= 8) {
+      return 'high'
+    }
+
+    return 'occasion'
+  }
+
+  const budgetLevel = getBudgetLevel(costPerServing)
+
 
   const topIngredients = useMemo(() => {
     return ingredients
@@ -1101,56 +1117,95 @@ function NewRecipeInner() {
                 </div>  
                 {/* prix par personne */}
 
-                {costPerServing && (
-                  <div style={{marginBottom:14}}>
+            {costPerServing && (
+ <div style={{ marginBottom: 14 }}>
+   <div
+     className="app-muted"
+     style={{ fontWeight: 700 }}
+>
+     Prix par personne
+   </div>
 
-                    <div
-                      className="app-muted"
-                      style={{fontWeight:700}}
-                    >
-                      Prix par personne
-                    </div>
+   <div style={{ fontSize: 20, fontWeight: 800 }}>
+     <Price
+       value={costPerServing}
+       blur={blurPrices}
+     />
+   </div>
 
-                    <div style={{fontSize:20,fontWeight:800}}>
-                      <Price
-                        value={costPerServing}
-                        blur={blurPrices}
-                      />
-                    </div>
-                    <div
-                      style={{
-                        fontSize:13,
-                        opacity:0.7,
-                      }}
-                    >
-                    {servings} portions
-                    </div>    
-                  </div>
-                )}
+   <div
+     style={{
+       fontSize: 13,
+       opacity: 0.7,
+     }}
+>
+     {servings} portions
+   </div>
 
-                {extraCost && extraCost > 0 && (
-                  <div style={{ marginBottom: 14 }}>
-                    <div
-                      className="app-muted"
-                      style={{ fontWeight: 700 }}
-                    >
-                      Impact courses
-                    </div>
+   {budgetLevel && (
+     <div
+       style={{
+         display: 'flex',
+         gap: 8,
+         flexWrap: 'wrap',
+         marginTop: 10,
+       }}
+>
+       <div
+         style={{
+           padding: '6px 12px',
+           borderRadius: 999,
+           fontSize: 13,
+           fontWeight: 700,
+           background: budgetLevel === 'smart' ? 'rgba(176,188,140,0.28)' : 'rgba(0,0,0,0.06)',
+           color: budgetLevel === 'smart' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+         }}
+>
+         Budget malin
+       </div>
 
-                    <div style={{ fontWeight: 700 }}>
-                      + <Price value={extraCost} blur={blurPrices} />
-                    </div>
+       <div
+         style={{
+           padding: '6px 12px',
+           borderRadius: 999,
+           fontSize: 13,
+           fontWeight: 700,
+           background: budgetLevel === 'medium' ? 'rgba(230,190,120,0.30)' : 'rgba(0,0,0,0.06)',
+           color: budgetLevel === 'medium' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+         }}
+>
+         Budget moyen
+       </div>
 
-                    <div
-                      style={{
-                        fontSize: 13,
-                        opacity: 0.7,
-                      }}
-                    >  
-                      Ce que tu dois réellement dépenser en magasin.
-                    </div>
-                  </div>
-                )}
+       <div
+         style={{
+           padding: '6px 12px',
+           borderRadius: 999,
+           fontSize: 13,
+           fontWeight: 700,
+           background: budgetLevel === 'high' ? 'rgba(180,120,120,0.22)' : 'rgba(0,0,0,0.06)',
+           color: budgetLevel === 'high' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+         }}
+>
+         Budget élevé
+       </div>
+
+       <div
+         style={{
+           padding: '6px 12px',
+           borderRadius: 999,
+           fontSize: 13,
+           fontWeight: 700,
+           background: budgetLevel === 'occasion' ? 'rgba(122,92,67,0.18)' : 'rgba(0,0,0,0.06)',
+           color: budgetLevel === 'occasion' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+         }}
+>
+         Occasion
+       </div>
+     </div>
+   )}
+ </div>
+)}
 
                 {/* top ingrédients */}
 
