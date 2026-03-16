@@ -1101,11 +1101,11 @@ function NewRecipeInner() {
            <div className="cost-pill paper-ui">
              <div className="cost-pill-row cost-pill-row-recipe">
                <span className="cost-pill-label recipe-color-2">
-                 Coût recette
+                 Coût de la  recette
                </span>
 
                <span className="amount">
-                 ≈ <Price value={totalCost} blur={blurPrices} />
+                {' ≈ '} <Price value={totalCost} blur={blurPrices} />
                </span>
              </div>
            </div>
@@ -1113,11 +1113,11 @@ function NewRecipeInner() {
            <div className="cost-pill paper-ui">
              <div className="cost-pill-row cost-pill-row-courses">
                <span className="cost-pill-label recipe-color-2">
-                 Coût courses
+                 Coût des courses
                </span>
 
                <span className="amount">
-                 ≈ <Price value={totalProducts} blur={blurPrices} />
+                 {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
                </span>
              </div>
            </div>
@@ -1134,58 +1134,15 @@ function NewRecipeInner() {
                 }}
               >
 
-                <h3
-                  style={{
-                    fontWeight:800,
-                    marginBottom:12,
-                    color:'var(--primary)'
-                  }}
-                >  
-                Ce que coûte vraiment cette recette
-                </h3>
-                <div 
-                  style={{
-                    fontSize:13,
-                    opacity:0.7,
-                    marginBottom:12
-                  }}  
-                >
-                  Les ingrédients les plus chers sont ceux qui font monter le budget.
-                </div>  
-                {/* prix par personne */}
+               
 
-            {costPerServing && (
- <div style={{ marginBottom: 14 }}>
-   <div
-     className="app-muted"
-     style={{ fontWeight: 700 }}
->
-     Prix par personne
-   </div>
-
-   <div style={{ fontSize: 20, fontWeight: 800 }}>
-     <Price
-       value={costPerServing}
-       blur={blurPrices}
-     />
-   </div>
-
-   <div
-     style={{
-       fontSize: 13,
-       opacity: 0.7,
-     }}
->
-     {servings} portions
-   </div>
-
-   {budgetLevel && (
+                 {budgetLevel && (
      <div
        style={{
          display: 'flex',
          gap: 8,
          flexWrap: 'wrap',
-         marginTop: 10,
+         marginBottom: 15,
        }}
 >
        <div
@@ -1226,38 +1183,21 @@ function NewRecipeInner() {
 >
          Budget élevé
        </div>
-
-       <div
-         style={{
-           padding: '6px 12px',
-           borderRadius: 999,
-           fontSize: 13,
-           fontWeight: 700,
-           background: budgetLevel === 'occasion' ? 'rgba(122,92,67,0.18)' : 'rgba(0,0,0,0.06)',
-           color: budgetLevel === 'occasion' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-         }}
->
-         Occasion
-       </div>
      </div>
    )}
- </div>
-)}
-
-                {/* top ingrédients */}
+   <h3
+                  style={{
+                    fontWeight:800,
+                    marginBottom:12,
+                    color:'var(--primary)'
+                  }}
+                >  
+                Les ingrédients les plus élevés :
+                </h3>
+    {/* top ingrédients */}
 
                 {topIngredients.length > 0 && (
                   <div>
-
-                    <div
-                      className="app-muted"
-                      style={{
-                        fontWeight:700,
-                        marginBottom:6
-                      }}
-                    >
-                      Ce qui coûte le plus
-                    </div>
 
                     <div style={{display:'grid',gap:4}}>
 
@@ -1271,7 +1211,7 @@ function NewRecipeInner() {
                         >
 
                           <span>
-                            #{index+1} {i.name}
+                            • {index+1} {i.name}
                           </span>
 
                           <span 
@@ -1287,6 +1227,38 @@ function NewRecipeInner() {
                           </span>
                         </div>
                       ))}
+                {/* prix par personne */}
+
+            {costPerServing && (
+ <div style={{ marginBottom: 14, marginTop: 20 }}>
+   <div
+     className="app-muted"
+     style={{ fontWeight: 700 }}
+>
+     Prix par personne :
+   </div>
+
+   <div style={{ fontSize: 20, fontWeight: 800 }}>
+     <Price
+       value={costPerServing}
+       blur={blurPrices}
+     />
+   </div>
+
+   <div
+     style={{
+       fontSize: 13,
+       opacity: 0.7,
+     }}
+>
+     {servings} portions
+   </div>
+
+  
+ </div>
+)}
+
+               
 
                       {economySuggestion && (
 
@@ -1299,7 +1271,7 @@ function NewRecipeInner() {
                               marginBottom:6
                             }}
                           >
-                            Comment réduire le coût
+                            Comment réduire le coût :
 
                           </div>
 
@@ -1311,7 +1283,7 @@ function NewRecipeInner() {
                             }}
                           >
 <div style={{ marginBottom: 8, fontWeight: 700 }}>
- Optimiser {economySuggestion.ingredientName}
+ • {economySuggestion.ingredientName}
 </div>
 
 {economySuggestion.substitutions?.length > 0 && (
@@ -1323,7 +1295,7 @@ function NewRecipeInner() {
    <div style={{ display: 'grid', gap: 4 }}>
      {economySuggestion.substitutions.map((sub) => (
        <div key={sub.id} style={{ fontSize: 14 }}>
-         • {sub.name}
+         . {sub.name}
        </div>
      ))}
    </div>
