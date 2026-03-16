@@ -1131,3 +1131,99 @@ min-width: 0;
        font-weight: 900 !important;
    }
 }
+
+/* =========================
+Fiche recette - ingrédients responsive
+========================= */
+
+.recipe-detail-table-head,
+.recipe-detail-table-row,
+.recipe-detail-table-total {
+ display: grid;
+ grid-template-columns: 90px 70px 1fr 110px 110px;
+ column-gap: 12px;
+ align-items: baseline;
+}
+
+.recipe-detail-table-head {
+ padding: 8px 10px;
+ border-bottom: 1px solid var(--border);
+ font-size: 12px;
+}
+
+.recipe-detail-table-row {
+ padding: 10px 10px;
+ border-bottom: 1px solid rgba(0,0,0,0.06);
+}
+
+.recipe-detail-table-total {
+ padding: 12px 10px 0;
+}
+
+.recipe-detail-mobile-list {
+ display: none;
+}
+
+.recipe-detail-mobile-card {
+ border: 1px solid var(--border);
+ border-radius: 14px;
+ background: rgba(255,255,255,0.72);
+ padding: 12px;
+ display: grid;
+ gap: 10px;
+}
+
+.recipe-detail-mobile-name {
+ font-weight: 800;
+ color: var(--primary);
+ font-size: 16px;
+ line-height: 1.25;
+}
+
+.recipe-detail-mobile-meta {
+ display: flex;
+ gap: 12px;
+ flex-wrap: wrap;
+ font-size: 14px;
+}
+
+.recipe-detail-mobile-prices {
+ display: grid;
+ grid-template-columns: 1fr 1fr;
+ gap: 10px;
+}
+
+.recipe-detail-mobile-label {
+ font-size: 12px;
+ opacity: 0.7;
+ font-weight: 700;
+ margin-bottom: 4px;
+}
+
+.recipe-detail-mobile-value {
+ font-size: 16px;
+ font-weight: 800;
+}
+
+.recipe-cost-recipe {
+ color: #B0BC8C;
+}
+
+.recipe-cost-product {
+ color: var(--primary);
+}
+
+.recipe-detail-mobile-total {
+ background: rgba(255,255,255,0.82);
+}
+
+@media (max-width: 760px) {
+ .recipe-detail-table-desktop {
+   display: none;
+ }
+
+ .recipe-detail-mobile-list {
+   display: grid;
+   gap: 12px;
+ }
+}

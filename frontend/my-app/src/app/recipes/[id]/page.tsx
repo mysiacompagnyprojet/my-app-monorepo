@@ -21,6 +21,14 @@ const playfair = Playfair_Display({
  weight: ['400', '600', '700'],
 })
 
+type RecipeIngredient = {
+ name: string
+ quantity: number
+ unit: string
+ costRecipe?: number | null
+ buyPriceEur?: number | null
+}
+
 type Recipe = {
  id: string
  title: string
@@ -31,21 +39,28 @@ type Recipe = {
  steps?: string[] | null
  totalCostEur?: number | null
  totalCoursesEur?: number | null
- ingredients?: Array<{
-   name: string
-   quantity: number
-   unit: string
-   costRecipe?: number | null
-   // ⚠️ peut ne pas exister selon ce que renvoie le backend
-   buyPriceEur?: number | null
- }>
+ ingredients?: RecipeIngredient[]
 }
 
 type Limits = {
-  blurPrices: boolean
-  used: number
-  limit: number
-  remaining: number
+ blurPrices: boolean
+ used: number
+ limit: number
+ remaining: number
+}
+
+type TopIngredient = {
+ name: string
+ cost: number
+}
+
+function getBudgetLevel(pricePerPerson: number | null) {
+ if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
+
+ if (pricePerPerson < 3) return 'smart'
+ if (pricePerPerson <= 5) return 'medium'
+ if (pricePerPerson <= 8) return 'high'
+ return 'occasion'
 }
 
 export default function RecipeDetailPage() {
@@ -56,12 +71,8 @@ export default function RecipeDetailPage() {
  const [recipe, setRecipe] = useState<Recipe | null>(null)
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
-
  const [limits, setLimits] = useState<Limits | null>(null)
 
- // ─────────────────────────────────────────────
- // FETCH RECETTE
- // ─────────────────────────────────────────────
  useEffect(() => {
    if (!id) return
 
@@ -74,6 +85,7 @@ export default function RecipeDetailPage() {
          `/recipes/${encodeURIComponent(id)}`,
          { method: 'GET' }
        )
+
        const rec = (json as any)?.recipe ?? json
        if (!rec?.id) throw new Error('Réponse backend invalide (recipe manquante)')
 
@@ -88,29 +100,46 @@ export default function RecipeDetailPage() {
  }, [id])
 
  const blurPrices = Boolean(limits?.blurPrices)
-
  const ingredients = recipe?.ingredients ?? []
 
-  const formatQty = (q: number) => {
-  const s = Number.isFinite(q) ? String(q) : ''
-    return s.replace('.', ',')
-  }
+ const formatQty = (q: number) => {
+   const s = Number.isFinite(q) ? String(q) : ''
+   return s.replace('.', ',')
+ }
 
-  const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
+ const isNum = (v: any): v is number => typeof v === 'number' && Number.isFinite(v)
 
-  const totalRecipeCost = useMemo(() => {
-    return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0), 0)
-  }, [ingredients])
+ const totalRecipeCost = useMemo(() => {
+   if (isNum(recipe?.totalCostEur)) return Number(recipe?.totalCostEur)
+   return ingredients.reduce((sum, ing) => sum + (isNum(ing.costRecipe) ? ing.costRecipe : 0), 0)
+ }, [ingredients, recipe?.totalCostEur])
 
-  //const totalProductsCost = useMemo(() => {
-    //return ingredients.reduce((sum, ing: any) => sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0), 0)
-  //}, [ingredients])
-  const totalProductsCost = recipe?.totalCoursesEur ?? 0
-  const missingBuyCount = ingredients.filter((ing: any) => !isNum(ing.buyPriceEur)).length
+ const totalProductsCost = useMemo(() => {
+   if (isNum(recipe?.totalCoursesEur)) return Number(recipe?.totalCoursesEur)
+   return ingredients.reduce((sum, ing) => sum + (isNum(ing.buyPriceEur) ? ing.buyPriceEur : 0), 0)
+ }, [ingredients, recipe?.totalCoursesEur])
 
- // ─────────────────────────────────────────────
- // ÉTATS BLOQUANTS
- // ─────────────────────────────────────────────
+ const missingBuyCount = ingredients.filter((ing) => !isNum(ing.buyPriceEur)).length
+
+ const costPerServing = useMemo(() => {
+   if (!recipe?.servings || recipe.servings <= 0) return null
+   if (!totalRecipeCost || totalRecipeCost <= 0) return null
+   return totalRecipeCost / recipe.servings
+ }, [recipe?.servings, totalRecipeCost])
+
+ const budgetLevel = useMemo(() => getBudgetLevel(costPerServing), [costPerServing])
+
+ const topIngredients = useMemo<TopIngredient[]>(() => {
+   return ingredients
+     .map((ing) => ({
+       name: String(ing.name || '').trim(),
+       cost: isNum(ing.costRecipe) ? ing.costRecipe : 0,
+     }))
+     .filter((ing) => ing.name && ing.cost > 0)
+     .sort((a, b) => b.cost - a.cost)
+     .slice(0, 3)
+ }, [ingredients])
+
  if (loading) {
    return (
      <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
@@ -134,7 +163,7 @@ export default function RecipeDetailPage() {
          <p style={{ color: '#b00020', fontWeight: 800 }}>{err}</p>
 
          <p className="app-muted" style={{ marginTop: 10 }}>
-           Erreur 401 : non connectée (token manquant / expiré)
+           Erreur 401 : non connectée
            <br />
            Erreur 404 : recette inexistante ou pas à toi
          </p>
@@ -143,7 +172,7 @@ export default function RecipeDetailPage() {
            className="app-btn-secondary"
            style={{ marginTop: 12 }}
            onClick={() => router.push('/recipes')}
-         >
+          >
            ← Retour
          </button>
        </section>
@@ -161,9 +190,6 @@ export default function RecipeDetailPage() {
    )
  }
 
- // ─────────────────────────────────────────────
- // AFFICHAGE NORMAL
- // ─────────────────────────────────────────────
  return (
    <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
      {/* Header */}
@@ -184,7 +210,6 @@ export default function RecipeDetailPage() {
      <section className="app-card p-6" style={{ marginTop: 16 }}>
        <RecipeImagePreview imageUrl={recipe.imageUrl} />
 
-       {/* ✅ Titre recette en Playfair Display */}
        <h2
          className={playfair.className}
          style={{
@@ -193,7 +218,7 @@ export default function RecipeDetailPage() {
            lineHeight: 1.15,
            marginBottom: 6,
          }}
-         >
+        > 
          {recipe.title}
        </h2>
 
@@ -204,17 +229,182 @@ export default function RecipeDetailPage() {
          </span>
        </div>
 
-       {/* ✅ compteur freenium (si limits dispo) */}
        {limits && Number.isFinite(limits.limit) && (
          <div className="mt-3 text-sm app-muted">
-           Pricing gratuit : {limits.used}/{limits.limit} • reste {limits.remaining}
+           Analyses gratuites utilisées : {limits.used}/{limits.limit} • il reste {limits.remaining}
          </div>
        )}
      </section>
 
-       {limits?.blurPrices && (
-        <PricingPaywallNotice remaining={limits.remaining} context="recipes"/>
-       )}
+     {limits?.blurPrices && <PricingPaywallNotice remaining={limits.remaining} context="recipes" />}
+
+     {/* Analyse */}
+     {totalRecipeCost > 0 && (
+       <section
+         className="app-card p-6"
+         style={{
+           marginTop: 16,
+           background: 'rgba(176,188,140,0.08)',
+           border: '1px solid rgba(176,188,140,0.25)',
+         }}
+        >
+         <h3
+           style={{
+             fontWeight: 800,
+             marginBottom: 12,
+             color: 'var(--primary)',
+             fontSize: 18,
+           }}
+          > 
+           Ce que coûte vraiment cette recette
+         </h3>
+
+         <div
+           style={{
+             fontSize: 13,
+             opacity: 0.7,
+             marginBottom: 12,
+           }}
+          >
+           Les ingrédients les plus chers sont ceux qui font monter le budget.
+         </div>
+
+         {costPerServing && (
+           <div style={{ marginBottom: 14 }}>
+             <div className="app-muted" style={{ fontWeight: 700 }}>
+               Prix par personne
+             </div>
+
+             <div style={{ fontSize: 20, fontWeight: 800 }}>
+               <Price value={costPerServing} blur={blurPrices} />
+             </div>
+
+             <div
+               style={{
+                 fontSize: 13,
+                 opacity: 0.7,
+               }}
+              > 
+               {recipe.servings} portions
+             </div>
+
+             {budgetLevel && (
+               <div
+                 style={{
+                   display: 'flex',
+                   gap: 8,
+                   flexWrap: 'wrap',
+                   marginTop: 10,
+                 }}
+                >
+                 <div
+                   style={{
+                     padding: '6px 12px',
+                     borderRadius: 999,
+                     fontSize: 13,
+                     fontWeight: 700,
+                     background:
+                       budgetLevel === 'smart' ? 'rgba(176,188,140,0.28)' : 'rgba(0,0,0,0.06)',
+                     color:
+                       budgetLevel === 'smart' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+                   }}
+                  >
+                   Budget malin
+                 </div>
+
+                 <div
+                   style={{
+                     padding: '6px 12px',
+                     borderRadius: 999,
+                     fontSize: 13,
+                     fontWeight: 700,
+                     background:
+                       budgetLevel === 'medium' ? 'rgba(230,190,120,0.30)' : 'rgba(0,0,0,0.06)',
+                     color:
+                       budgetLevel === 'medium' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+                   }}
+                  >
+                   Budget moyen
+                 </div>
+
+                 <div
+                   style={{
+                     padding: '6px 12px',
+                     borderRadius: 999,
+                     fontSize: 13,
+                     fontWeight: 700,
+                     background:
+                       budgetLevel === 'high' ? 'rgba(180,120,120,0.18)' : 'rgba(0,0,0,0.06)',
+                     color:
+                       budgetLevel === 'high' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+                   }}
+                  >
+                   Budget élevé
+                 </div>
+
+                 <div
+                   style={{
+                     padding: '6px 12px',
+                     borderRadius: 999,
+                     fontSize: 13,
+                     fontWeight: 700,
+                     background:
+                       budgetLevel === 'occasion'
+                         ? 'rgba(123,68,46,0.16)'
+                         : 'rgba(0,0,0,0.06)',
+                     color:
+                       budgetLevel === 'occasion' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
+                   }}
+                  >
+                   Occasion
+                 </div>
+               </div>
+             )}
+           </div>
+         )}
+
+         {topIngredients.length > 0 && (
+           <div>
+             <div
+               className="app-muted"
+               style={{
+                 fontWeight: 700,
+                 marginBottom: 6,
+               }}
+              >
+               Ce qui coûte le plus
+             </div>
+
+             <div style={{ display: 'grid', gap: 4 }}>
+               {topIngredients.map((i, index) => (
+                 <div
+                   key={index}
+                   style={{
+                     display: 'flex',
+                     justifyContent: 'space-between',
+                     gap: 12,
+                   }}
+                  >
+                   <span>
+                     #{index + 1} {i.name}
+                   </span>
+
+                   <span
+                     style={{
+                       fontWeight: 700,
+                       color: 'var(--primary)',
+                       whiteSpace: 'nowrap',
+                     }}
+                    >
+                     <Price value={i.cost} blur={blurPrices} />
+                   </span>
+                 </div>
+               ))}
+             </div>
+           </div>
+         )}
+       </section>
+     )}
 
      {/* Ingrédients */}
      <section className="app-card p-6" style={{ marginTop: 16 }}>
@@ -222,85 +412,116 @@ export default function RecipeDetailPage() {
 
        {ingredients.length ? (
          <div style={{ marginTop: 12 }}>
-           {/* En-tête */}
-           <div
-             className="app-muted"
-             style={{
-               display: 'grid',
-               gridTemplateColumns: '90px 70px 1fr 110px 110px',
-               columnGap: 12,
-               padding: '8px 10px',
-               borderBottom: '1px solid var(--border)',
-               fontSize: 12,
-             }}
-             >
-             <div style={{ textAlign: 'right' }}>Qté</div>
-             <div>Unité</div>
-             <div style={{ paddingLeft: 14 }}>Ingrédient</div>
-             <div style={{ textAlign: 'right' }}>Coût recette</div>
-             <div style={{ textAlign: 'right' }}>Coût produit</div>
+           {/* DESKTOP */}
+           <div className="recipe-detail-table-desktop">
+             <div className="recipe-detail-table-head app-muted">
+               <div style={{ textAlign: 'right' }}>Qté</div>
+               <div>Unité</div>
+               <div style={{ paddingLeft: 14 }}>Ingrédient</div>
+               <div style={{ textAlign: 'right' }}>Coût recette</div>
+               <div style={{ textAlign: 'right' }}>Coût produit</div>
+             </div>
+
+             <div>
+               {ingredients.map((ing, i) => (
+                 <div key={i} className="recipe-detail-table-row">
+                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                     {formatQty(ing.quantity)}
+                   </div>
+
+                   <div style={{ opacity: 0.85 }}>{ing.unit}</div>
+
+                   <div style={{ paddingLeft: 14 }}>{ing.name}</div>
+
+                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                     <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
+                   </div>
+
+                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                     <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
+                   </div>
+                 </div>
+               ))}
+             </div>
+
+             <div className="recipe-detail-table-total">
+               <div />
+               <div />
+               <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
+
+               <div style={{ textAlign: 'right', fontWeight: 800 }}>
+                 <Price value={totalRecipeCost} blur={blurPrices} />
+               </div>
+
+               <div style={{ textAlign: 'right', fontWeight: 800 }}>
+                 <Price value={totalProductsCost} blur={blurPrices} />
+               </div>
+             </div>
            </div>
 
-           {/* Lignes */}
-           <div>
-             {ingredients.map((ing: any, i: number) => (
-               <div
-                 key={i}
-                 style={{
-                   display: 'grid',
-                   gridTemplateColumns: '90px 70px 1fr 110px 110px',
-                   columnGap: 12,
-                   padding: '10px 10px',
-                   borderBottom: '1px solid rgba(0,0,0,0.06)',
-                   alignItems: 'baseline',
-                 }}
-                 >
-                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                   {formatQty(ing.quantity)}
+           {/* MOBILE */}
+           <div className="recipe-detail-mobile-list">
+             {ingredients.map((ing, i) => (
+               <div key={i} className="recipe-detail-mobile-card">
+                 <div className="recipe-detail-mobile-name">{ing.name}</div>
+
+                 <div className="recipe-detail-mobile-meta">
+                   <span>
+                     <strong>Qté :</strong> {formatQty(ing.quantity)}
+                   </span>
+                   <span>
+                     <strong>Unité :</strong> {ing.unit}
+                   </span>
                  </div>
 
-                 <div style={{ opacity: 0.85 }}>{ing.unit}</div>
+                 <div className="recipe-detail-mobile-prices">
+                   <div>
+                     <div className="recipe-detail-mobile-label">Coût recette</div>
+                     <div className="recipe-detail-mobile-value recipe-cost-recipe">
+                       <Price
+                         value={isNum(ing.costRecipe) ? ing.costRecipe : null}
+                         blur={blurPrices}
+                       />
+                     </div>
+                   </div>
 
-                 <div style={{ paddingLeft: 14 }}>{ing.name}</div>
-
-                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                   <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
-                 </div>
-
-                 <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                   <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
+                   <div>
+                     <div className="recipe-detail-mobile-label">Coût produit</div>
+                     <div className="recipe-detail-mobile-value recipe-cost-product">
+                       <Price
+                         value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null}
+                         blur={blurPrices}
+                       />
+                     </div>
+                   </div>
                  </div>
                </div>
              ))}
-           </div>
 
-           {/* Totaux */}
-           <div
-             style={{
-               display: 'grid',
-               gridTemplateColumns: '90px 70px 1fr 110px 110px',
-               columnGap: 12,
-               padding: '12px 10px 0',
-               alignItems: 'baseline',
-             }}
-             >
-             <div />
-             <div />
-             <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
+             <div className="recipe-detail-mobile-card recipe-detail-mobile-total">
+               <div className="recipe-detail-mobile-name">Totaux</div>
 
-             <div style={{ textAlign: 'right', fontWeight: 800 }}>
-               <Price value={totalRecipeCost} blur={blurPrices} />
-             </div>
+               <div className="recipe-detail-mobile-prices">
+                 <div>
+                   <div className="recipe-detail-mobile-label">Coût recette</div>
+                   <div className="recipe-detail-mobile-value recipe-cost-recipe">
+                     <Price value={totalRecipeCost} blur={blurPrices} />
+                   </div>
+                 </div>
 
-             <div style={{ textAlign: 'right', fontWeight: 800 }}>
-               <Price value={totalProductsCost} blur={blurPrices} />
+                 <div>
+                   <div className="recipe-detail-mobile-label">Coût produit</div>
+                   <div className="recipe-detail-mobile-value recipe-cost-product">
+                     <Price value={totalProductsCost} blur={blurPrices} />
+                   </div>
+                 </div>
+               </div>
              </div>
            </div>
 
            {missingBuyCount > 0 && (
              <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
-               ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s) (pas encore enrichi ou pas
-               trouvé).
+               ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s).
              </p>
            )}
 
@@ -339,7 +560,7 @@ export default function RecipeDetailPage() {
                    borderRadius: 20,
                    padding: '12px 14px',
                  }}
-                 >
+                >
                  <div style={{ marginBottom: 8 }}>
                    <span
                      style={{
@@ -354,7 +575,7 @@ export default function RecipeDetailPage() {
                        color: 'var(--primary)',
                        verticalAlign: 'middle',
                      }}
-                     >
+                    >
                      Étape {i + 1}
                    </span>
                  </div>
@@ -365,7 +586,7 @@ export default function RecipeDetailPage() {
                      lineHeight: 1.65,
                      fontSize: 14,
                    }}
-                   >
+                  >
                    {String(s)}
                  </div>
                </div>
