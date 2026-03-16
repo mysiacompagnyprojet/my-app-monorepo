@@ -1350,10 +1350,23 @@ function NewRecipeInner() {
  </div>
 
  <div style={{ fontSize: 13, opacity: 0.8 }}>
-   Nouveau prix/personne :
-   {' '}
-   <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
- </div>
+ Nouveau coût recette :
+ {' '}
+ <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
+</div>
+
+<div style={{ fontSize: 13, opacity: 0.8 }}>
+ Nouveau prix/personne :
+ {' '}
+ <Price
+   value={
+     economySuggestion.newTotalEur != null && servings > 0
+       ? economySuggestion.newTotalEur / servings
+       : null
+   }
+   blur={blurPrices}
+ />
+</div>
 </div>
                         </div>
                       </div>
