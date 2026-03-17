@@ -233,13 +233,19 @@ export default function HeaderClient() {
        </a>
      </>
    ) : (
-     <button
-       type="button"
-       className="app-btn app-btn-sage"
-       onClick={() => router.push('/login')}
-    >
-       Se connecter / Créer un compte gratuit
-     </button>
+     <>
+        <a className="landing-header-link" href="/premium">
+          Tarifs
+        </a>
+
+        <button
+          type="button"
+          className="app-btn landing-header-login"
+          onClick={() => router.push('/login')}
+        >
+          Connexion
+        </button>
+      </>
    )}
  </div>
 )}
