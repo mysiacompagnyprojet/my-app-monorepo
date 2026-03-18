@@ -740,148 +740,6 @@ min-width: 0;
    }
 }
 
-.ingredient-row-desktop {
-   display: grid;
-   grid-template-columns: minmax(0, 1.8fr) 190px 80px 90px 130px 130px 44px;
-   gap: 10px;
-   align-items: center;
-}
-
-.ingredient-row-desktop input {
-    min-height: 36px;
-}
-
-.ingredient-row-mobile {
-   display: none;
-}
-
-.ingredient-cell-name {
-   min-width: 0;
-}
-
-.ingredient-cell-name input {
-   width: 100%;
-   min-width: 0;
-}
-
-.ingredient-picker-wrap {
-   width: 100%;
-}
-
-.ingredient-picker-wrap button,
-.ingredient-picker-wrap a {
-   width: 100%;
-   justify-content: center;
-}
-
-.ingredient-price-col {
-   text-align: center;
-   min-width: 0;
-}
-
-.ingredient-price-label {
-   font-size: 12px;
-   line-height: 1.05;
-   opacity: 0.6;
-   font-weight: 700;
-   margin-bottom: 4px;
-}
-
-.ingredient-price-value {
-   font-size: 15px;
-   font-weight: 800;
-   line-height: 1.1;
-   white-space: nowrap;
-}
-
-.ingredient-delete-col {
-   display: flex;
-   justify-content: center;
-}
-
-.ingredient-delete-col button {
-    width: 32px;
-    height: 32px;
-}
-
-@media (max-width: 980px) {
-   .ingredient-row-desktop {
-       grid-template-columns: minmax(0, 1.5fr) 170px 70px 80px 115px 115px 44px;
-       gap: 8px;
-   }
-}
-
-@media (max-width: 980px) {
-   .ingredient-row-desktop {
-       display: none;
-   }
-
-   .ingredient-row-mobile {
-       display: grid;
-       gap: 10px;
-   }
-
-   .ingredient-mobile-top {
-       display: grid;
-       gap: 10px;
-   }
-
-   .ingredient-mobile-meta {
-       display: grid;
-       grid-template-columns: 1fr 1fr;
-       gap: 10px;
-   }
-
-   .ingredient-mobile-prices {
-       display: grid;
-       grid-template-columns: 1fr 1fr auto;
-       gap: 10px;
-       align-items: stretch;
-   }
-
-   .ingredient-mobile-pricebox {
-       text-align: center;
-       padding: 8px 10px;
-       border: 1px solid var(--border);
-       border-radius: 12px;
-       background: rgba(255,255,255,0.72);
-   }
-
-   .ingredient-row-mobile {
-    gap: 14px;
-   }
-
-   .ingredient-mobile-pricebox {
-    padding: 10px 12px;
-   }
-
-   .ingredient-mobile-meta input {
-    min-height: 34px;
-    padding: 6px 8px; 
-    font-size: 14px;
-   }
-
-   .ingredient-mobile-top input {
-    padding: 8px 10px;
-   }
-
-   .ingredients-recalc {
-    width: 100%;
-   }
-}
-
-.ingredient-row-desktop,
-.ingredient-row-mobile {
-    transition: background 160ms ease, transform 120ms ease;
-}
-
-@media (hover: hover) {
-    .ingredient-row-desktop:hover {
-        background: rgba(255,255,255,0.35);
-        border-radius: 12PX;
-    }
-}
-
 .cost-pill-row .amount {
    font-size: 22px !important;
    font-weight: 900 !important;
@@ -897,12 +755,11 @@ min-width: 0;
 }
 
 /* =========================
-Fiche recette - ingrédients responsive
+d'ici à Fiche recette - ingrédients responsive
 ========================= */
 
 .recipe-detail-table-head,
-.recipe-detail-table-row,
-.recipe-detail-table-total {
+.recipe-detail-table-row {
  display: grid;
  grid-template-columns: 90px 70px 1fr 110px 110px;
  column-gap: 12px;
@@ -918,10 +775,6 @@ Fiche recette - ingrédients responsive
 .recipe-detail-table-row {
  padding: 10px 10px;
  border-bottom: 1px solid rgba(0,0,0,0.06);
-}
-
-.recipe-detail-table-total {
- padding: 12px 10px 0;
 }
 
 .recipe-detail-mobile-list {
@@ -969,14 +822,6 @@ Fiche recette - ingrédients responsive
  font-weight: 800;
 }
 
-.recipe-cost-recipe {
- color: #B0BC8C;
-}
-
-.recipe-cost-product {
- color: var(--primary);
-}
-
 .recipe-detail-mobile-total {
  background: rgba(255,255,255,0.82);
 }
@@ -1002,7 +847,10 @@ input[type="number"] {
  -moz-appearance: textfield;
  appearance: textfield;
 }
-
+/* =========================
+ici - ancienne class pour fichierrecipes/[id]
+a supprimer une fois qu'on aura fait les nouvelles class
+========================= */
 
 
 
@@ -1904,7 +1752,7 @@ creation-compte create-account
 
 
 /* =========================
-RECIPES / NEW RECIPE EDITOR
+CLASS FICHIER NEW/PAGE.TSX RECIPES / NEW RECIPE EDITOR
 ========================= */
 
 .recipe-editor-page {
@@ -2229,57 +2077,6 @@ RECIPES / NEW RECIPE EDITOR
  color: #6d5247;
  font-weight: 800;
  box-shadow: 0 8px 18px rgba(60,40,20,0.05);
-}
-
-.recipe-ingredient-card {
- padding: 14px;
- border-radius: 22px;
- background: rgba(255,255,255,0.72);
- border: 1px solid rgba(230,220,210,0.84);
- box-shadow: 0 10px 20px rgba(60,40,20,0.04);
-}
-
-.recipe-ingredient-row-desktop {
- align-items: stretch;
-}
-
-.recipe-ingredient-input,
-.recipe-ingredient-name-input {
- width: 100%;
- min-height: 48px;
- border: 1px solid rgba(230,220,210,0.92);
- border-radius: 16px;
- background: rgba(255,255,255,0.94);
- padding: 12px 14px;
- font-size: 15px;
- color: #4c3730;
-}
-
-.recipe-ingredient-qty-input,
-.recipe-ingredient-unit-input {
- min-height: 48px;
- border-radius: 16px !important;
- padding: 10px 14px !important;
- justify-content: flex-start !important;
- font-weight: 600 !important;
-}
-
-.recipe-ingredient-pricebox {
- display: grid;
- align-content: center;
- text-align: center;
- padding: 10px 12px;
- border-radius: 16px;
- background: rgba(255,255,255,0.88);
- border: 1px solid rgba(230,220,210,0.86);
- min-height: 72px;
-}
-
-.recipe-ingredient-delete {
- width: 38px !important;
- height: 38px !important;
- border-radius: 999px !important;
- place-self: center;
 }
 
 .recipe-editor-add-ingredient-btn {
@@ -2663,8 +2460,8 @@ RECIPES / NEW RECIPE EDITOR
 
 .recipe-editor-ingredient-desktop {
  display: grid;
- grid-template-columns: minmax(0, 1.7fr) 170px 84px 92px 120px 120px 40px;
- gap: 10px;
+ grid-template-columns: minmax(240px, 2fr) 150px 72px 78px 110px 110px 36px;
+ gap: 8px;
  align-items: center;
 }
 
@@ -2710,7 +2507,7 @@ RECIPES / NEW RECIPE EDITOR
  place-items: center !important;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 860px) {
  .recipe-editor-ingredient-desktop {
    display: none;
  }
@@ -2737,4 +2534,28 @@ RECIPES / NEW RECIPE EDITOR
    gap: 10px;
    align-items: stretch;
  }
+}
+.recipe-editor-ingredient-picker-wrap {
+ min-width: 0;
+}
+
+.recipe-editor-ingredient-picker-wrap button,
+.recipe-editor-ingredient-picker-wrap a {
+ width: 100%;
+ justify-content: center;
+}
+
+.recipe-editor-ingredient-price-label {
+ font-size: 12px;
+ line-height: 1.1;
+ opacity: 0.68;
+ font-weight: 700;
+ margin-bottom: 4px;
+}
+
+.recipe-editor-ingredient-price-value {
+ font-size: 15px;
+ font-weight: 800;
+ line-height: 1.1;
+ white-space: nowrap;
 }
