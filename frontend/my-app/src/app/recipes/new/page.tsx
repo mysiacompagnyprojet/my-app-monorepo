@@ -401,7 +401,7 @@ function NewRecipeInner() {
    if (pricePerPerson < 3) return 'smart'
    if (pricePerPerson <= 5) return 'medium'
    if (pricePerPerson <= 8) return 'high'
-   return 'occasion'
+   return 'high'
  }
 
  const budgetLevel = getBudgetLevel(costPerServing)
@@ -979,256 +979,258 @@ function NewRecipeInner() {
      )}
 
      <section className="app-card recipe-editor-hero-card">
-       <div className="recipe-form-top-grid">
-         <div style={{ display: 'grid', gap: 21 }}>
-           <label className="recipe-servings-block">
-             <span className="recipe-servings-label">Portions</span>
+ <div className="recipe-form-top-grid">
+   <div className="recipe-editor-left-col">
+     <label className="recipe-servings-block">
+       <span className="recipe-servings-label">Portions</span>
 
-             <div className="recipe-servings-control">
-               <button
-                 type="button"
-                 className="app-btn app-btn-utility recipe-servings-btn"
-                 onClick={() => setServings((prev) => Math.max(1, prev - 1))}
-                 aria-label="Réduire le nombre de portions"
-                >
-                 −
-               </button>
+       <div className="recipe-servings-control">
+         <button
+           type="button"
+           className="app-btn app-btn-utility recipe-servings-btn"
+           onClick={() => setServings((prev) => Math.max(1, prev - 1))}
+           aria-label="Réduire le nombre de portions"
+          >
+           −
+         </button>
 
-               <input
-                 type="number"
-                 min={1}
-                 inputMode="numeric"
-                 value={servings}
-                 onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
-                 className="app-btn app-btn-utility recipe-servings-input"
-               />
+         <input
+           type="number"
+           min={1}
+           inputMode="numeric"
+           value={servings}
+           onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
+           className="app-btn app-btn-utility recipe-servings-input"
+         />
 
-               <button
-                 type="button"
-                 className="app-btn app-btn-utility recipe-servings-btn"
-                 onClick={() => setServings((prev) => prev + 1)}
-                 aria-label="Augmenter le nombre de portions"
-                >
-                 +
-               </button>
-             </div>
-           </label>
+         <button
+           type="button"
+           className="app-btn app-btn-utility recipe-servings-btn"
+           onClick={() => setServings((prev) => prev + 1)}
+           aria-label="Augmenter le nombre de portions"
+          >
+           +
+         </button>
+       </div>
+     </label>
 
-           <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
-             Notes
+     <label className="recipe-editor-notes-card">
+       <span className="recipe-editor-notes-label">Notes</span>
 
-             <textarea
-               value={notes}
-               onChange={(e) => setNotes(e.target.value)}
-               rows={6}
-               style={{ minHeight: 170 }}
-             />
-           </label>
-         </div>
+       <textarea
+         value={notes}
+         onChange={(e) => setNotes(e.target.value)}
+         rows={6}
+         className="recipe-editor-notes-textarea"
+       />
+     </label>
 
-         <div style={{ display: 'grid', gap: 14 }}>
-           <label className="recipe-editor-image-drop">
-             <input
-               type="file"
-               accept="image/*"
-               style={{ display: 'none' }}
-               onChange={(e) => {
-                 const file = e.target.files?.[0]
-                 if (!file) return
-
-                 const localUrl = URL.createObjectURL(file)
-                 setImageUrl(localUrl)
-               }}
-             />
-
-             {imageUrl ? (
-               <div className="recipe-editor-image-stack">
-                 <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
-
-                 <input
-                   value={imageUrl}
-                   onClick={(e) => e.stopPropagation()}
-                   onChange={(e) => setImageUrl(e.target.value)}
-                   className="recipe-editor-image-url"
-                 />
-
-                 <button
-                   type="button"
-                   className="app-btn recipe-editor-secondary-btn"
-                   onClick={(e) => {
-                     e.preventDefault()
-                     setCrop({ x: 0, y: 0 })
-                     setZoom(1)
-                     setCroppedAreaPixels(null)
-                     setIsCropping(true)
-                   }}
-                  >
-                   Recadrer l’image
-                 </button>
-               </div>
-             ) : (
-               <>
-                 <div className="recipe-editor-image-plus">+</div>
-
-                 <div className="recipe-editor-image-title">Ajouter une image</div>
-
-                 <div className="recipe-editor-image-hint">
-                   Clique sur le + pour choisir une photo
-                 </div>
-               </>
-             )}
-           </label>
-
-           <div className="recipe-editor-costs">
-             <div className="recipe-editor-costs-card">
-               <div className="cost-pill-row cost-pill-row-recipe">
-                 <span className="cost-pill-label recipe-color-2">Coût de la recette</span>
-                 <span className="amount">
-                   {' ≈ '} <Price value={totalCost} blur={blurPrices} />
-                 </span>
-               </div>
+     {totalCost > 0 && (
+       <div className="recipe-analysis-card recipe-analysis-card--summary">
+         {budgetLevel && (
+           <div className="recipe-budget-pills">
+             <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
+               Budget malin
              </div>
 
-             <div className="recipe-editor-costs-card">
-               <div className="cost-pill-row cost-pill-row-courses">
-                 <span className="cost-pill-label recipe-color-2">Coût des courses</span>
-                 <span className="amount">
-                   {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
-                 </span>
-               </div>
+             <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
+               Budget moyen
+             </div>
+
+             <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
+               Budget élevé
              </div>
            </div>
+         )}
 
-           {totalCost > 0 && (
-             <div
-               className="recipe-analysis-card"
-               style={{
-                 marginTop: 16,
-                 background: 'rgba(176,188,140,0.08)',
-                 border: '1px solid rgba(176,188,140,0.25)',
-               }}
-              >
-               {budgetLevel && (
-                 <div className="recipe-budget-pills">
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}
-                    >
-                     Budget malin
-                   </div>
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}
-                    >
-                     Budget moyen
-                   </div>
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}
-                    >
-                     Budget élevé
-                   </div>
+         {topIngredients.length > 0 && (
+           <div className="recipe-analysis-top-block">
+             <h3 className="recipe-analysis-section-title">
+               Les ingrédients les plus élevés :
+             </h3>
+
+             <div className="recipe-analysis-top-list">
+               {topIngredients.map((i, index) => (
+                 <div key={index} className="recipe-analysis-top-item">
+                   <span>
+                     • {index + 1} {i.name}
+                   </span>
+
+                   <span className="recipe-analysis-price">
+                     <Price value={i.cost} blur={blurPrices} />
+                   </span>
                  </div>
-               )}
-
-               {topIngredients.length > 0 && (
-                 <div>
-                   <h3 className="recipe-analysis-section-title">
-                     Les ingrédients les plus élevés :
-                   </h3>
-
-                   <div style={{ display: 'grid', gap: 4 }}>
-                     {topIngredients.map((i, index) => (
-                       <div key={index} className="recipe-analysis-top-item">
-                         <span>
-                           • {index + 1} {i.name}
-                         </span>
-
-                         <span className="recipe-analysis-price">
-                           <Price value={i.cost} blur={blurPrices} />
-                         </span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
-
-               {costPerServing && (
-                 <div className="recipe-analysis-serving-card">
-                   <div className="recipe-analysis-serving-label">Prix par personne :</div>
-                   <div className="recipe-analysis-serving-value">
-                     <Price value={costPerServing} blur={blurPrices} />
-                   </div>
-                   <div className="recipe-analysis-serving-meta">{servings} portions</div>
-                 </div>
-               )}
-
-               {economySuggestions.length > 0 && (
-                 <div style={{ marginTop: 16 }}>
-                   <div className="recipe-analysis-section-title">
-                     Comment réduire le coût :
-                   </div>
-
-                   <div style={{ display: 'grid', gap: 12 }}>
-                     {economySuggestions.map((suggestion, index) => (
-                       <div
-                         key={`${suggestion.ingredientName}-${index}`}
-                         className="recipe-analysis-saving-box"
-                        >
-                         <div className="recipe-analysis-saving-main">
-                           • {suggestion.ingredientName}
-                         </div>
-
-                         {suggestion.substitutions?.length > 0 && (
-                           <div style={{ marginBottom: 10 }}>
-                             <div className="recipe-analysis-saving-label">
-                               {suggestion.label || 'Alternative possible selon la recette'} :
-                             </div>
-
-                             <div className="recipe-analysis-saving-list">
-                               {suggestion.substitutions.map((sub) => (
-                                 <div key={sub.id} className="recipe-analysis-saving-item">
-                                   . {sub.name}
-                                 </div>
-                               ))}
-                             </div>
-                           </div>
-                         )}
-
-                         {suggestion.note && (
-                           <div className="recipe-analysis-saving-note">
-                             {suggestion.note}
-                           </div>
-                         )}
-
-                         <div className="recipe-analysis-saving-strong">
-                           Économie estimée : ~
-                           <Price value={suggestion.savingEur} blur={blurPrices} />
-                         </div>
-
-                         <div className="recipe-analysis-saving-meta">
-                           Nouveau coût recette :{' '}
-                           <Price value={suggestion.newTotalEur} blur={blurPrices} />
-                         </div>
-
-                         <div className="recipe-analysis-saving-meta">
-                           Nouveau prix/personne :{' '}
-                           <Price
-                             value={
-                               suggestion.newTotalEur != null && servings > 0
-                                 ? suggestion.newTotalEur / servings
-                                 : null
-                             }
-                             blur={blurPrices}
-                           />
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
+               ))}
              </div>
-           )}
+           </div>
+         )}
+
+         {costPerServing && (
+           <div className="recipe-analysis-serving-card">
+             <div className="recipe-analysis-serving-label">Prix par personne :</div>
+
+             <div className="recipe-analysis-serving-value">
+               <Price value={costPerServing} blur={blurPrices} />
+             </div>
+
+             <div className="recipe-analysis-serving-meta">{servings} portions</div>
+           </div>
+         )}
+       </div>
+     )}
+   </div>
+
+   <div className="recipe-editor-right-col">
+     <label className="recipe-editor-image-drop">
+       <input
+         type="file"
+         accept="image/*"
+         style={{ display: 'none' }}
+         onChange={(e) => {
+           const file = e.target.files?.[0]
+           if (!file) return
+
+           const localUrl = URL.createObjectURL(file)
+           setImageUrl(localUrl)
+         }}
+       />
+
+       {imageUrl ? (
+         <div className="recipe-editor-image-stack">
+           <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
+
+           <input
+             value={imageUrl}
+             onClick={(e) => e.stopPropagation()}
+             onChange={(e) => setImageUrl(e.target.value)}
+             className="recipe-editor-image-url"
+           />
+
+           <button
+             type="button"
+             className="app-btn recipe-editor-secondary-btn"
+             onClick={(e) => {
+               e.preventDefault()
+               setCrop({ x: 0, y: 0 })
+               setZoom(1)
+               setCroppedAreaPixels(null)
+               setIsCropping(true)
+             }}
+            >
+             Recadrer l’image
+           </button>
+         </div>
+       ) : (
+         <>
+           <div className="recipe-editor-image-plus">+</div>
+
+           <div className="recipe-editor-image-title">Ajouter une image</div>
+
+           <div className="recipe-editor-image-hint">
+             Clique sur le + pour choisir une photo
+           </div>
+         </>
+       )}
+     </label>
+
+     <div className="recipe-editor-costs">
+       <div className="recipe-editor-cost-card">
+         <div className="cost-pill-row cost-pill-row-recipe">
+           <span className="cost-pill-label recipe-color-2">Coût de la recette</span>
+           <span className="amount">
+             {' ≈ '} <Price value={totalCost} blur={blurPrices} />
+           </span>
          </div>
        </div>
-     </section>
+
+       <div className="recipe-editor-cost-card">
+         <div className="cost-pill-row cost-pill-row-courses">
+           <span className="cost-pill-label recipe-color-2">Coût des courses</span>
+           <span className="amount">
+             {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
+           </span>
+         </div>
+       </div>
+     </div>
+
+     {economySuggestions.length > 0 && (
+       <div className="recipe-analysis-card recipe-analysis-card--economy">
+         <div className="recipe-analysis-section-title">
+           Comment réduire le coût :
+         </div>
+
+         <div className="recipe-analysis-accordion-list">
+           {economySuggestions.map((suggestion, index) => {
+             const newPricePerPerson =
+               suggestion.newTotalEur != null && servings > 0
+                 ? suggestion.newTotalEur / servings
+                 : null
+
+             return (
+               <details
+                 key={`${suggestion.ingredientName}-${index}`}
+                 className="recipe-analysis-accordion"
+                 open={index === 0}
+                >
+                 <summary className="recipe-analysis-accordion-summary">
+                   <div className="recipe-analysis-accordion-main">
+                     <span className="recipe-analysis-accordion-title">
+                       {suggestion.ingredientName}
+                     </span>
+
+                     <span className="recipe-analysis-accordion-saving">
+                       Économie estimée : ~
+                       <Price value={suggestion.savingEur} blur={blurPrices} />
+                     </span>
+                   </div>
+
+                   <span className="recipe-analysis-accordion-icon">+</span>
+                 </summary>
+
+                 <div className="recipe-analysis-accordion-content">
+                   {suggestion.substitutions?.length > 0 && (
+                     <div className="recipe-analysis-accordion-block">
+                       <div className="recipe-analysis-saving-label">
+                         {suggestion.label || 'Alternative possible selon la recette'} :
+                       </div>
+
+                       <div className="recipe-analysis-saving-list">
+                         {suggestion.substitutions.map((sub) => (
+                           <div key={sub.id} className="recipe-analysis-saving-item">
+                             • {sub.name}
+                           </div>
+                         ))}
+                       </div>
+                     </div>
+                   )}
+
+                   {suggestion.note && (
+                     <div className="recipe-analysis-saving-note">
+                       {suggestion.note}
+                     </div>
+                   )}
+
+                   <div className="recipe-analysis-accordion-metrics">
+                     <div className="recipe-analysis-saving-meta">
+                       Nouveau coût recette :{' '}
+                       <Price value={suggestion.newTotalEur} blur={blurPrices} />
+                     </div>
+
+                     <div className="recipe-analysis-saving-meta">
+                       Nouveau prix/personne :{' '}
+                       <Price value={newPricePerPerson} blur={blurPrices} />
+                     </div>
+                   </div>
+                 </div>
+               </details>
+             )
+           })}
+         </div>
+       </div>
+     )}
+   </div>
+ </div>
+</section>
 
      <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
        <div className="ingredients-top">
@@ -1238,7 +1240,7 @@ function NewRecipeInner() {
            </h2>
 
            <p className="mt-2 text-sm app-muted">
-             Un ingrédient par ligne : nom, quantité, unité, prix.
+             Un ingrédient par ligne : nom, quantité, unité.
            </p>
          </div>
 
@@ -1486,15 +1488,7 @@ function NewRecipeInner() {
          <button
            type="button"
            onClick={save}
-           className="app-btn app-btn-sage"
-           style={{
-             minWidth: 280,
-             height: 60,
-             fontSize: 35,
-             fontWeight: 800,
-             borderRadius: 14,
-             boxShadow: '0 12px 22px rgba(176,188,140,0.35)',
-           }}
+           className="app-btn recipe-editor-save-btn"
           >
            Enregistrer la recette
          </button>
