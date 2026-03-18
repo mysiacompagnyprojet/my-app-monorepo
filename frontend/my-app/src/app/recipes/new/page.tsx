@@ -1254,26 +1254,21 @@ function NewRecipeInner() {
          </button>
        </div>
 
-       <div className="mt-4 grid gap-3">
+       <div className="mt-4 recipe-editor-ingredients-shell">
          {ingredients.map((ing, idx) => {
            const costCourses = computeCostCourses(ing)
            const costRecipe =
              typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
 
            return (
-             <div key={idx} className="app-card p-3">
-               <div className="ingredient-row-desktop">
+             <div key={idx} className="recipe-editor-ingredient-line">
+               <div className="recipe-editor-ingredient-desktop">
                  <div className="ingredient-cell-name">
                    <input
                      placeholder="Nom de l'ingrédient..."
                      value={ing.name}
                      onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     style={{
-                       border: '1px solid var(--border)',
-                       borderRadius: 12,
-                       padding: 10,
-                       width: '100%',
-                     }}
+                     className="recipe-editor-ingredient-name"
                    />
                  </div>
 
@@ -1299,36 +1294,24 @@ function NewRecipeInner() {
                    placeholder="Qté"
                    value={qtyInputs[idx] ?? ''}
                    onChange={(e) => setQtyInput(idx, e.target.value)}
-                   className="app-btn app-btn-utility"
-                   style={{
-                     borderRadius: 12,
-                     padding: 10,
-                     width: '100%',
-                     justifyContent: 'flex-start',
-                     fontWeight: 500,
-                   }}
+                   className="recipe-editor-ingredient-qty"
                  />
 
                  <input
                    placeholder="Unité"
                    value={ing.unit}
                    onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                   className="app-btn app-btn-utility"
-                   style={{
-                     borderRadius: 12,
-                     padding: 10,
-                     width: '100%',
-                   }}
+                   className="recipe-editor-ingredient-unit"
                  />
 
-                 <div className="ingredient-price-col">
+                 <div className="recipe-editor-ingredient-pricebox">
                    <div className="ingredient-price-label">Coût recette</div>
                    <div className="ingredient-price-value cost-pill-row-recipe">
                      <Price value={costRecipe} blur={blurPrices} />
                    </div>
                  </div>
 
-                 <div className="ingredient-price-col">
+                 <div className="recipe-editor-ingredient-pricebox">
                    <div className="ingredient-price-label">Coût courses</div>
                    <div className="ingredient-price-value cost-pill-row-courses">
                      <Price value={costCourses} blur={blurPrices} />
@@ -1339,7 +1322,7 @@ function NewRecipeInner() {
                    <button
                      type="button"
                      onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility"
+                     className="app-btn app-btn-utility recipe-editor-ingredient-delete"
                      style={smallXBtnStyle}
                     >
                      ✕
@@ -1347,18 +1330,13 @@ function NewRecipeInner() {
                  </div>
                </div>
 
-               <div className="ingredient-row-mobile">
-                 <div className="ingredient-mobile-top">
+               <div className="recipe-editor-ingredient-mobile">
+                 <div className="recipe-editor-ingredient-mobile-top">
                    <input
                      placeholder="Nom de l'ingrédient..."
                      value={ing.name}
                      onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     style={{
-                       border: '1px solid var(--border)',
-                       borderRadius: 12,
-                       padding: 10,
-                       width: '100%',
-                     }}
+                     className="recipe-editor-ingredient-name"
                    />
 
                    <div className="ingredient-picker-wrap">
@@ -1380,45 +1358,31 @@ function NewRecipeInner() {
                    </div>
                  </div>
 
-                 <div className="ingredient-mobile-meta">
+                 <div className="recipe-editor-ingredient-mobile-meta">
                    <input
                      placeholder="Qté"
                      value={qtyInputs[idx] ?? ''}
                      onChange={(e) => setQtyInput(idx, e.target.value)}
-                     className="app-btn-utility"
-                     style={{
-                       borderRadius: 20,
-                       padding: 10,
-                       width: '100%',
-                       justifyContent: 'flex-start',
-                       fontWeight: 500,
-                     }}
+                     className="recipe-editor-ingredient-qty"
                    />
 
                    <input
                      placeholder="Unité"
                      value={ing.unit}
                      onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                     className="app-btn app-btn-utility"
-                     style={{
-                       borderRadius: 20,
-                       padding: '6px 10px',
-                       width: '100%',
-                       justifyContent: 'flex-start',
-                       fontWeight: 500,
-                     }}
+                     className="recipe-editor-ingredient-unit"
                    />
                  </div>
 
-                 <div className="ingredient-mobile-prices">
-                   <div className="ingredient-mobile-pricebox">
+                 <div className="recipe-editor-ingredient-mobile-prices">
+                   <div className="recipe-editor-ingredient-pricebox">
                      <div className="ingredient-price-label">Coût recette</div>
                      <div className="ingredient-price-value cost-pill-row-recipe">
                        <Price value={costRecipe} blur={blurPrices} />
                      </div>
                    </div>
 
-                   <div className="ingredient-mobile-pricebox">
+                   <div className="recipe-editor-ingredient-pricebox">
                      <div className="ingredient-price-label">Coût courses</div>
                      <div className="ingredient-price-value cost-pill-row-courses">
                        <Price value={costCourses} blur={blurPrices} />
@@ -1428,7 +1392,7 @@ function NewRecipeInner() {
                    <button
                      type="button"
                      onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility"
+                     className="app-btn app-btn-utility recipe-editor-ingredient-delete"
                      style={smallXBtnStyle}
                     >
                      ✕
@@ -1447,7 +1411,7 @@ function NewRecipeInner() {
              ])
              setQtyInputs((p) => [...p, ''])
            }}
-           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
+           className="app-btn recipe-editor-add-ingredient-btn"
            style={{ width: 'min(260px, 100%)' }}
            type="button"
           >
@@ -1584,8 +1548,6 @@ function NewRecipeInner() {
    </main>
  )
 }
-
-
 
 export default function Page() {
  return (
