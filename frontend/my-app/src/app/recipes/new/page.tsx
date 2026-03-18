@@ -348,7 +348,7 @@ function NewRecipeInner() {
  const [status, setStatus] = useState<string>('')
 
  const [isRepricing, setIsRepricing] = useState(false)
- const [economySuggestion, setEconomySuggestion] = useState<EconomySuggestion | null>(null)
+ const [economySuggestions, setEconomySuggestions] = useState<EconomySuggestion[]>([])
 
  const [blurPrices, setBlurPrices] = useState(false)
  useEffect(() => {
@@ -409,12 +409,12 @@ function NewRecipeInner() {
  const topIngredients = useMemo(() => {
    return ingredients
      .map((ing) => {
-     const costCourses = computeCostCourses(ing)
-     return {
-      name: ing.name,
-      cost: typeof costCourses === 'number' ? costCourses: 0,
-     }
-    })
+       const costCourses = computeCostCourses(ing)
+       return {
+         name: ing.name,
+         cost: typeof costCourses === 'number' ? costCourses : 0,
+       }
+     })
      .filter((i) => i.name && i.cost > 0)
      .sort((a, b) => b.cost - a.cost)
      .slice(0, 3)
@@ -425,37 +425,60 @@ function NewRecipeInner() {
      .map((ing) => ({
        name: String(ing.name || '').trim(),
        costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
+       coursesCost: (() => {
+         const v = computeCostCourses(ing)
+         return typeof v === 'number' ? v : 0
+       })(),
        ingredientBaseId:
          typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
        id: typeof ing.id === 'string' ? ing.id : null,
      }))
      .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
 
-   if (!validIngredients.length || totalCost <= 0) {
-     setEconomySuggestion(null)
+   const replaceableIngredients = validIngredients
+     .filter((ing) => ing.ingredientBaseId !== null)
+     .sort((a, b) => {
+       if (b.coursesCost !== a.coursesCost) return b.coursesCost - a.coursesCost
+       return b.costEur - a.costEur
+     })
+     .slice(0, 4)
+
+   if (!replaceableIngredients.length || totalCost <= 0) {
+     setEconomySuggestions([])
      return
    }
 
    const timer = setTimeout(async () => {
      try {
-       const json = await apiFetch<{
-         ok: boolean
-         suggestion?: EconomySuggestion | null
-       }>('/recipes/economy-suggestion', {
-         method: 'POST',
-         body: JSON.stringify({
-           ingredients: validIngredients,
-           totalCostEur: totalCost,
-         }),
-       })
+       const suggestions: EconomySuggestion[] = []
 
-       if (json?.ok) {
-         setEconomySuggestion(json.suggestion ?? null)
-       } else {
-         setEconomySuggestion(null)
+       for (const ing of replaceableIngredients) {
+         const json = await apiFetch<{
+           ok: boolean
+           suggestion?: EconomySuggestion | null
+         }>('/recipes/economy-suggestion', {
+           method: 'POST',
+           body: JSON.stringify({
+             ingredients: [
+               {
+                 name: ing.name,
+                 costEur: ing.costEur,
+                 ingredientBaseId: ing.ingredientBaseId,
+                 id: ing.id,
+               },
+             ],
+             totalCostEur: totalCost,
+           }),
+         })
+
+         if (json?.ok && json.suggestion) {
+           suggestions.push(json.suggestion)
+         }
        }
+
+       setEconomySuggestions(suggestions)
      } catch {
-       setEconomySuggestion(null)
+       setEconomySuggestions([])
      }
    }, 300)
 
@@ -714,7 +737,6 @@ function NewRecipeInner() {
        } as any
      }
 
-     console.log('FRONT ENRICHED', enriched)
      return copy
    })
  }
@@ -760,6 +782,7 @@ function NewRecipeInner() {
      const enriched = Array.isArray((json as any).ingredients)
        ? (json as any).ingredients
        : []
+
      if (!enriched.length) {
        if (!silent) setStatus('❌ Recalcul impossible: réponse vide.')
        return
@@ -990,6 +1013,17 @@ function NewRecipeInner() {
                </button>
              </div>
            </label>
+
+           <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
+             Notes
+
+             <textarea
+               value={notes}
+               onChange={(e) => setNotes(e.target.value)}
+               rows={6}
+               style={{ minHeight: 170 }}
+             />
+           </label>
          </div>
 
          <div style={{ display: 'grid', gap: 14 }}>
@@ -1009,11 +1043,7 @@ function NewRecipeInner() {
 
              {imageUrl ? (
                <div className="recipe-editor-image-stack">
-                 <img
-                   src={imageUrl}
-                   alt="preview"
-                   className="recipe-editor-image-preview"
-                 />
+                 <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
 
                  <input
                    value={imageUrl}
@@ -1080,13 +1110,19 @@ function NewRecipeInner() {
               >
                {budgetLevel && (
                  <div className="recipe-budget-pills">
-                   <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}
+                    >
                      Budget malin
                    </div>
-                   <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}
+                    >
                      Budget moyen
                    </div>
-                   <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}
+                    >
                      Budget élevé
                    </div>
                  </div>
@@ -1110,74 +1146,81 @@ function NewRecipeInner() {
                          </span>
                        </div>
                      ))}
+                   </div>
+                 </div>
+               )}
 
-                     {costPerServing && (
-                       <div className="recipe-analysis-serving-card">
-                         <div className="recipe-analysis-serving-label">Prix par personne :</div>
-                         <div className="recipe-analysis-serving-value">
-                           <Price value={costPerServing} blur={blurPrices} />
+               {costPerServing && (
+                 <div className="recipe-analysis-serving-card">
+                   <div className="recipe-analysis-serving-label">Prix par personne :</div>
+                   <div className="recipe-analysis-serving-value">
+                     <Price value={costPerServing} blur={blurPrices} />
+                   </div>
+                   <div className="recipe-analysis-serving-meta">{servings} portions</div>
+                 </div>
+               )}
+
+               {economySuggestions.length > 0 && (
+                 <div style={{ marginTop: 16 }}>
+                   <div className="recipe-analysis-section-title">
+                     Comment réduire le coût :
+                   </div>
+
+                   <div style={{ display: 'grid', gap: 12 }}>
+                     {economySuggestions.map((suggestion, index) => (
+                       <div
+                         key={`${suggestion.ingredientName}-${index}`}
+                         className="recipe-analysis-saving-box"
+                        >
+                         <div className="recipe-analysis-saving-main">
+                           • {suggestion.ingredientName}
                          </div>
-                         <div className="recipe-analysis-serving-meta">{servings} portions</div>
-                       </div>
-                     )}
 
-                     {economySuggestion && (
-                       <div style={{ marginTop: 16 }}>
-                         <div className="recipe-analysis-section-title">
-                           Comment réduire le coût :
-                         </div>
-
-                         <div className="recipe-analysis-saving-box">
-                           <div className="recipe-analysis-saving-main">
-                             • {economySuggestion.ingredientName}
-                           </div>
-
-                           {economySuggestion.substitutions?.length > 0 && (
-                             <div style={{ marginBottom: 10 }}>
-                               <div className="recipe-analysis-saving-label">
-                                 {economySuggestion.label || 'Alternative possible selon la recette'} :
-                               </div>
-
-                               <div className="recipe-analysis-saving-list">
-                                 {economySuggestion.substitutions.map((sub) => (
-                                   <div key={sub.id} className="recipe-analysis-saving-item">
-                                     . {sub.name}
-                                   </div>
-                                 ))}
-                               </div>
+                         {suggestion.substitutions?.length > 0 && (
+                           <div style={{ marginBottom: 10 }}>
+                             <div className="recipe-analysis-saving-label">
+                               {suggestion.label || 'Alternative possible selon la recette'} :
                              </div>
-                           )}
 
-                           {economySuggestion.note && (
-                             <div className="recipe-analysis-saving-note">
-                               {economySuggestion.note}
+                             <div className="recipe-analysis-saving-list">
+                               {suggestion.substitutions.map((sub) => (
+                                 <div key={sub.id} className="recipe-analysis-saving-item">
+                                   . {sub.name}
+                                 </div>
+                               ))}
                              </div>
-                           )}
-
-                           <div className="recipe-analysis-saving-strong">
-                             Économie estimée : ~
-                             <Price value={economySuggestion.savingEur} blur={blurPrices} />
                            </div>
+                         )}
 
-                           <div className="recipe-analysis-saving-meta">
-                             Nouveau coût recette :{' '}
-                             <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
+                         {suggestion.note && (
+                           <div className="recipe-analysis-saving-note">
+                             {suggestion.note}
                            </div>
+                         )}
 
-                           <div className="recipe-analysis-saving-meta">
-                             Nouveau prix/personne :{' '}
-                             <Price
-                               value={
-                                 economySuggestion.newTotalEur != null && servings > 0
-                                   ? economySuggestion.newTotalEur / servings
-                                   : null
-                               }
-                               blur={blurPrices}
-                             />
-                           </div>
+                         <div className="recipe-analysis-saving-strong">
+                           Économie estimée : ~
+                           <Price value={suggestion.savingEur} blur={blurPrices} />
+                         </div>
+
+                         <div className="recipe-analysis-saving-meta">
+                           Nouveau coût recette :{' '}
+                           <Price value={suggestion.newTotalEur} blur={blurPrices} />
+                         </div>
+
+                         <div className="recipe-analysis-saving-meta">
+                           Nouveau prix/personne :{' '}
+                           <Price
+                             value={
+                               suggestion.newTotalEur != null && servings > 0
+                                 ? suggestion.newTotalEur / servings
+                                 : null
+                             }
+                             blur={blurPrices}
+                           />
                          </div>
                        </div>
-                     )}
+                     ))}
                    </div>
                  </div>
                )}
@@ -1434,7 +1477,7 @@ function NewRecipeInner() {
                      ? '#b00020'
                      : 'var(--primary)',
                }}
-              >
+               >
                {status}
              </p>
            )}
@@ -1488,7 +1531,7 @@ function NewRecipeInner() {
                overflow: 'hidden',
                background: '#111',
              }}
-            > 
+            >
              <Cropper
                image={imageUrl}
                crop={crop}
@@ -1522,7 +1565,7 @@ function NewRecipeInner() {
                gap: 10,
                flexWrap: 'wrap',
              }}
-            > 
+            >
              <button
                type="button"
                className="app-btn app-btn-secondary"
@@ -1547,6 +1590,7 @@ function NewRecipeInner() {
    </main>
  )
 }
+
 
 
 export default function Page() {
