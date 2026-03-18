@@ -408,10 +408,13 @@ function NewRecipeInner() {
 
  const topIngredients = useMemo(() => {
    return ingredients
-     .map((ing) => ({
-       name: ing.name,
-       cost: typeof ing.costEur === 'number' ? ing.costEur : 0,
-     }))
+     .map((ing) => {
+     const costCourses = computeCostCourses(ing)
+     return {
+      name: ing.name,
+      cost: typeof costCourses === 'number' ? costCourses: 0,
+     }
+    })
      .filter((i) => i.name && i.cost > 0)
      .sort((a, b) => b.cost - a.cost)
      .slice(0, 3)
