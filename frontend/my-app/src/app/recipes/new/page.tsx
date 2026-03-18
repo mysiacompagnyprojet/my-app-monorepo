@@ -11,6 +11,7 @@ import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
+
 type Line = IngredientLine & {
  unitPriceBuy?: number | null
 
@@ -339,15 +340,16 @@ function NewRecipeInner() {
  const [imageUrl, setImageUrl] = useState('')
  const [notes, setNotes] = useState('')
  const [steps, setSteps] = useState<string[]>([''])
- const [ingredients, setIngredients] = useState<Line[]>([{ name: '', quantity: 0, unit: '', buyRecalced: false }])
+ const [ingredients, setIngredients] = useState<Line[]>([
+   { name: '', quantity: 0, unit: '', buyRecalced: false },
+ ])
  const [qtyInputs, setQtyInputs] = useState<string[]>([''])
  const [trash, setTrash] = useState<string>('')
  const [status, setStatus] = useState<string>('')
 
  const [isRepricing, setIsRepricing] = useState(false)
- const [ economySuggestion, setEconomySuggestion ] = useState<EconomySuggestion | null>(null)
+ const [economySuggestions, setEconomySuggestions] = useState<EconomySuggestion[]>([])
 
- // ✅ NEW: floutage selon policy locale
  const [blurPrices, setBlurPrices] = useState(false)
  useEffect(() => {
    try {
@@ -355,7 +357,6 @@ function NewRecipeInner() {
    } catch {}
  }, [])
 
- // Crop UI
  const [isCropping, setIsCropping] = useState(false)
  const [crop, setCrop] = useState({ x: 0, y: 0 })
  const [zoom, setZoom] = useState(1)
@@ -376,7 +377,8 @@ function NewRecipeInner() {
 
  const totalCost = useMemo(() => {
    return ingredients.reduce(
-     (acc, i) => acc + (typeof (i as any).costEur === 'number' ? ((i as any).costEur as number) : 0),
+     (acc, i) =>
+       acc + (typeof (i as any).costEur === 'number' ? ((i as any).costEur as number) : 0),
      0
    )
  }, [ingredients])
@@ -389,90 +391,100 @@ function NewRecipeInner() {
  }, [ingredients])
 
  const costPerServing = useMemo(() => {
-    if (!servings || servings <= 0) return null
-    if (!totalCost || totalCost <= 0) return null
+   if (!servings || servings <= 0) return null
+   if (!totalCost || totalCost <= 0) return null
+   return totalCost / servings
+ }, [totalCost, servings])
 
-    return totalCost / servings
-  }, [totalCost, servings])
+ function getBudgetLevel(pricePerPerson: number | null) {
+   if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
+   if (pricePerPerson < 3) return 'smart'
+   if (pricePerPerson <= 5) return 'medium'
+   if (pricePerPerson <= 8) return 'high'
+   return 'occasion'
+ }
 
-  function getBudgetLevel(pricePerPerson: number | null) {
-    if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
+ const budgetLevel = getBudgetLevel(costPerServing)
 
-    if (pricePerPerson < 3) {
-      return 'smart'
-    }
+ const topIngredients = useMemo(() => {
+   return ingredients
+     .map((ing) => {
+       const costCourses = computeCostCourses(ing)
+       return {
+         name: ing.name,
+         cost: typeof costCourses === 'number' ? costCourses : 0,
+       }
+     })
+     .filter((i) => i.name && i.cost > 0)
+     .sort((a, b) => b.cost - a.cost)
+     .slice(0, 3)
+ }, [ingredients])
 
-    if (pricePerPerson <= 5) {
-      return 'medium'
-    }
+ useEffect(() => {
+   const validIngredients = ingredients
+     .map((ing) => ({
+       name: String(ing.name || '').trim(),
+       costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
+       coursesCost: (() => {
+         const v = computeCostCourses(ing)
+         return typeof v === 'number' ? v : 0
+       })(),
+       ingredientBaseId:
+         typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
+       id: typeof ing.id === 'string' ? ing.id : null,
+     }))
+     .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
 
-    if (pricePerPerson <= 8) {
-      return 'high'
-    }
+   const replaceableIngredients = validIngredients
+     .filter((ing) => ing.ingredientBaseId !== null)
+     .sort((a, b) => {
+       if (b.coursesCost !== a.coursesCost) return b.coursesCost - a.coursesCost
+       return b.costEur - a.costEur
+     })
+     .slice(0, 4)
 
-    return 'occasion'
-  }
+   if (!replaceableIngredients.length || totalCost <= 0) {
+     setEconomySuggestions([])
+     return
+   }
 
-  const budgetLevel = getBudgetLevel(costPerServing)
+   const timer = setTimeout(async () => {
+     try {
+       const suggestions: EconomySuggestion[] = []
 
+       for (const ing of replaceableIngredients) {
+         const json = await apiFetch<{
+           ok: boolean
+           suggestion?: EconomySuggestion | null
+         }>('/recipes/economy-suggestion', {
+           method: 'POST',
+           body: JSON.stringify({
+             ingredients: [
+               {
+                 name: ing.name,
+                 costEur: ing.costEur,
+                 ingredientBaseId: ing.ingredientBaseId,
+                 id: ing.id,
+               },
+             ],
+             totalCostEur: totalCost,
+           }),
+         })
 
-  const topIngredients = useMemo(() => {
-    return ingredients
-   .map((ing) => {
-     const costCourses = computeCostCourses(ing)
-     return {
-      name: ing.name,
-      cost: typeof costCourses === 'number' ? costCourses: 0,
+         if (json?.ok && json.suggestion) {
+           suggestions.push(json.suggestion)
+         }
+       }
+
+       setEconomySuggestions(suggestions)
+     } catch {
+       setEconomySuggestions([])
      }
-    })
-   .filter(i => i.name && i.cost > 0)
-   .sort((a,b) => b.cost - a.cost)
-   .slice(0,3)
-  }, [ingredients])
+   }, 300)
 
-  useEffect(() => {
-    const validIngredients = ingredients
-      .map((ing) => ({
-        name: String(ing.name || '').trim(),
-        costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
-        ingredientBaseId:
-        typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
-        id: typeof ing.id === 'string' ? ing.id : null,
-      }))
-      .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
+   return () => clearTimeout(timer)
+ }, [ingredients, totalCost])
 
-      if (!validIngredients.length || totalCost <= 0) {
-        setEconomySuggestion(null)
-        return
-      }
-
-      const timer = setTimeout(async () => {
-        try {
-          const json = await apiFetch<{
-            ok: boolean
-            suggestion?: EconomySuggestion | null
-          }>('/recipes/economy-suggestion', {
-            method: 'POST',
-            body: JSON.stringify({
-              ingredients: validIngredients,
-              totalCostEur: totalCost,
-            }),
-          })
-
-          if (json?.ok) {
-            setEconomySuggestion(json.suggestion ?? null)
-          } else {
-            setEconomySuggestion(null)
-          }
-          } catch {
-            setEconomySuggestion(null)
-          }
-      }, 300)
-
-        return () => clearTimeout(timer)
-      }, [ingredients, totalCost])
-
- // 1) Pré-remplissage depuis OCR
  useEffect(() => {
    if (!fromOcr) return
 
@@ -496,29 +508,44 @@ function NewRecipeInner() {
      const normalized = ing
        .map((row: any): Line | null => {
          if (!row) return null
-         if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
-         if (row.raw) return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+         if (typeof row === 'string') {
+           return { name: row, quantity: 0, unit: '', buyRecalced: false }
+         }
+         if (row.raw) {
+           return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+         }
 
-         const buyPriceEur = typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+         const buyPriceEur =
+           typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
          return {
            name: String(row.name || '').trim(),
            quantity: Number(row.quantity || 0) || 0,
            unit: String(row.unit || ''),
-           quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+           quantityRaw:
+             typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
            price: row.price ?? null,
            costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
-           unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
-           priceMatched: typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
+           unitPriceBuy:
+             typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+           priceMatched:
+             typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
            id: row.id ?? null,
 
            buyPriceEur,
-           buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
-           buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-           buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
-           gramsPerPiece: typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
-           density_g_per_ml: typeof row.density_g_per_ml === 'number' ? row.density_g_per_ml : row.density_g_per_ml ?? null,
+           buyLabel:
+             typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
+           buyRefQty:
+             typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
+           buyRefUnit:
+             typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+           gramsPerPiece:
+             typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
+           density_g_per_ml:
+             typeof row.density_g_per_ml === 'number'
+               ? row.density_g_per_ml
+               : row.density_g_per_ml ?? null,
 
            buyRecalced: typeof buyPriceEur === 'number',
            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
@@ -526,12 +553,16 @@ function NewRecipeInner() {
        })
        .filter((x: any): x is Line => x !== null)
 
-     const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+     const finalIngredients = normalized.length
+       ? normalized
+       : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
 
      setIngredients(finalIngredients)
      setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-     const tr = Array.isArray((d as any).trash) ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean) : []
+     const tr = Array.isArray((d as any).trash)
+       ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean)
+       : []
      setTrash(tr.join('\n'))
    } catch (e) {
      console.error('ocrDraft parse error', e)
@@ -542,7 +573,6 @@ function NewRecipeInner() {
    } catch {}
  }, [fromOcr])
 
- // 2) Pré-remplissage générique (prefill=1)
  useEffect(() => {
    if (!prefill) return
 
@@ -557,36 +587,52 @@ function NewRecipeInner() {
      setImageUrl(String(d.imageUrl || ''))
      setNotes(String(d.notes || ''))
 
-     const s = Array.isArray(d.steps) ? d.steps.map((x) => String(x || '').trim()).filter(Boolean) : []
+     const s = Array.isArray(d.steps)
+       ? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
+       : []
      setSteps(s.length ? s : [''])
 
      const ing = Array.isArray(d.ingredients) ? d.ingredients : []
      const normalized = ing
        .map((row: any): Line | null => {
          if (!row) return null
-         if (typeof row === 'string') return { name: row, quantity: 0, unit: '', buyRecalced: false }
-         if (row.raw) return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+         if (typeof row === 'string') {
+           return { name: row, quantity: 0, unit: '', buyRecalced: false }
+         }
+         if (row.raw) {
+           return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+         }
 
-         const buyPriceEur = typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+         const buyPriceEur =
+           typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
 
          return {
            name: String(row.name || '').trim(),
            quantity: Number(row.quantity || 0) || 0,
            unit: String(row.unit || ''),
-           quantityRaw: typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+           quantityRaw:
+             typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
            price: row.price ?? null,
            costEur: typeof row.costEur === 'number' ? row.costEur : null,
-           unitPriceBuy: typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+           unitPriceBuy:
+             typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
            priceMatched: row.priceMatched ?? false,
            id: row.id ?? null,
 
            buyPriceEur,
-           buyLabel: typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
-           buyRefQty: typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-           buyRefUnit: typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
-           gramsPerPiece: typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
-           density_g_per_ml: typeof row.density_g_per_ml === 'number' ? row.density_g_per_ml : row.density_g_per_ml ?? null,
+           buyLabel:
+             typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
+           buyRefQty:
+             typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
+           buyRefUnit:
+             typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+           gramsPerPiece:
+             typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
+           density_g_per_ml:
+             typeof row.density_g_per_ml === 'number'
+               ? row.density_g_per_ml
+               : row.density_g_per_ml ?? null,
 
            buyRecalced: typeof buyPriceEur === 'number',
            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
@@ -594,12 +640,16 @@ function NewRecipeInner() {
        })
        .filter((x: any): x is Line => x !== null)
 
-     const finalIngredients = normalized.length ? normalized : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+     const finalIngredients = normalized.length
+       ? normalized
+       : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
 
      setIngredients(finalIngredients)
      setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
 
-     const tr = Array.isArray(d.trash) ? d.trash.map((x) => String(x || '').trim()).filter(Boolean) : []
+     const tr = Array.isArray(d.trash)
+       ? d.trash.map((x) => String(x || '').trim()).filter(Boolean)
+       : []
      setTrash(tr.join('\n'))
    } catch (e) {
      console.error('prefill parse error', e)
@@ -656,7 +706,12 @@ function NewRecipeInner() {
        const old = copy[idx]
        const e = enriched[k] as any
 
-       const cost = typeof e.costEur === 'number' ? e.costEur : typeof e.costRecipe === 'number' ? e.costRecipe : null
+       const cost =
+         typeof e.costEur === 'number'
+           ? e.costEur
+           : typeof e.costRecipe === 'number'
+           ? e.costRecipe
+           : null
 
        copy[idx] = {
          ...old,
@@ -674,14 +729,14 @@ function NewRecipeInner() {
          buyRecalced: true,
 
          gramsPerPiece: typeof e.gramsPerPiece === 'number' ? e.gramsPerPiece : null,
-         density_g_per_ml: typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
+         density_g_per_ml:
+           typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
          mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
 
          note: typeof e.note === 'string' ? e.note : undefined,
        } as any
      }
 
-     console.log('FRONT ENRICHED', enriched)
      return copy
    })
  }
@@ -724,7 +779,10 @@ function NewRecipeInner() {
        return
      }
 
-     const enriched = Array.isArray((json as any).ingredients) ? (json as any).ingredients : []
+     const enriched = Array.isArray((json as any).ingredients)
+       ? (json as any).ingredients
+       : []
+
      if (!enriched.length) {
        if (!silent) setStatus('❌ Recalcul impossible: réponse vide.')
        return
@@ -744,7 +802,10 @@ function NewRecipeInner() {
 
  const ingredientsSig = useMemo(() => {
    return ingredients
-     .map((i) => `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`)
+     .map(
+       (i) =>
+         `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`
+     )
      .join('||')
  }, [ingredients])
 
@@ -765,7 +826,6 @@ function NewRecipeInner() {
    return () => {
      if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
    }
-   // eslint-disable-next-line react-hooks/exhaustive-deps
  }, [ingredientsSig])
 
  async function uploadCroppedImage(croppedBlob: Blob) {
@@ -831,7 +891,13 @@ function NewRecipeInner() {
    }
  }
 
- const statusKind = status.startsWith('✅') ? 'success' : status.startsWith('❌') ? 'error' : status ? 'info' : null
+ const statusKind = status.startsWith('✅')
+   ? 'success'
+   : status.startsWith('❌')
+   ? 'error'
+   : status
+   ? 'info'
+   : null
 
  const smallXBtnStyle: React.CSSProperties = {
    width: 30,
@@ -850,793 +916,682 @@ function NewRecipeInner() {
    color: 'var(--primary)',
  }
 
- const inputStyle: React.CSSProperties = {
-   background: 'white',
-   border: '1px solid var(--border)',
-   borderRadius: 12,
-   padding: 14,
- }
-
  return (
- <main className="app-container" style={{ margin: '40px auto' }}>
-   {/* ============================= */}
-   {/* TITRE                         */}
-   {/* ============================= */}
+   <main className="app-container recipe-editor-page">
+     <section className="recipe-editor-head">
+       <input
+         value={title}
+         onChange={(e) => setTitle(e.target.value)}
+         placeholder="Titre de la recette"
+         className="recipe-title editable-title"
+         style={{
+           background: 'transparent',
+           border: 'none',
+           outline: 'none',
+           width: '100%',
+         }}
+       />
 
-   <section style={{ marginBottom: 16 }}>
-     <input
-       value={title}
-       onChange={(e) => setTitle(e.target.value)}
-       placeholder="Titre de la recette"
-       className="recipe-title editable-title"
-       style={{
-         background: 'transparent',
-         border: 'none',
-         outline: 'none',
-         width: '100%',
-       }}
-     />
-
-     <p className="recipe-color-1">
-       Remplis l’essentiel. Tu peux toujours ajuster plus tard.
-     </p>
-
-     {blurPrices && (
-       <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
-         ⚠️ Limite atteinte : les prix sont floutés.
+       <p className="recipe-editor-subtitle">
+         Remplis l’essentiel. Tu peux toujours ajuster plus tard.
        </p>
-     )}
-   </section>
 
-   {blurPrices && <PricingPaywallNotice context="import" />}
-
-   {/* ============================= */}
-   {/* CORBEILLE OCR                 */}
-   {/* ============================= */}
-
-   {trash.trim() && (
-     <section className="app-card p-5" style={{ marginTop: 16 }}>
-       <details>
-         <summary
-           style={{
-             cursor: 'pointer',
-             fontWeight: 800,
-             color: 'var(--primary)',
-           }}
-           >
-           🗑️ Corbeille (texte non-recette détecté)
-         </summary>
-
-         <p className="mt-2 text-sm app-muted">
-           Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été
-           filtré.
+       {blurPrices && (
+         <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
+           ⚠️ Limite atteinte : les prix sont floutés.
          </p>
-
-         <textarea
-           value={trash}
-           onChange={(e) => setTrash(e.target.value)}
-           rows={6}
-           className="mt-3 w-full"
-           style={{
-             background: 'white',
-             border: '1px solid var(--border)',
-             borderRadius: 12,
-             padding: 12,
-           }}
-         />
-       </details>
+       )}
      </section>
-   )}
 
-   {/* ============================= */}
-   {/* INFOS + IMAGE                 */}
-   {/* ============================= */}
+     {blurPrices && <PricingPaywallNotice context="import" />}
 
-   <section className="app-card p-6" style={{ marginTop: 16 }}>
-     <div className="recipe-form-top-grid">
-       {/* -------- LEFT -------- */}
+     {trash.trim() && (
+       <section className="app-card p-5" style={{ marginTop: 16 }}>
+         <details>
+           <summary
+             style={{
+               cursor: 'pointer',
+               fontWeight: 800,
+               color: 'var(--primary)',
+             }}
+            >
+             🗑️ Corbeille (texte non-recette détecté)
+           </summary>
 
-       <div style={{ display: 'grid', gap: 21 }}>
-         <label className="grid gap-1 text-sm font-semibold recipe-color-2">
- Portions
+           <p className="mt-2 text-sm app-muted">
+             Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+           </p>
 
- <div
-   style={{
-     display: 'inline-flex',
-     alignItems: 'center',
-     gap: 8,
-     width: 'fit-content',
-   }}
->
-   <button
-     type="button"
-     className="app-btn app-btn-utility"
-     onClick={() => setServings((prev) => Math.max(1, prev - 1))}
-     aria-label="Réduire le nombre de portions"
-     style={{
-       width: 44,
-       height: 44,
-       padding: 0,
-       fontSize: 22,
-       fontWeight: 800,
-       lineHeight: 1,
-     }}
-     >
-     −
-   </button>
-
-   <input
-     type="number"
-     min={1}
-     inputMode="numeric"
-     value={servings}
-     onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
-     className="app-btn app-btn-utility"
-     style={{
-       width: 84,
-       textAlign: 'center',
-       fontWeight: 700,
-     }}
-   />
-
-   <button
-     type="button"
-     className="app-btn app-btn-utility"
-     onClick={() => setServings((prev) => prev + 1)}
-     aria-label="Augmenter le nombre de portions"
-     style={{
-       width: 44,
-       height: 44,
-       padding: 0,
-       fontSize: 22,
-       fontWeight: 800,
-       lineHeight: 1,
-     }}
-     >
-     +
-   </button>
- </div>
-</label>
-       </div>
-
-       {/* -------- RIGHT -------- */}
-
-       <div style={{ display: 'grid', gap: 14 }}>
-         <label
-           style={{
-             border: '1px dashed var(--border)',
-             borderRadius: 18,
-             padding: 28,
-             textAlign: 'center',
-             cursor: 'pointer',
-             display: 'block',
-           }}
-           >
-           <input
-             type="file"
-             accept="image/*"
-             style={{ display: 'none' }}
-             onChange={(e) => {
-               const file = e.target.files?.[0]
-               if (!file) return
-
-               const localUrl = URL.createObjectURL(file)
-               setImageUrl(localUrl)
+           <textarea
+             value={trash}
+             onChange={(e) => setTrash(e.target.value)}
+             rows={6}
+             className="mt-3 w-full"
+             style={{
+               background: 'white',
+               border: '1px solid var(--border)',
+               borderRadius: 12,
+               padding: 12,
              }}
            />
+         </details>
+       </section>
+     )}
 
-           {imageUrl ? (
-             <div style={{ display: 'grid', gap: 10 }}>
-               <img
-                 src={imageUrl}
-                 alt="preview"
-                 style={{
-                   width: '100%',
-                   borderRadius: 14,
-                   objectFit: 'cover',
-                   maxHeight: 250,
-                 }}
-               />
+     <section className="app-card recipe-editor-hero-card">
+       <div className="recipe-form-top-grid">
+         <div style={{ display: 'grid', gap: 21 }}>
+           <label className="recipe-servings-block">
+             <span className="recipe-servings-label">Portions</span>
+
+             <div className="recipe-servings-control">
+               <button
+                 type="button"
+                 className="app-btn app-btn-utility recipe-servings-btn"
+                 onClick={() => setServings((prev) => Math.max(1, prev - 1))}
+                 aria-label="Réduire le nombre de portions"
+                >
+                 −
+               </button>
 
                <input
-                 value={imageUrl}
-                 onClick={(e) => e.stopPropagation()}
-                 onChange={(e) => setImageUrl(e.target.value)}
-                 style={{
-                   ...inputStyle,
-                   whiteSpace: 'nowrap',
-                   overflow: 'hidden',
-                   textOverflow: 'ellipsis',
-                 }}
+                 type="number"
+                 min={1}
+                 inputMode="numeric"
+                 value={servings}
+                 onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
+                 className="app-btn app-btn-utility recipe-servings-input"
                />
 
                <button
                  type="button"
-                 className="app-btn app-btn-sage recipe-color-2"
-                 onClick={(e) => {
-                   e.preventDefault()
-                   setCrop({ x: 0, y: 0 })
-                   setZoom(1)
-                   setCroppedAreaPixels(null)
-                   setIsCropping(true)
-                 }}
-                 >
-                 Recadrer l’image
-               </button>
-             </div>
-           ) : (
-             <>
-               <div
-                 style={{
-                   width: 60,
-                   height: 60,
-                   borderRadius: '50%',
-                   background: 'rgba(176,188,140,0.4)',
-                   display: 'grid',
-                   placeItems: 'center',
-                   margin: '0 auto 16px auto',
-                   fontSize: 28,
-                 }}
+                 className="app-btn app-btn-utility recipe-servings-btn"
+                 onClick={() => setServings((prev) => prev + 1)}
+                 aria-label="Augmenter le nombre de portions"
                 >
                  +
-               </div>
-
-               <div
-                 className="recipe-color-2"
-                 style={{ fontWeight: 700, marginBottom: 6 }}
-                 >
-                 Ajouter une image
-               </div>
-
-               <div
-                 className="recipe-color-1"
-                 style={{ fontSize: 13, opacity: 0.6 }}
-                 >
-                 Clique sur le + pour choisir une photo
-               </div>
-             </>
-           )}
-         </label>
-
-         {/* coûts */}
-
-         <div className="cost-summary">
-           <div className="cost-pill paper-ui">
-             <div className="cost-pill-row cost-pill-row-recipe">
-               <span className="cost-pill-label recipe-color-2">
-                 Coût de la  recette
-               </span>
-
-               <span className="amount">
-                {' ≈ '} <Price value={totalCost} blur={blurPrices} />
-               </span>
+               </button>
              </div>
-           </div>
+           </label>
 
-           <div className="cost-pill paper-ui">
-             <div className="cost-pill-row cost-pill-row-courses">
-               <span className="cost-pill-label recipe-color-2">
-                 Coût des courses
-               </span>
+           <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
+             Notes
 
-               <span className="amount">
-                 {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
-               </span>
-             </div>
-           </div>
+             <textarea
+               value={notes}
+               onChange={(e) => setNotes(e.target.value)}
+               rows={6}
+               style={{ minHeight: 170 }}
+             />
+           </label>
          </div>
-          {/* ANALYSE MYSIA */}
 
-          {totalCost > 0 && (
-            <div
-                className="app-card p-5"
-                style={{
-                  marginTop:16,
-                  background:'rgba(176,188,140,0.08)',
-                  border:'1px solid rgba(176,188,140,0.25)'
-                }}
+         <div style={{ display: 'grid', gap: 14 }}>
+           <label className="recipe-editor-image-drop">
+             <input
+               type="file"
+               accept="image/*"
+               style={{ display: 'none' }}
+               onChange={(e) => {
+                 const file = e.target.files?.[0]
+                 if (!file) return
+
+                 const localUrl = URL.createObjectURL(file)
+                 setImageUrl(localUrl)
+               }}
+             />
+
+             {imageUrl ? (
+               <div className="recipe-editor-image-stack">
+                 <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
+
+                 <input
+                   value={imageUrl}
+                   onClick={(e) => e.stopPropagation()}
+                   onChange={(e) => setImageUrl(e.target.value)}
+                   className="recipe-editor-image-url"
+                 />
+
+                 <button
+                   type="button"
+                   className="app-btn recipe-editor-secondary-btn"
+                   onClick={(e) => {
+                     e.preventDefault()
+                     setCrop({ x: 0, y: 0 })
+                     setZoom(1)
+                     setCroppedAreaPixels(null)
+                     setIsCropping(true)
+                   }}
+                  >
+                   Recadrer l’image
+                 </button>
+               </div>
+             ) : (
+               <>
+                 <div className="recipe-editor-image-plus">+</div>
+
+                 <div className="recipe-editor-image-title">Ajouter une image</div>
+
+                 <div className="recipe-editor-image-hint">
+                   Clique sur le + pour choisir une photo
+                 </div>
+               </>
+             )}
+           </label>
+
+           <div className="recipe-editor-costs">
+             <div className="recipe-editor-costs-card">
+               <div className="cost-pill-row cost-pill-row-recipe">
+                 <span className="cost-pill-label recipe-color-2">Coût de la recette</span>
+                 <span className="amount">
+                   {' ≈ '} <Price value={totalCost} blur={blurPrices} />
+                 </span>
+               </div>
+             </div>
+
+             <div className="recipe-editor-costs-card">
+               <div className="cost-pill-row cost-pill-row-courses">
+                 <span className="cost-pill-label recipe-color-2">Coût des courses</span>
+                 <span className="amount">
+                   {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
+                 </span>
+               </div>
+             </div>
+           </div>
+
+           {totalCost > 0 && (
+             <div
+               className="recipe-analysis-card"
+               style={{
+                 marginTop: 16,
+                 background: 'rgba(176,188,140,0.08)',
+                 border: '1px solid rgba(176,188,140,0.25)',
+               }}
               >
+               {budgetLevel && (
+                 <div className="recipe-budget-pills">
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}
+                    >
+                     Budget malin
+                   </div>
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}
+                    >
+                     Budget moyen
+                   </div>
+                   <div
+                     className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}
+                    >
+                     Budget élevé
+                   </div>
+                 </div>
+               )}
 
-               
+               {topIngredients.length > 0 && (
+                 <div>
+                   <h3 className="recipe-analysis-section-title">
+                     Les ingrédients les plus élevés :
+                   </h3>
 
-                 {budgetLevel && (
-     <div
-       style={{
-         display: 'flex',
-         gap: 8,
-         flexWrap: 'wrap',
-         marginBottom: 15,
-       }}
->
-       <div
-         style={{
-           padding: '6px 12px',
-           borderRadius: 999,
-           fontSize: 13,
-           fontWeight: 700,
-           background: budgetLevel === 'smart' ? 'rgba(176,188,140,0.28)' : 'rgba(0,0,0,0.06)',
-           color: budgetLevel === 'smart' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-         }}
->
-         Budget malin
-       </div>
+                   <div style={{ display: 'grid', gap: 4 }}>
+                     {topIngredients.map((i, index) => (
+                       <div key={index} className="recipe-analysis-top-item">
+                         <span>
+                           • {index + 1} {i.name}
+                         </span>
 
-       <div
-         style={{
-           padding: '6px 12px',
-           borderRadius: 999,
-           fontSize: 13,
-           fontWeight: 700,
-           background: budgetLevel === 'medium' ? 'rgba(230,190,120,0.30)' : 'rgba(0,0,0,0.06)',
-           color: budgetLevel === 'medium' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-         }}
->
-         Budget moyen
-       </div>
+                         <span className="recipe-analysis-price">
+                           <Price value={i.cost} blur={blurPrices} />
+                         </span>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
 
-       <div
-         style={{
-           padding: '6px 12px',
-           borderRadius: 999,
-           fontSize: 13,
-           fontWeight: 700,
-           background: budgetLevel === 'high' ? 'rgba(180,120,120,0.22)' : 'rgba(0,0,0,0.06)',
-           color: budgetLevel === 'high' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-         }}
->
-         Budget élevé
-       </div>
-     </div>
-   )}
-   <h3
-                  style={{
-                    fontWeight:800,
-                    marginBottom:12,
-                    color:'var(--primary)'
-                  }}
-                >  
-                Les ingrédients les plus élevés :
-                </h3>
-    {/* top ingrédients */}
+               {costPerServing && (
+                 <div className="recipe-analysis-serving-card">
+                   <div className="recipe-analysis-serving-label">Prix par personne :</div>
+                   <div className="recipe-analysis-serving-value">
+                     <Price value={costPerServing} blur={blurPrices} />
+                   </div>
+                   <div className="recipe-analysis-serving-meta">{servings} portions</div>
+                 </div>
+               )}
 
-                {topIngredients.length > 0 && (
-                  <div>
+               {economySuggestions.length > 0 && (
+                 <div style={{ marginTop: 16 }}>
+                   <div className="recipe-analysis-section-title">
+                     Comment réduire le coût :
+                   </div>
 
-                    <div style={{display:'grid',gap:4}}>
-
-                      {topIngredients.map((i,index)=>(
-                        <div
-                          key={index}
-                          style={{
-                            display:'flex',
-                            justifyContent:'space-between'
-                          }}
+                   <div style={{ display: 'grid', gap: 12 }}>
+                     {economySuggestions.map((suggestion, index) => (
+                       <div
+                         key={`${suggestion.ingredientName}-${index}`}
+                         className="recipe-analysis-saving-box"
                         >
+                         <div className="recipe-analysis-saving-main">
+                           • {suggestion.ingredientName}
+                         </div>
 
-                          <span>
-                            • {index+1} {i.name}
-                          </span>
+                         {suggestion.substitutions?.length > 0 && (
+                           <div style={{ marginBottom: 10 }}>
+                             <div className="recipe-analysis-saving-label">
+                               {suggestion.label || 'Alternative possible selon la recette'} :
+                             </div>
 
-                          <span 
-                            style={{
-                              fontWeight:700,
-                              color:'var(--primary)'
-                              }}
-                            >
-                            <Price
-                              value={i.cost}
-                              blur={blurPrices}
-                            />
-                          </span>
-                        </div>
-                      ))}
-                {/* prix par personne */}
+                             <div className="recipe-analysis-saving-list">
+                               {suggestion.substitutions.map((sub) => (
+                                 <div key={sub.id} className="recipe-analysis-saving-item">
+                                   . {sub.name}
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
 
-            {costPerServing && (
- <div style={{ marginBottom: 14, marginTop: 20 }}>
-   <div
-     className="app-muted"
-     style={{ fontWeight: 700 }}
->
-     Prix par personne :
-   </div>
+                         {suggestion.note && (
+                           <div className="recipe-analysis-saving-note">
+                             {suggestion.note}
+                           </div>
+                         )}
 
-   <div style={{ fontSize: 20, fontWeight: 800 }}>
-     <Price
-       value={costPerServing}
-       blur={blurPrices}
-     />
-   </div>
+                         <div className="recipe-analysis-saving-strong">
+                           Économie estimée : ~
+                           <Price value={suggestion.savingEur} blur={blurPrices} />
+                         </div>
 
-   <div
-     style={{
-       fontSize: 13,
-       opacity: 0.7,
-     }}
->
-     {servings} portions
-   </div>
+                         <div className="recipe-analysis-saving-meta">
+                           Nouveau coût recette :{' '}
+                           <Price value={suggestion.newTotalEur} blur={blurPrices} />
+                         </div>
 
-  
- </div>
-)}
-
-               
-
-                      {economySuggestion && (
-
-                        <div style={{marginTop:16}}>
-
-                          <div
-                            className="app-muted"
-                            style={{
-                              fontWeight:700,
-                              marginBottom:6
-                            }}
-                          >
-                            Comment réduire le coût :
-
-                          </div>
-
-                          <div 
-                            style={{
-                              background:'rgba(176,188,140,0.15)',
-                              padding:12,
-                              borderRadius:12
-                            }}
-                          >
-<div style={{ marginBottom: 8, fontWeight: 700 }}>
- • {economySuggestion.ingredientName}
-</div>
-
-{economySuggestion.substitutions?.length > 0 && (
- <div style={{ marginBottom: 10 }}>
-   <div style={{ fontSize: 13, opacity: 0.8, marginBottom: 4 }}>
-     {economySuggestion.label || 'Alternative possible selon la recette'} :
-   </div>
-
-   <div style={{ display: 'grid', gap: 4 }}>
-     {economySuggestion.substitutions.map((sub) => (
-       <div key={sub.id} style={{ fontSize: 14 }}>
-         . {sub.name}
-       </div>
-     ))}
-   </div>
- </div>
-)}
-
-{economySuggestion.note && (
- <div style={{ fontSize: 13, opacity: 0.75, marginBottom: 10 }}>
-   {economySuggestion.note}
- </div>
-)}
-
-<div
- style={{
-   display: 'flex',
-   flexWrap: 'wrap',
-   gap: 12,
-   alignItems: 'center',
- }}
- >
- <div style={{ fontWeight: 700 }}>
-   Économie estimée : ~
-   <Price value={economySuggestion.savingEur} blur={blurPrices} />
- </div>
-
- <div style={{ fontSize: 13, opacity: 0.8 }}>
- Nouveau coût recette :
- {' '}
- <Price value={economySuggestion.newTotalEur} blur={blurPrices} />
-</div>
-
-<div style={{ fontSize: 13, opacity: 0.8 }}>
- Nouveau prix/personne :
- {' '}
- <Price
-   value={
-     economySuggestion.newTotalEur != null && servings > 0
-       ? economySuggestion.newTotalEur / servings
-       : null
-   }
-   blur={blurPrices}
- />
-</div>
-</div>
-                        </div>
-                      </div>
-                    )}
-                    </div>
-                  </div>
-                )}
-              </div>
-          )} 
-
-        </div>
-     </div>
-   </section>
-
-   {/* ============================= */}
-   {/* INGREDIENTS                   */}
-   {/* ============================= */}
-
-   <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
-     <div className="ingredients-top">
-       <div className="ingredients-head grid gap-1 text-sm font-semibold">
-         <h2 className="recipe-color-2" style={sectionTitleStyle}>
-           Ingrédients
-         </h2>
-
-         <p className="mt-2 text-sm app-muted">
-           Un ingrédient par ligne : nom, quantité, unité, prix.
-         </p>
-       </div>
-
-       <button
-         onClick={() => recalcPrices({ silent: false })}
-         disabled={isRepricing}
-         className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
-         type="button"
-           >
-         {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
-       </button>
-     </div>
-
-     <div className="mt-4 grid gap-3">
-       {ingredients.map((ing, idx) => {
-         const costCourses = computeCostCourses(ing)
-         const costRecipe =
-           typeof (ing as any).costEur === 'number'
-             ? (ing as any).costEur
-             : null
-
-         return (
- <div key={idx} className="app-card p-3">
-   {/* DESKTOP */}
-   <div className="ingredient-row-desktop">
-     <div className="ingredient-cell-name">
-       <input
-         placeholder="Nom de l'ingrédient..."
-         value={ing.name}
-         onChange={(e) => setIngredient(idx, { name: e.target.value })}
-         style={{
-           border: '1px solid var(--border)',
-           borderRadius: 12,
-           padding: 10,
-           width: '100%',
-         }}
-       />
-     </div>
-
-     <div className="ingredient-picker-wrap">
-       <IngredientPicker
-         querySeed={normalizeIngredientForLookup(ing.name)}
-         onPick={(item) => {
-           setIngredient(idx, {
-             name: item.nom,
-             ingredientBaseId: item.id,
-             id: item.id as any,
-           })
-
-           setTimeout(() => {
-             recalcPrices({ silent: true })
-           }, 0)
-         }}
-         buttonLabel="Voir les produits"
-       />
-     </div>
-
-     <input
-       placeholder="Qté"
-       value={qtyInputs[idx] ?? ''}
-       onChange={(e) => setQtyInput(idx, e.target.value)}
-       className="app-btn app-btn-utility"
-       style={{
-         borderRadius: 12,
-         padding: 10,
-         width: '100%',
-         justifyContent: 'flex-start',
-         fontWeight: 500,
-       }}
-     />
-
-     <input
-       placeholder="Unité"
-       value={ing.unit}
-       onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-       className="app-btn app-btn-utility"
-       style={{
-         borderRadius: 12,
-         padding: 10,
-         width: '100%',
-       }}
-     />
-
-     <div className="ingredient-price-col">
-       <div className="ingredient-price-label">Coût recette</div>
-       <div className="ingredient-price-value cost-pill-row-recipe">
-         <Price value={costRecipe} blur={blurPrices} />
-       </div>
-     </div>
-
-     <div className="ingredient-price-col">
-       <div className="ingredient-price-label">Coût courses</div>
-       <div className="ingredient-price-value cost-pill-row-courses">
-         <Price value={costCourses} blur={blurPrices} />
-       </div>
-     </div>
-
-     <div className="ingredient-delete-col">
-       <button
-         type="button"
-         onClick={() => removeIngredient(idx)}
-         className="app-btn app-btn-utility"
-         style={smallXBtnStyle}
-        >
-         ✕
-       </button>
-     </div>
-   </div>
-
-   {/* MOBILE */}
-   <div className="ingredient-row-mobile">
-     <div className="ingredient-mobile-top">
-       <input
-         placeholder="Nom de l'ingrédient..."
-         value={ing.name}
-         onChange={(e) => setIngredient(idx, { name: e.target.value })}
-         style={{
-           border: '1px solid var(--border)',
-           borderRadius: 12,
-           padding: 10,
-           width: '100%',
-         }}
-       />
-
-       <div className="ingredient-picker-wrap">
-         <IngredientPicker
-           querySeed={normalizeIngredientForLookup(ing.name)}
-           onPick={(item) => {
-             setIngredient(idx, {
-               name: item.nom,
-               ingredientBaseId: item.id,
-               id: item.id as any,
-             })
-
-             setTimeout(() => {
-               recalcPrices({ silent: true })
-             }, 0)
-           }}
-           buttonLabel="Voir les produits"
-         />
-       </div>
-     </div>
-
-     <div className="ingredient-mobile-meta">
-       <input
-         placeholder="Qté"
-         value={qtyInputs[idx] ?? ''}
-         onChange={(e) => setQtyInput(idx, e.target.value)}
-         className="app-btn-utility"
-         style={{
-           borderRadius: 20,
-           padding: 10,
-           width: '100%',
-           justifyContent: 'flex-start',
-           fontWeight: 500,
-         }}
-       />
-
-       <input
-         placeholder="Unité"
-         value={ing.unit}
-         onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-         className="app-btn app-btn-utility"
-         style={{
-           borderRadius: 20,
-           padding: "6px 10px",
-           width: '100%',
-           justifyContent: 'flex-start',
-           fontWeight: 500,
-         }}
-       />
-     </div>
-
-     <div className="ingredient-mobile-prices">
-       <div className="ingredient-mobile-pricebox">
-         <div className="ingredient-price-label">Coût recette</div>
-         <div className="ingredient-price-value cost-pill-row-recipe">
-           <Price value={costRecipe} blur={blurPrices} />
+                         <div className="recipe-analysis-saving-meta">
+                           Nouveau prix/personne :{' '}
+                           <Price
+                             value={
+                               suggestion.newTotalEur != null && servings > 0
+                                 ? suggestion.newTotalEur / servings
+                                 : null
+                             }
+                             blur={blurPrices}
+                           />
+                         </div>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
+             </div>
+           )}
          </div>
        </div>
+     </section>
 
-       <div className="ingredient-mobile-pricebox">
-         <div className="ingredient-price-label">Coût courses</div>
-         <div className="ingredient-price-value cost-pill-row-courses">
-           <Price value={costCourses} blur={blurPrices} />
+     <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
+       <div className="ingredients-top">
+         <div className="ingredients-head grid gap-1 text-sm font-semibold">
+           <h2 className="recipe-color-2" style={sectionTitleStyle}>
+             Ingrédients
+           </h2>
+
+           <p className="mt-2 text-sm app-muted">
+             Un ingrédient par ligne : nom, quantité, unité, prix.
+           </p>
          </div>
-       </div>
 
-       <button
-         type="button"
-         onClick={() => removeIngredient(idx)}
-         className="app-btn app-btn-utility"
-         style={smallXBtnStyle}
-         >
-         ✕
-       </button>
-     </div>
-   </div>
- </div>
-)
-       })}
-
-       <button
-         onClick={() => {
-           setIngredients((p) => [
-             ...p,
-             { name: '', quantity: 0, unit: '', buyRecalced: false },
-           ])
-
-           setQtyInputs((p) => [...p, ''])
-         }}
-         className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-         style={{ width: 'min(260px, 100%)' }}
-         type="button"
-         >
-         + Ajouter un ingrédient
-       </button>
-     </div>
-   </section>
-    <section className="app-card p-5" style={{ marginTop: 16 }}>
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        alignItems: 'center',
-        gap: 14,
-        flexWrap: 'wrap',
-      }}
-      >
-      <div>
-        {status && (
-          <p
-            style={{
-              margin: 0,
-              fontWeight: 700,
-              color:
-                statusKind === 'success'
-                  ? '#2f6f3e'
-                  : statusKind === 'error'
-                  ? '#b00020'
-                  : 'var(--primary)',
-            }}
+         <button
+           onClick={() => recalcPrices({ silent: false })}
+           disabled={isRepricing}
+           className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
+           type="button"
           >
-            {status}
-          </p>
-        )}
-      </div>
+           {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
+         </button>
+       </div>
 
-      <button
-        type="button"
-        onClick={save}
-        className="app-btn app-btn-sage"
-        style={{ 
-          minWidth: 280,
-          height: 60,
-          fontSize: 35,
-          fontWeight: 800,
-          borderRadius: 14,
-          boxShadow: "0 12px 22px rgba(176,188,140,0.35)"
-        }}
+       <div className="mt-4 grid gap-3">
+         {ingredients.map((ing, idx) => {
+           const costCourses = computeCostCourses(ing)
+           const costRecipe =
+             typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
+
+           return (
+             <div key={idx} className="app-card p-3">
+               <div className="ingredient-row-desktop">
+                 <div className="ingredient-cell-name">
+                   <input
+                     placeholder="Nom de l'ingrédient..."
+                     value={ing.name}
+                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
+                     style={{
+                       border: '1px solid var(--border)',
+                       borderRadius: 12,
+                       padding: 10,
+                       width: '100%',
+                     }}
+                   />
+                 </div>
+
+                 <div className="ingredient-picker-wrap">
+                   <IngredientPicker
+                     querySeed={normalizeIngredientForLookup(ing.name)}
+                     onPick={(item) => {
+                       setIngredient(idx, {
+                         name: item.nom,
+                         ingredientBaseId: item.id,
+                         id: item.id as any,
+                       })
+
+                       setTimeout(() => {
+                         recalcPrices({ silent: true })
+                       }, 0)
+                     }}
+                     buttonLabel="Voir les produits"
+                   />
+                 </div>
+
+                 <input
+                   placeholder="Qté"
+                   value={qtyInputs[idx] ?? ''}
+                   onChange={(e) => setQtyInput(idx, e.target.value)}
+                   className="app-btn app-btn-utility"
+                   style={{
+                     borderRadius: 12,
+                     padding: 10,
+                     width: '100%',
+                     justifyContent: 'flex-start',
+                     fontWeight: 500,
+                   }}
+                 />
+
+                 <input
+                   placeholder="Unité"
+                   value={ing.unit}
+                   onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+                   className="app-btn app-btn-utility"
+                   style={{
+                     borderRadius: 12,
+                     padding: 10,
+                     width: '100%',
+                   }}
+                 />
+
+                 <div className="ingredient-price-col">
+                   <div className="ingredient-price-label">Coût recette</div>
+                   <div className="ingredient-price-value cost-pill-row-recipe">
+                     <Price value={costRecipe} blur={blurPrices} />
+                   </div>
+                 </div>
+
+                 <div className="ingredient-price-col">
+                   <div className="ingredient-price-label">Coût courses</div>
+                   <div className="ingredient-price-value cost-pill-row-courses">
+                     <Price value={costCourses} blur={blurPrices} />
+                   </div>
+                 </div>
+
+                 <div className="ingredient-delete-col">
+                   <button
+                     type="button"
+                     onClick={() => removeIngredient(idx)}
+                     className="app-btn app-btn-utility"
+                     style={smallXBtnStyle}
+                    >
+                     ✕
+                   </button>
+                 </div>
+               </div>
+
+               <div className="ingredient-row-mobile">
+                 <div className="ingredient-mobile-top">
+                   <input
+                     placeholder="Nom de l'ingrédient..."
+                     value={ing.name}
+                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
+                     style={{
+                       border: '1px solid var(--border)',
+                       borderRadius: 12,
+                       padding: 10,
+                       width: '100%',
+                     }}
+                   />
+
+                   <div className="ingredient-picker-wrap">
+                     <IngredientPicker
+                       querySeed={normalizeIngredientForLookup(ing.name)}
+                       onPick={(item) => {
+                         setIngredient(idx, {
+                           name: item.nom,
+                           ingredientBaseId: item.id,
+                           id: item.id as any,
+                         })
+
+                         setTimeout(() => {
+                           recalcPrices({ silent: true })
+                         }, 0)
+                       }}
+                       buttonLabel="Voir les produits"
+                     />
+                   </div>
+                 </div>
+
+                 <div className="ingredient-mobile-meta">
+                   <input
+                     placeholder="Qté"
+                     value={qtyInputs[idx] ?? ''}
+                     onChange={(e) => setQtyInput(idx, e.target.value)}
+                     className="app-btn-utility"
+                     style={{
+                       borderRadius: 20,
+                       padding: 10,
+                       width: '100%',
+                       justifyContent: 'flex-start',
+                       fontWeight: 500,
+                     }}
+                   />
+
+                   <input
+                     placeholder="Unité"
+                     value={ing.unit}
+                     onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+                     className="app-btn app-btn-utility"
+                     style={{
+                       borderRadius: 20,
+                       padding: '6px 10px',
+                       width: '100%',
+                       justifyContent: 'flex-start',
+                       fontWeight: 500,
+                     }}
+                   />
+                 </div>
+
+                 <div className="ingredient-mobile-prices">
+                   <div className="ingredient-mobile-pricebox">
+                     <div className="ingredient-price-label">Coût recette</div>
+                     <div className="ingredient-price-value cost-pill-row-recipe">
+                       <Price value={costRecipe} blur={blurPrices} />
+                     </div>
+                   </div>
+
+                   <div className="ingredient-mobile-pricebox">
+                     <div className="ingredient-price-label">Coût courses</div>
+                     <div className="ingredient-price-value cost-pill-row-courses">
+                       <Price value={costCourses} blur={blurPrices} />
+                     </div>
+                   </div>
+
+                   <button
+                     type="button"
+                     onClick={() => removeIngredient(idx)}
+                     className="app-btn app-btn-utility"
+                     style={smallXBtnStyle}
+                    >
+                     ✕
+                   </button>
+                 </div>
+               </div>
+             </div>
+           )
+         })}
+
+         <button
+           onClick={() => {
+             setIngredients((p) => [
+               ...p,
+               { name: '', quantity: 0, unit: '', buyRecalced: false },
+             ])
+             setQtyInputs((p) => [...p, ''])
+           }}
+           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
+           style={{ width: 'min(260px, 100%)' }}
+           type="button"
+          >
+           + Ajouter un ingrédient
+         </button>
+       </div>
+     </section>
+
+     <section className="app-card p-5" style={{ marginTop: 16 }}>
+       <div
+         style={{
+           display: 'flex',
+           justifyContent: 'center',
+           alignItems: 'center',
+           gap: 14,
+           flexWrap: 'wrap',
+         }}
         >
-        Enregistrer la recette
-      </button>
-    </div>
-  </section>
- </main>
-)
+         <div>
+           {status && (
+             <p
+               style={{
+                 margin: 0,
+                 fontWeight: 700,
+                 color:
+                   statusKind === 'success'
+                     ? '#2f6f3e'
+                     : statusKind === 'error'
+                     ? '#b00020'
+                     : 'var(--primary)',
+               }}
+               >
+               {status}
+             </p>
+           )}
+         </div>
+
+         <button
+           type="button"
+           onClick={save}
+           className="app-btn app-btn-sage"
+           style={{
+             minWidth: 280,
+             height: 60,
+             fontSize: 35,
+             fontWeight: 800,
+             borderRadius: 14,
+             boxShadow: '0 12px 22px rgba(176,188,140,0.35)',
+           }}
+          >
+           Enregistrer la recette
+         </button>
+       </div>
+     </section>
+
+     {isCropping && imageUrl && (
+       <div
+         style={{
+           position: 'fixed',
+           inset: 0,
+           zIndex: 2000,
+           background: 'rgba(30, 22, 18, 0.72)',
+           display: 'grid',
+           placeItems: 'center',
+           padding: 16,
+         }}
+        >
+         <div
+           className="app-card"
+           style={{
+             width: 'min(920px, 100%)',
+             padding: 16,
+             display: 'grid',
+             gap: 14,
+           }}
+          >
+           <div
+             style={{
+               position: 'relative',
+               width: '100%',
+               height: 'min(70vh, 560px)',
+               borderRadius: 18,
+               overflow: 'hidden',
+               background: '#111',
+             }}
+            >
+             <Cropper
+               image={imageUrl}
+               crop={crop}
+               zoom={zoom}
+               aspect={4 / 3}
+               onCropChange={setCrop}
+               onZoomChange={setZoom}
+               onCropComplete={onCropComplete}
+             />
+           </div>
+
+           <div style={{ display: 'grid', gap: 8 }}>
+             <label className="text-sm font-semibold recipe-color-2">
+               Zoom
+               <input
+                 type="range"
+                 min={1}
+                 max={3}
+                 step={0.01}
+                 value={zoom}
+                 onChange={(e) => setZoom(Number(e.target.value))}
+                 style={{ width: '100%' }}
+               />
+             </label>
+           </div>
+
+           <div
+             style={{
+               display: 'flex',
+               justifyContent: 'flex-end',
+               gap: 10,
+               flexWrap: 'wrap',
+             }}
+            >
+             <button
+               type="button"
+               className="app-btn app-btn-secondary"
+               onClick={() => setIsCropping(false)}
+               disabled={isUploadingCrop}
+              >
+               Annuler
+             </button>
+
+             <button
+               type="button"
+               className="app-btn app-btn-primary"
+               onClick={confirmCrop}
+               disabled={isUploadingCrop}
+              >
+               {isUploadingCrop ? 'Envoi…' : 'Valider le recadrage'}
+             </button>
+           </div>
+         </div>
+       </div>
+     )}
+   </main>
+ )
 }
+
+
 
 export default function Page() {
  return (
