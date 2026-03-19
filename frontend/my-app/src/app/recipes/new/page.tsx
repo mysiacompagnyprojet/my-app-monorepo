@@ -899,23 +899,6 @@ function NewRecipeInner() {
    ? 'info'
    : null
 
- const smallXBtnStyle: React.CSSProperties = {
-   width: 30,
-   height: 30,
-   padding: 0,
-   display: 'grid',
-   placeItems: 'center',
-   fontSize: 14,
-   lineHeight: '14px',
-   borderRadius: 10,
- }
-
- const sectionTitleStyle: React.CSSProperties = {
-   fontSize: '1.13rem',
-   fontWeight: 800,
-   color: 'var(--primary)',
- }
-
  return (
    <main className="app-container recipe-editor-page">
      <section className="recipe-editor-head">
@@ -923,13 +906,7 @@ function NewRecipeInner() {
          value={title}
          onChange={(e) => setTitle(e.target.value)}
          placeholder="Titre de la recette"
-         className="recipe-title editable-title"
-         style={{
-           background: 'transparent',
-           border: 'none',
-           outline: 'none',
-           width: '100%',
-         }}
+         className="recipe-editor-title-input recipe-editor-title-field"
        />
 
        <p className="recipe-editor-subtitle">
@@ -937,7 +914,7 @@ function NewRecipeInner() {
        </p>
 
        {blurPrices && (
-         <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
+         <p className="recipe-editor-section-text recipe-editor-alert-text">
            ⚠️ Limite atteinte : les prix sont floutés.
          </p>
        )}
@@ -946,19 +923,13 @@ function NewRecipeInner() {
      {blurPrices && <PricingPaywallNotice context="import" />}
 
      {trash.trim() && (
-       <section className="app-card p-5" style={{ marginTop: 16 }}>
+       <section className="recipe-editor-trash-card">
          <details>
-           <summary
-             style={{
-               cursor: 'pointer',
-               fontWeight: 800,
-               color: 'var(--primary)',
-             }}
-            >
+           <summary className="recipe-editor-trash-summary">
              🗑️ Corbeille (texte non-recette détecté)
            </summary>
 
-           <p className="mt-2 text-sm app-muted">
+           <p className="recipe-editor-trash-text">
              Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
            </p>
 
@@ -966,19 +937,13 @@ function NewRecipeInner() {
              value={trash}
              onChange={(e) => setTrash(e.target.value)}
              rows={6}
-             className="mt-3 w-full"
-             style={{
-               background: 'white',
-               border: '1px solid var(--border)',
-               borderRadius: 12,
-               padding: 12,
-             }}
+             className="recipe-editor-trash-textarea"
            />
          </details>
        </section>
      )}
 
-     <section className="app-card recipe-editor-hero-card">
+     <section className="recipe-editor-hero-card">
  <div className="recipe-form-top-grid">
    <div className="recipe-editor-left-col">
      <label className="recipe-servings-block">
@@ -987,7 +952,7 @@ function NewRecipeInner() {
        <div className="recipe-servings-control">
          <button
            type="button"
-           className="app-btn app-btn-utility recipe-servings-btn"
+           className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
            onClick={() => setServings((prev) => Math.max(1, prev - 1))}
            aria-label="Réduire le nombre de portions"
           >
@@ -1000,12 +965,12 @@ function NewRecipeInner() {
            inputMode="numeric"
            value={servings}
            onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
-           className="app-btn app-btn-utility recipe-servings-input"
+           className="recipe-editor-input recipe-servings-input"
          />
 
          <button
            type="button"
-           className="app-btn app-btn-utility recipe-servings-btn"
+           className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
            onClick={() => setServings((prev) => prev + 1)}
            aria-label="Augmenter le nombre de portions"
           >
@@ -1085,7 +1050,7 @@ function NewRecipeInner() {
        <input
          type="file"
          accept="image/*"
-         style={{ display: 'none' }}
+         className="recipe-editor-file-input"
          onChange={(e) => {
            const file = e.target.files?.[0]
            if (!file) return
@@ -1108,7 +1073,7 @@ function NewRecipeInner() {
 
            <button
              type="button"
-             className="app-btn recipe-editor-secondary-btn"
+             className="recipe-editor-btn recipe-editor-btn-secondary"
              onClick={(e) => {
                e.preventDefault()
                setCrop({ x: 0, y: 0 })
@@ -1135,18 +1100,18 @@ function NewRecipeInner() {
 
      <div className="recipe-editor-costs">
        <div className="recipe-editor-cost-card">
-         <div className="cost-pill-row cost-pill-row-recipe">
-           <span className="cost-pill-label recipe-color-2">Coût de la recette</span>
-           <span className="amount">
+         <div className="recipe-editor-cost-row recipe-editor-cost-row-recipe">
+           <span className="recipe-editor-cost-label">Coût de la recette</span>
+           <span className="recipe-editor-cost-amount">
              {' ≈ '} <Price value={totalCost} blur={blurPrices} />
            </span>
          </div>
        </div>
 
        <div className="recipe-editor-cost-card">
-         <div className="cost-pill-row cost-pill-row-courses">
-           <span className="cost-pill-label recipe-color-2">Coût des courses</span>
-           <span className="amount">
+         <div className="recipe-editor-cost-row recipe-editor-cost-row-courses">
+           <span className="recipe-editor-cost-label">Coût des courses</span>
+           <span className="recipe-editor-cost-amount">
              {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
            </span>
          </div>
@@ -1232,14 +1197,14 @@ function NewRecipeInner() {
  </div>
 </section>
 
-     <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
-       <div className="ingredients-top">
-         <div className="ingredients-head grid gap-1 text-sm font-semibold">
-           <h2 className="recipe-color-2" style={sectionTitleStyle}>
+     <section className="recipe-editor-ingredients-section">
+       <div className="recipe-editor-ingredients-head">
+         <div className="recipe-editor-section-heading">
+           <h2 className="recipe-editor-section-title">
              Ingrédients
            </h2>
 
-           <p className="mt-2 text-sm app-muted">
+           <p className="recipe-editor-section-text">
              Un ingrédient par ligne : nom, quantité, unité.
            </p>
          </div>
@@ -1247,14 +1212,14 @@ function NewRecipeInner() {
          <button
            onClick={() => recalcPrices({ silent: false })}
            disabled={isRepricing}
-           className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
+           className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-recalc-btn"
            type="button"
           >
            {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
          </button>
        </div>
 
-       <div className="mt-4 recipe-editor-ingredients-shell">
+       <div className="recipe-editor-ingredients-shell">
          {ingredients.map((ing, idx) => {
            const costCourses = computeCostCourses(ing)
            const costRecipe =
@@ -1272,7 +1237,7 @@ function NewRecipeInner() {
                    />
                  </div>
 
-                 <div className="ingredient-picker-wrap">
+                 <div className="recipe-editor-ingredient-picker-wrap">
                    <IngredientPicker
                      querySeed={normalizeIngredientForLookup(ing.name)}
                      onPick={(item) => {
@@ -1305,15 +1270,15 @@ function NewRecipeInner() {
                  />
 
                  <div className="recipe-editor-ingredient-pricebox">
-                   <div className="ingredient-price-label">Coût recette</div>
-                   <div className="ingredient-price-value cost-pill-row-recipe">
+                   <div className="recipe-editor-ingredient-price-label">Coût recette</div>
+                   <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
                      <Price value={costRecipe} blur={blurPrices} />
                    </div>
                  </div>
 
                  <div className="recipe-editor-ingredient-pricebox">
-                   <div className="ingredient-price-label">Coût courses</div>
-                   <div className="ingredient-price-value cost-pill-row-courses">
+                   <div className="recipe-editor-ingredient-price-label">Coût courses</div>
+                   <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
                      <Price value={costCourses} blur={blurPrices} />
                    </div>
                  </div>
@@ -1322,8 +1287,7 @@ function NewRecipeInner() {
                    <button
                      type="button"
                      onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility recipe-editor-ingredient-delete"
-                     style={smallXBtnStyle}
+                     className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
                     >
                      ✕
                    </button>
@@ -1339,7 +1303,7 @@ function NewRecipeInner() {
                      className="recipe-editor-ingredient-name"
                    />
 
-                   <div className="ingredient-picker-wrap">
+                   <div className="recipe-editor-ingredient-picker-wrap">
                      <IngredientPicker
                        querySeed={normalizeIngredientForLookup(ing.name)}
                        onPick={(item) => {
@@ -1376,15 +1340,15 @@ function NewRecipeInner() {
 
                  <div className="recipe-editor-ingredient-mobile-prices">
                    <div className="recipe-editor-ingredient-pricebox">
-                     <div className="ingredient-price-label">Coût recette</div>
-                     <div className="ingredient-price-value cost-pill-row-recipe">
+                     <div className="recipe-editor-ingredient-price-label">Coût recette</div>
+                     <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
                        <Price value={costRecipe} blur={blurPrices} />
                      </div>
                    </div>
 
                    <div className="recipe-editor-ingredient-pricebox">
-                     <div className="ingredient-price-label">Coût courses</div>
-                     <div className="ingredient-price-value cost-pill-row-courses">
+                     <div className="recipe-editor-ingredient-price-label">Coût courses</div>
+                     <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
                        <Price value={costCourses} blur={blurPrices} />
                      </div>
                    </div>
@@ -1392,8 +1356,7 @@ function NewRecipeInner() {
                    <button
                      type="button"
                      onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility recipe-editor-ingredient-delete"
-                     style={smallXBtnStyle}
+                     className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
                     >
                      ✕
                    </button>
@@ -1411,8 +1374,7 @@ function NewRecipeInner() {
              ])
              setQtyInputs((p) => [...p, ''])
            }}
-           className="app-btn recipe-editor-add-ingredient-btn"
-           style={{ width: 'min(260px, 100%)' }}
+           className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-add-ingredient-btn"
            type="button"
           >
            + Ajouter un ingrédient
@@ -1420,39 +1382,28 @@ function NewRecipeInner() {
        </div>
      </section>
 
-     <section className="app-card p-5" style={{ marginTop: 16 }}>
-       <div
-         style={{
-           display: 'flex',
-           justifyContent: 'center',
-           alignItems: 'center',
-           gap: 14,
-           flexWrap: 'wrap',
-         }}
-        >
+     <section className="recipe-editor-savebar">
+       <div className="recipe-editor-savebar-inner">
          <div>
            {status && (
              <p
-               style={{
-                 margin: 0,
-                 fontWeight: 700,
-                 color:
+              className={`recipe-editor-status-text ${
                    statusKind === 'success'
-                     ? '#2f6f3e'
-                     : statusKind === 'error'
-                     ? '#b00020'
-                     : 'var(--primary)',
-               }}
-               >
+                     ? 'is-success'
+                     :  statusKind === 'error'
+                     ? 'is-error'
+                     : 'is-info'
+              }`}       
+            >
                {status}
-             </p>
+            </p>
            )}
          </div>
 
          <button
            type="button"
            onClick={save}
-           className="app-btn recipe-editor-save-btn"
+           className="recipe-editor-btn recipe-editor-btn-primary recipe-editor-save-btn"
           >
            Enregistrer la recette
          </button>
@@ -1460,36 +1411,11 @@ function NewRecipeInner() {
      </section>
 
      {isCropping && imageUrl && (
-       <div
-         style={{
-           position: 'fixed',
-           inset: 0,
-           zIndex: 2000,
-           background: 'rgba(30, 22, 18, 0.72)',
-           display: 'grid',
-           placeItems: 'center',
-           padding: 16,
-         }}
-        >
+       <div className="recipe-editor-crop-overlay">
          <div
-           className="app-card"
-           style={{
-             width: 'min(920px, 100%)',
-             padding: 16,
-             display: 'grid',
-             gap: 14,
-           }}
+           className="recipe-editor-crop-modal"
           >
-           <div
-             style={{
-               position: 'relative',
-               width: '100%',
-               height: 'min(70vh, 560px)',
-               borderRadius: 18,
-               overflow: 'hidden',
-               background: '#111',
-             }}
-            >
+           <div className="recipe-editor-crop-stage">
              <Cropper
                image={imageUrl}
                crop={crop}
@@ -1501,8 +1427,8 @@ function NewRecipeInner() {
              />
            </div>
 
-           <div style={{ display: 'grid', gap: 8 }}>
-             <label className="text-sm font-semibold recipe-color-2">
+           <div className="recipe-editor-crop-zoom">
+             <label className="recipe-editor-crop-zoom-label">
                Zoom
                <input
                  type="range"
@@ -1511,22 +1437,15 @@ function NewRecipeInner() {
                  step={0.01}
                  value={zoom}
                  onChange={(e) => setZoom(Number(e.target.value))}
-                 style={{ width: '100%' }}
+                 className="recipe-editor-crop-range"
                />
              </label>
            </div>
 
-           <div
-             style={{
-               display: 'flex',
-               justifyContent: 'flex-end',
-               gap: 10,
-               flexWrap: 'wrap',
-             }}
-            >
+           <div className="recipe-editor-crop-actions">
              <button
                type="button"
-               className="app-btn app-btn-secondary"
+               className="recipe-editor-btn recipe-editor-btn-secondary"
                onClick={() => setIsCropping(false)}
                disabled={isUploadingCrop}
               >
@@ -1535,7 +1454,7 @@ function NewRecipeInner() {
 
              <button
                type="button"
-               className="app-btn app-btn-primary"
+               className="recipe-editor-btn recipe-editor-btn-primary"
                onClick={confirmCrop}
                disabled={isUploadingCrop}
               >
@@ -1551,7 +1470,7 @@ function NewRecipeInner() {
 
 export default function Page() {
  return (
-   <Suspense fallback={<div className="app-container" style={{ padding: 24 }}>Chargement…</div>}>
+   <Suspense fallback={<div className="app-container recipe-editor-loading">Chargement…</div>}>
      <NewRecipeInner />
    </Suspense>
  )

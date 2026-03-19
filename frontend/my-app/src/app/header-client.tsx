@@ -1,4 +1,6 @@
-// frontend/my-app/src/app/header-client.tsx
+// frontend/my-app/src/app/header-client.tsx/
+//logo mysia, les boutons: mes recettes, import ocr, nouvelle recette
+// le bouton se connecter, ascenseur categorie à gauche
 'use client'
 
 import Image from 'next/image'
