@@ -944,477 +944,454 @@ function NewRecipeInner() {
      )}
 
      <section className="recipe-editor-hero-card">
- <div className="recipe-form-top-grid">
-   <div className="recipe-editor-left-col">
-     <label className="recipe-servings-block">
-       <span className="recipe-servings-label">Portions</span>
+       <div className="recipe-form-top-grid">
+         <div className="recipe-editor-left-col">
+           <label className="recipe-servings-block">
+             <span className="recipe-servings-label">Portions</span>
 
-       <div className="recipe-servings-control">
-         <button
-           type="button"
-           className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
-           onClick={() => setServings((prev) => Math.max(1, prev - 1))}
-           aria-label="Réduire le nombre de portions"
-          >
-           −
-         </button>
+             <div className="recipe-servings-control">
+               <button
+                 type="button"
+                 className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
+                 onClick={() => setServings((prev) => Math.max(1, prev - 1))}
+                 aria-label="Réduire le nombre de portions"
+                >
+                 −
+               </button>
 
-         <input
-           type="number"
-           min={1}
-           inputMode="numeric"
-           value={servings}
-           onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
-           className="recipe-editor-input recipe-servings-input"
-         />
+               <input
+                 type="number"
+                 min={1}
+                 inputMode="numeric"
+                 value={servings}
+                 onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
+                 className="recipe-editor-input recipe-servings-input"
+               />
 
-         <button
-           type="button"
-           className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
-           onClick={() => setServings((prev) => prev + 1)}
-           aria-label="Augmenter le nombre de portions"
-          >
-           +
-         </button>
-       </div>
-     </label>
-
-     <label className="recipe-editor-notes-card">
-       <span className="recipe-editor-notes-label">Notes</span>
-
-       <textarea
-         value={notes}
-         onChange={(e) => setNotes(e.target.value)}
-         rows={6}
-         className="recipe-editor-notes-textarea"
-       />
-     </label>
-
-     {totalCost > 0 && (
-       <div className="recipe-analysis-card recipe-analysis-card--summary">
-         {budgetLevel && (
-           <div className="recipe-budget-pills">
-             <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
-               Budget malin
+               <button
+                 type="button"
+                 className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
+                 onClick={() => setServings((prev) => prev + 1)}
+                 aria-label="Augmenter le nombre de portions"
+                >
+                 +
+               </button>
              </div>
+           </label>
 
-             <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
-               Budget moyen
-             </div>
+           <label className="recipe-editor-notes-card">
+             <span className="recipe-editor-notes-label">Notes</span>
 
-             <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
-               Budget élevé
-             </div>
-           </div>
-         )}
+             <textarea
+               value={notes}
+               onChange={(e) => setNotes(e.target.value)}
+               rows={6}
+               className="recipe-editor-notes-textarea"
+             />
+           </label>
 
-         {topIngredients.length > 0 && (
-           <div className="recipe-analysis-top-block">
-             <h3 className="recipe-analysis-section-title">
-               Les ingrédients les plus élevés :
-             </h3>
+           {totalCost > 0 && (
+             <div className="recipe-analysis-card recipe-analysis-card--summary">
+               {budgetLevel && (
+                 <div className="recipe-budget-pills">
+                   <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
+                     Budget malin
+                   </div>
 
-             <div className="recipe-analysis-top-list">
-               {topIngredients.map((i, index) => (
-                 <div key={index} className="recipe-analysis-top-item">
-                   <span>
-                     • {index + 1} {i.name}
-                   </span>
+                   <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
+                     Budget moyen
+                   </div>
 
-                   <span className="recipe-analysis-price">
-                     <Price value={i.cost} blur={blurPrices} />
-                   </span>
+                   <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
+                     Budget élevé
+                   </div>
                  </div>
-               ))}
+               )}
+
+               {topIngredients.length > 0 && (
+                 <div className="recipe-analysis-top-block">
+                   <h3 className="recipe-analysis-section-title">
+                     Les ingrédients les plus élevés :
+                   </h3>
+
+                   <div className="recipe-analysis-top-list">
+                     {topIngredients.map((i, index) => (
+                       <div key={index} className="recipe-analysis-top-item">
+                         <span>
+                           • {index + 1} {i.name}
+                         </span>
+
+                         <span className="recipe-analysis-price">
+                           <Price value={i.cost} blur={blurPrices} />
+                         </span>
+                       </div>
+                     ))}
+                   </div>
+                 </div>
+               )}
              </div>
-           </div>
-         )}
+           )}
 
-         {costPerServing && (
-           <div className="recipe-analysis-serving-card">
-             <div className="recipe-analysis-serving-label">Prix par personne :</div>
+           <section className="recipe-editor-ingredients-section">
+ <div className="recipe-editor-ingredients-head">
+   <div className="recipe-editor-section-heading">
+     <h2 className="recipe-editor-section-title">
+       Ingrédients
+     </h2>
 
-             <div className="recipe-analysis-serving-value">
-               <Price value={costPerServing} blur={blurPrices} />
-             </div>
-
-             <div className="recipe-analysis-serving-meta">{servings} portions</div>
-           </div>
-         )}
-       </div>
-     )}
+     <p className="recipe-editor-section-text">
+       Un ingrédient par ligne : nom, quantité, unité.
+     </p>
    </div>
 
-   <div className="recipe-editor-right-col">
-     <label className="recipe-editor-image-drop">
-       <input
-         type="file"
-         accept="image/*"
-         className="recipe-editor-file-input"
-         onChange={(e) => {
-           const file = e.target.files?.[0]
-           if (!file) return
+   <button
+     onClick={() => recalcPrices({ silent: false })}
+     disabled={isRepricing}
+     className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-recalc-btn"
+     type="button"
+           >
+     {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
+   </button>
+ </div>
 
-           const localUrl = URL.createObjectURL(file)
-           setImageUrl(localUrl)
-         }}
-       />
+ <div className="recipe-editor-ingredients-shell">
+   {ingredients.map((ing, idx) => {
+     const costCourses = computeCostCourses(ing)
+     const costRecipe =
+       typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
 
-       {imageUrl ? (
-         <div className="recipe-editor-image-stack">
-           <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
+     return (
+       <div key={idx} className="recipe-editor-ingredient-line">
+         <div className="recipe-editor-ingredient-desktop">
+           <div className="ingredient-cell-name">
+             <input
+               placeholder="Nom de l'ingrédient..."
+               value={ing.name}
+               onChange={(e) => setIngredient(idx, { name: e.target.value })}
+               className="recipe-editor-ingredient-name"
+             />
+           </div>
+
+           <div className="recipe-editor-ingredient-picker-wrap">
+             <IngredientPicker
+               querySeed={normalizeIngredientForLookup(ing.name)}
+               onPick={(item) => {
+                 setIngredient(idx, {
+                   name: item.nom,
+                   ingredientBaseId: item.id,
+                   id: item.id as any,
+                 })
+
+                 setTimeout(() => {
+                   recalcPrices({ silent: true })
+                 }, 0)
+               }}
+               buttonLabel="Voir les produits"
+             />
+           </div>
 
            <input
-             value={imageUrl}
-             onClick={(e) => e.stopPropagation()}
-             onChange={(e) => setImageUrl(e.target.value)}
-             className="recipe-editor-image-url"
+             placeholder="Qté"
+             value={qtyInputs[idx] ?? ''}
+             onChange={(e) => setQtyInput(idx, e.target.value)}
+             className="recipe-editor-ingredient-qty"
            />
 
-           <button
-             type="button"
-             className="recipe-editor-btn recipe-editor-btn-secondary"
-             onClick={(e) => {
-               e.preventDefault()
-               setCrop({ x: 0, y: 0 })
-               setZoom(1)
-               setCroppedAreaPixels(null)
-               setIsCropping(true)
-             }}
-            >
-             Recadrer l’image
-           </button>
-         </div>
-       ) : (
-         <>
-           <div className="recipe-editor-image-plus">+</div>
+           <input
+             placeholder="Unité"
+             value={ing.unit}
+             onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+             className="recipe-editor-ingredient-unit"
+           />
 
-           <div className="recipe-editor-image-title">Ajouter une image</div>
-
-           <div className="recipe-editor-image-hint">
-             Clique sur le + pour choisir une photo
+           <div className="recipe-editor-ingredient-pricebox">
+             <div className="recipe-editor-ingredient-price-label">Coût recette</div>
+             <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
+               <Price value={costRecipe} blur={blurPrices} />
+             </div>
            </div>
-         </>
-       )}
-     </label>
 
-     <div className="recipe-editor-costs">
-       <div className="recipe-editor-cost-card">
-         <div className="recipe-editor-cost-row recipe-editor-cost-row-recipe">
-           <span className="recipe-editor-cost-label">Coût de la recette</span>
-           <span className="recipe-editor-cost-amount">
-             {' ≈ '} <Price value={totalCost} blur={blurPrices} />
-           </span>
+           <div className="recipe-editor-ingredient-pricebox">
+             <div className="recipe-editor-ingredient-price-label">Coût courses</div>
+             <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
+               <Price value={costCourses} blur={blurPrices} />
+             </div>
+           </div>
+
+           <div className="ingredient-delete-col">
+             <button
+               type="button"
+               onClick={() => removeIngredient(idx)}
+               className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
+               >
+               ✕
+             </button>
+           </div>
+         </div>
+
+         <div className="recipe-editor-ingredient-mobile">
+           <div className="recipe-editor-ingredient-mobile-top">
+             <input
+               placeholder="Nom de l'ingrédient..."
+               value={ing.name}
+               onChange={(e) => setIngredient(idx, { name: e.target.value })}
+               className="recipe-editor-ingredient-name"
+             />
+
+             <div className="recipe-editor-ingredient-picker-wrap">
+               <IngredientPicker
+                 querySeed={normalizeIngredientForLookup(ing.name)}
+                 onPick={(item) => {
+                   setIngredient(idx, {
+                     name: item.nom,
+                     ingredientBaseId: item.id,
+                     id: item.id as any,
+                   })
+
+                   setTimeout(() => {
+                     recalcPrices({ silent: true })
+                   }, 0)
+                 }}
+                 buttonLabel="Voir les produits"
+               />
+             </div>
+           </div>
+
+           <div className="recipe-editor-ingredient-mobile-meta">
+             <input
+               placeholder="Qté"
+               value={qtyInputs[idx] ?? ''}
+               onChange={(e) => setQtyInput(idx, e.target.value)}
+               className="recipe-editor-ingredient-qty"
+             />
+
+             <input
+               placeholder="Unité"
+               value={ing.unit}
+               onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+               className="recipe-editor-ingredient-unit"
+             />
+           </div>
+
+           <div className="recipe-editor-ingredient-mobile-prices">
+             <div className="recipe-editor-ingredient-pricebox">
+               <div className="recipe-editor-ingredient-price-label">Coût recette</div>
+               <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
+                 <Price value={costRecipe} blur={blurPrices} />
+               </div>
+             </div>
+
+             <div className="recipe-editor-ingredient-pricebox">
+               <div className="recipe-editor-ingredient-price-label">Coût courses</div>
+               <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
+                 <Price value={costCourses} blur={blurPrices} />
+               </div>
+             </div>
+
+             <button
+               type="button"
+               onClick={() => removeIngredient(idx)}
+               className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
+                 >
+               ✕
+             </button>
+           </div>
          </div>
        </div>
+     )
+   })}
 
-       <div className="recipe-editor-cost-card">
-         <div className="recipe-editor-cost-row recipe-editor-cost-row-courses">
-           <span className="recipe-editor-cost-label">Coût des courses</span>
-           <span className="recipe-editor-cost-amount">
-             {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
-           </span>
-         </div>
-       </div>
-     </div>
+   <div className="recipe-editor-ingredients-actions">
+     <button
+       onClick={() => {
+         setIngredients((p) => [
+           ...p,
+           { name: '', quantity: 0, unit: '', buyRecalced: false },
+         ])
+         setQtyInputs((p) => [...p, ''])
+       }}
+       className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-add-ingredient-btn"
+       type="button"
+       >
+       + Ajouter un ingrédient
+     </button>
 
-     {economySuggestions.length > 0 && (
-       <div className="recipe-analysis-card recipe-analysis-card--economy">
-         <div className="recipe-analysis-section-title">
-           Comment réduire le coût :
-         </div>
-
-         <div className="recipe-analysis-accordion-list">
-           {economySuggestions.map((suggestion, index) => {
-             const newPricePerPerson =
-               suggestion.newTotalEur != null && servings > 0
-                 ? suggestion.newTotalEur / servings
-                 : null
-
-             return (
-               <details
-                 key={`${suggestion.ingredientName}-${index}`}
-                 className="recipe-analysis-accordion"
-                 open={index === 0}
-                >
-                 <summary className="recipe-analysis-accordion-summary">
-                   <div className="recipe-analysis-accordion-main">
-                     <span className="recipe-analysis-accordion-title">
-                       {suggestion.ingredientName}
-                     </span>
-
-                     <span className="recipe-analysis-accordion-saving">
-                       Économie estimée : ~
-                       <Price value={suggestion.savingEur} blur={blurPrices} />
-                     </span>
-                   </div>
-
-                   <span className="recipe-analysis-accordion-icon">+</span>
-                 </summary>
-
-                 <div className="recipe-analysis-accordion-content">
-                   {suggestion.substitutions?.length > 0 && (
-                     <div className="recipe-analysis-accordion-block">
-                       <div className="recipe-analysis-saving-label">
-                         {suggestion.label || 'Alternative possible selon la recette'} :
-                       </div>
-
-                       <div className="recipe-analysis-saving-list">
-                         {suggestion.substitutions.map((sub) => (
-                           <div key={sub.id} className="recipe-analysis-saving-item">
-                             • {sub.name}
-                           </div>
-                         ))}
-                       </div>
-                     </div>
-                   )}
-
-                   {suggestion.note && (
-                     <div className="recipe-analysis-saving-note">
-                       {suggestion.note}
-                     </div>
-                   )}
-
-                   <div className="recipe-analysis-accordion-metrics">
-                     <div className="recipe-analysis-saving-meta">
-                       Nouveau coût recette :{' '}
-                       <Price value={suggestion.newTotalEur} blur={blurPrices} />
-                     </div>
-
-                     <div className="recipe-analysis-saving-meta">
-                       Nouveau prix/personne :{' '}
-                       <Price value={newPricePerPerson} blur={blurPrices} />
-                     </div>
-                   </div>
-                 </div>
-               </details>
-             )
-           })}
-         </div>
-       </div>
-     )}
+     <button
+       type="button"
+       onClick={save}
+       className="recipe-editor-btn recipe-editor-btn-primary recipe-editor-save-btn"
+       >
+       Enregistrer la recette
+     </button>
    </div>
  </div>
 </section>
-
-     <section className="recipe-editor-ingredients-section">
-       <div className="recipe-editor-ingredients-head">
-         <div className="recipe-editor-section-heading">
-           <h2 className="recipe-editor-section-title">
-             Ingrédients
-           </h2>
-
-           <p className="recipe-editor-section-text">
-             Un ingrédient par ligne : nom, quantité, unité.
-           </p>
          </div>
 
-         <button
-           onClick={() => recalcPrices({ silent: false })}
-           disabled={isRepricing}
-           className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-recalc-btn"
-           type="button"
-          >
-           {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
-         </button>
-       </div>
+         <div className="recipe-editor-right-col">
+           <label className="recipe-editor-image-drop">
+             <input
+               type="file"
+               accept="image/*"
+               className="recipe-editor-file-input"
+               onChange={(e) => {
+                 const file = e.target.files?.[0]
+                 if (!file) return
 
-       <div className="recipe-editor-ingredients-shell">
-         {ingredients.map((ing, idx) => {
-           const costCourses = computeCostCourses(ing)
-           const costRecipe =
-             typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
+                 const localUrl = URL.createObjectURL(file)
+                 setImageUrl(localUrl)
+               }}
+             />
 
-           return (
-             <div key={idx} className="recipe-editor-ingredient-line">
-               <div className="recipe-editor-ingredient-desktop">
-                 <div className="ingredient-cell-name">
-                   <input
-                     placeholder="Nom de l'ingrédient..."
-                     value={ing.name}
-                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     className="recipe-editor-ingredient-name"
-                   />
-                 </div>
-
-                 <div className="recipe-editor-ingredient-picker-wrap">
-                   <IngredientPicker
-                     querySeed={normalizeIngredientForLookup(ing.name)}
-                     onPick={(item) => {
-                       setIngredient(idx, {
-                         name: item.nom,
-                         ingredientBaseId: item.id,
-                         id: item.id as any,
-                       })
-
-                       setTimeout(() => {
-                         recalcPrices({ silent: true })
-                       }, 0)
-                     }}
-                     buttonLabel="Voir les produits"
-                   />
-                 </div>
+             {imageUrl ? (
+               <div className="recipe-editor-image-stack">
+                 <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
 
                  <input
-                   placeholder="Qté"
-                   value={qtyInputs[idx] ?? ''}
-                   onChange={(e) => setQtyInput(idx, e.target.value)}
-                   className="recipe-editor-ingredient-qty"
+                   value={imageUrl}
+                   onClick={(e) => e.stopPropagation()}
+                   onChange={(e) => setImageUrl(e.target.value)}
+                   className="recipe-editor-image-url"
                  />
 
-                 <input
-                   placeholder="Unité"
-                   value={ing.unit}
-                   onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                   className="recipe-editor-ingredient-unit"
-                 />
-
-                 <div className="recipe-editor-ingredient-pricebox">
-                   <div className="recipe-editor-ingredient-price-label">Coût recette</div>
-                   <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
-                     <Price value={costRecipe} blur={blurPrices} />
-                   </div>
-                 </div>
-
-                 <div className="recipe-editor-ingredient-pricebox">
-                   <div className="recipe-editor-ingredient-price-label">Coût courses</div>
-                   <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
-                     <Price value={costCourses} blur={blurPrices} />
-                   </div>
-                 </div>
-
-                 <div className="ingredient-delete-col">
-                   <button
-                     type="button"
-                     onClick={() => removeIngredient(idx)}
-                     className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
-                    >
-                     ✕
-                   </button>
-                 </div>
+                 <button
+                   type="button"
+                   className="recipe-editor-btn recipe-editor-btn-secondary"
+                   onClick={(e) => {
+                     e.preventDefault()
+                     setCrop({ x: 0, y: 0 })
+                     setZoom(1)
+                     setCroppedAreaPixels(null)
+                     setIsCropping(true)
+                   }}
+                  >
+                   Recadrer l’image
+                 </button>
                </div>
+             ) : (
+               <>
+                 <div className="recipe-editor-image-plus">+</div>
 
-               <div className="recipe-editor-ingredient-mobile">
-                 <div className="recipe-editor-ingredient-mobile-top">
-                   <input
-                     placeholder="Nom de l'ingrédient..."
-                     value={ing.name}
-                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     className="recipe-editor-ingredient-name"
-                   />
+                 <div className="recipe-editor-image-title">Ajouter une image</div>
 
-                   <div className="recipe-editor-ingredient-picker-wrap">
-                     <IngredientPicker
-                       querySeed={normalizeIngredientForLookup(ing.name)}
-                       onPick={(item) => {
-                         setIngredient(idx, {
-                           name: item.nom,
-                           ingredientBaseId: item.id,
-                           id: item.id as any,
-                         })
-
-                         setTimeout(() => {
-                           recalcPrices({ silent: true })
-                         }, 0)
-                       }}
-                       buttonLabel="Voir les produits"
-                     />
-                   </div>
+                 <div className="recipe-editor-image-hint">
+                   Clique sur le + pour choisir une photo
                  </div>
+               </>
+             )}
+           </label>
 
-                 <div className="recipe-editor-ingredient-mobile-meta">
-                   <input
-                     placeholder="Qté"
-                     value={qtyInputs[idx] ?? ''}
-                     onChange={(e) => setQtyInput(idx, e.target.value)}
-                     className="recipe-editor-ingredient-qty"
-                   />
-
-                   <input
-                     placeholder="Unité"
-                     value={ing.unit}
-                     onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                     className="recipe-editor-ingredient-unit"
-                   />
-                 </div>
-
-                 <div className="recipe-editor-ingredient-mobile-prices">
-                   <div className="recipe-editor-ingredient-pricebox">
-                     <div className="recipe-editor-ingredient-price-label">Coût recette</div>
-                     <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
-                       <Price value={costRecipe} blur={blurPrices} />
-                     </div>
-                   </div>
-
-                   <div className="recipe-editor-ingredient-pricebox">
-                     <div className="recipe-editor-ingredient-price-label">Coût courses</div>
-                     <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
-                       <Price value={costCourses} blur={blurPrices} />
-                     </div>
-                   </div>
-
-                   <button
-                     type="button"
-                     onClick={() => removeIngredient(idx)}
-                     className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
-                    >
-                     ✕
-                   </button>
-                 </div>
+           <div className="recipe-editor-costs">
+             <div className="recipe-editor-cost-card">
+               <div className="recipe-editor-cost-row recipe-editor-cost-row-recipe">
+                 <span className="recipe-editor-cost-label">Coût de la recette</span>
+                 <span className="recipe-editor-cost-amount">
+                   {' ≈ '} <Price value={totalCost} blur={blurPrices} />
+                 </span>
                </div>
              </div>
-           )
-         })}
 
-         <button
-           onClick={() => {
-             setIngredients((p) => [
-               ...p,
-               { name: '', quantity: 0, unit: '', buyRecalced: false },
-             ])
-             setQtyInputs((p) => [...p, ''])
-           }}
-           className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-add-ingredient-btn"
-           type="button"
-          >
-           + Ajouter un ingrédient
-         </button>
-       </div>
-     </section>
+             <div className="recipe-editor-cost-card">
+               <div className="recipe-editor-cost-row recipe-editor-cost-row-courses">
+                 <span className="recipe-editor-cost-label">Coût des courses</span>
+                 <span className="recipe-editor-cost-amount">
+                   {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
+                 </span>
+               </div>
+             </div>
 
-     <section className="recipe-editor-savebar">
-       <div className="recipe-editor-savebar-inner">
-         <div>
-           {status && (
-             <p
-              className={`recipe-editor-status-text ${
-                   statusKind === 'success'
-                     ? 'is-success'
-                     :  statusKind === 'error'
-                     ? 'is-error'
-                     : 'is-info'
-              }`}       
-            >
-               {status}
-            </p>
+             <div className="recipe-editor-cost-card">
+               <div className="recipe-editor-cost-row">
+                 <span className="recipe-editor-cost-label">Prix par personne</span>
+                 <span className="recipe-editor-cost-amount">
+                   {' ≈ '} <Price value={costPerServing} blur={blurPrices} />
+                 </span>
+               </div>
+             </div>
+           </div>
+
+           {economySuggestions.length > 0 && (
+             <div className="recipe-analysis-card recipe-analysis-card--economy">
+               <div className="recipe-analysis-section-title">
+                 Comment réduire le coût :
+               </div>
+
+               <div className="recipe-analysis-accordion-list">
+                 {economySuggestions.map((suggestion, index) => {
+                   const newPricePerPerson =
+                     suggestion.newTotalEur != null && servings > 0
+                       ? suggestion.newTotalEur / servings
+                       : null
+
+                   return (
+                     <details
+                       key={`${suggestion.ingredientName}-${index}`}
+                       className="recipe-analysis-accordion"
+                       open={index === 0}
+                      >
+                       <summary className="recipe-analysis-accordion-summary">
+                         <div className="recipe-analysis-accordion-main">
+                           <span className="recipe-analysis-accordion-title">
+                             {suggestion.ingredientName}
+                           </span>
+
+                           <span className="recipe-analysis-accordion-saving">
+                             Économie estimée : ~
+                             <Price value={suggestion.savingEur} blur={blurPrices} />
+                           </span>
+                         </div>
+
+                         <span className="recipe-analysis-accordion-icon">+</span>
+                       </summary>
+
+                       <div className="recipe-analysis-accordion-content">
+                         {suggestion.substitutions?.length > 0 && (
+                           <div className="recipe-analysis-accordion-block">
+                             <div className="recipe-analysis-saving-label">
+                               {suggestion.label || 'Alternative possible selon la recette'} :
+                             </div>
+
+                             <div className="recipe-analysis-saving-list">
+                               {suggestion.substitutions.map((sub) => (
+                                 <div key={sub.id} className="recipe-analysis-saving-item">
+                                   • {sub.name}
+                                 </div>
+                               ))}
+                             </div>
+                           </div>
+                         )}
+
+                         {suggestion.note && (
+                           <div className="recipe-analysis-saving-note">
+                             {suggestion.note}
+                           </div>
+                         )}
+
+                         <div className="recipe-analysis-accordion-metrics">
+                           <div className="recipe-analysis-saving-meta">
+                             Nouveau coût recette :{' '}
+                             <Price value={suggestion.newTotalEur} blur={blurPrices} />
+                           </div>
+
+                           <div className="recipe-analysis-saving-meta">
+                             Nouveau prix/personne :{' '}
+                             <Price value={newPricePerPerson} blur={blurPrices} />
+                           </div>
+                         </div>
+                       </div>
+                     </details>
+                   )
+                 })}
+               </div>
+             </div>
            )}
          </div>
-
-         <button
-           type="button"
-           onClick={save}
-           className="recipe-editor-btn recipe-editor-btn-primary recipe-editor-save-btn"
-          >
-           Enregistrer la recette
-         </button>
        </div>
      </section>
 
      {isCropping && imageUrl && (
        <div className="recipe-editor-crop-overlay">
-         <div
-           className="recipe-editor-crop-modal"
-          >
+         <div className="recipe-editor-crop-modal">
            <div className="recipe-editor-crop-stage">
              <Cropper
                image={imageUrl}

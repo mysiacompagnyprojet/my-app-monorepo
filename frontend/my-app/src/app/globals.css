@@ -1807,6 +1807,11 @@ creation-compte create-account
  border-radius: 26px;
 }
 
+.recipe-editor-ingredients-section {
+  width: 100%;
+  max-width: none;
+}
+
 .recipe-editor-trash-card {
  padding: 20px;
  border-radius: 22px;
@@ -1837,11 +1842,37 @@ creation-compte create-account
 }
 
 .recipe-editor-left-col {
- grid-template-rows: auto auto auto;
+ display: grid;
+ gap: 16px;
+ align-content: start;
+ min-width: 0;
+ grid-template-columns: 180px minmax(0, 1fr);
+ grid-template-areas:
+  "servings notes"
+  "summary summary";
+ align-items: start; 
 }
 
 .recipe-editor-right-col {
  grid-template-rows: auto auto auto;
+}
+
+.recipe-editor-left-col > .recipe-servings-block {
+  grid-area: servings;
+  align-self: start;
+
+}
+
+.recipe-editor-left-col > .recipe-editor-notes-card {
+  grid-area: notes;
+}
+
+.recipe-editor-left-col > .recipe-analysis-card--summary {
+  grid-area: summary;
+}
+
+.recipe-editor-left-col > .recipe-editor-ingredients-section {
+  grid-area: ingredients;
 }
 
 /* ===== Inputs / selects / textarea ===== */
@@ -1959,7 +1990,7 @@ creation-compte create-account
 .recipe-editor-btn-secondary:hover,
 .recipe-editor-btn-ghost:hover,
 .recipe-editor-btn-danger:hover {
- filter: brightness(0.98);
+ filter: brightness(1.02);
 }
 
 .recipe-editor-btn:active,
@@ -1989,13 +2020,13 @@ creation-compte create-account
    inset 0 1px 0 rgba(255,255,255,0.22);
 }
 
-.recipe-editor-btn-secondary {
+.recipe-editor-btn-secondary { /* recalculer les prix */
  color: #fff;
- border: 1px solid rgba(40, 68, 120, 0.65);
- background: linear-gradient(180deg, #4267a9 0%, #254c89 100%);
+ border: 1px solid rgba(223, 139, 47, 0.72);
+ background: linear-gradient(180deg, #FF8320 0%, #FFC393 100%);
  box-shadow:
-   0 10px 18px rgba(37, 76, 137, 0.20),
-   inset 0 1px 0 rgba(255,255,255,0.16);
+   0 10px 18px rgba(222, 136, 38, 0.24),
+   inset 0 1px 0 rgba(255,255,255,0.18);
 }
 
 .recipe-editor-btn-ghost {
@@ -2016,7 +2047,7 @@ creation-compte create-account
 .recipe-servings-block {
  display: grid;
  gap: 10px;
- padding: 16px 18px;
+ padding: 14px 16px;
  border-radius: 18px;
  background: rgba(255,255,255,0.74);
  border: 1px solid rgba(217, 206, 194, 0.88);
@@ -2041,13 +2072,13 @@ creation-compte create-account
 }
 
 .recipe-servings-btn {
- width: 54px;
- height: 46px;
+ width: 42px;
+ height: 42px;
  padding: 0;
  border: 0;
  border-right: 1px solid rgba(209, 197, 185, 0.95);
  border-radius: 0;
- font-size: 24px;
+ font-size: 22px;
  font-weight: 800;
  line-height: 1;
  box-shadow: none;
@@ -2059,8 +2090,8 @@ creation-compte create-account
 }
 
 .recipe-servings-input {
- width: 66px;
- min-height: 46px;
+ width: 54px;
+ min-height: 42px;
  border: 0;
  border-radius: 0;
  text-align: center;
@@ -2074,7 +2105,7 @@ creation-compte create-account
 .recipe-editor-notes-card {
  display: grid;
  gap: 10px;
- padding: 18px;
+ padding: 16px;
  border-radius: 18px;
  background: rgba(255, 255, 255, 0.78);
  border: 1px solid rgba(218, 206, 195, 0.88);
@@ -2088,7 +2119,7 @@ creation-compte create-account
 }
 
 .recipe-editor-notes-textarea {
- min-height: 124px;
+ min-height: 110px;
  resize: vertical;
 }
 
@@ -2153,8 +2184,8 @@ creation-compte create-account
 
 .recipe-editor-costs {
  display: grid;
- grid-template-columns: repeat(2, minmax(0, 1fr));
- gap: 12px;
+ grid-template-columns: 1fr;
+ gap: 10px;
  margin-top: 0;
 }
 
@@ -2228,40 +2259,45 @@ creation-compte create-account
 }
 
 .recipe-budget-pills {
- display: flex;
- flex-wrap: wrap;
+ display: grid;
+ grid-template-columns: repeat(3, minmax(0, 1fr));
  gap: 10px;
  margin-bottom: 14px;
 }
 
 .recipe-budget-pill {
- min-width: 122px;
- padding: 9px 16px;
+ width: 100%; 
+ min-width: 0;
+ padding: 10px 12px;
  border-radius: 12px;
  font-size: 14px;
  font-weight: 800;
  text-align: center;
+ white-space: nowrap;
  color: #6c6059;
  background: rgba(255, 255, 255, 0.85);
  border: 1px solid rgba(216, 203, 191, 0.92);
 }
 
-.recipe-budget-pill.is-active:nth-child(1) {
+.recipe-budget-pill.is-active:nth-child(1) { /* budget malin*/
  color: #fff;
- background: linear-gradient(180deg, #e9a24f 0%, #d7862c 100%);
- border-color: rgba(215, 134, 44, 0.90);
+ background: linear-gradient(180deg, #8fcf63 0%, #6fb13f 100%);
+ border-color: rgba(111, 177, 63, 0.92);
+ box-shadow: 0px 8px 16px rgba(111, 177, 63, 0.22);
 }
 
-.recipe-budget-pill.is-active:nth-child(2) {
+.recipe-budget-pill.is-active:nth-child(2) { /* budget moyen */
  color: #fff;
- background: linear-gradient(180deg, #97bd4b 0%, #7ca53a 100%);
- border-color: rgba(124, 165, 58, 0.90);
+ background: linear-gradient(180deg, #FFA500 0%, #FFA500 100%);
+ border-color: rgba(188, 159, 53, 0.92);
+ box-shadow: 0px 8px 16px rgba(188, 159, 53, 0.20);
 }
 
-.recipe-budget-pill.is-active:nth-child(3) {
+.recipe-budget-pill.is-active:nth-child(3) { /* budget eleve */
  color: #fff;
  background: linear-gradient(180deg, #d39a34 0%, #be8121 100%);
- border-color: rgba(190, 129, 33, 0.90);
+ border-color: rgba(221, 127, 29, 0.22);
+ box-shadow: 0px 8px 16px rgba(221, 127, 29, 0.22);
 }
 
 .recipe-analysis-section-title {
@@ -2383,8 +2419,8 @@ creation-compte create-account
 
 .recipe-analysis-accordion-saving {
  font-size: 14px;
- font-weight: 700;
- color: #c36e1c;
+ font-weight: 800;
+ color: #4f9a43;
 }
 
 .recipe-analysis-accordion-icon {
@@ -2514,6 +2550,15 @@ creation-compte create-account
  background: rgba(255, 255, 255, 0.88);
 }
 
+.recipe-editor-ingredient-picker-wrap {
+  min-width: 10px;
+  max-width: 180px;
+  width: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
 .recipe-editor-ingredient-desktop {
  display: grid;
  grid-template-columns: minmax(260px, 2.2fr) 150px 82px 90px 96px 96px 40px;
@@ -2572,30 +2617,40 @@ creation-compte create-account
  width: min(260px, 100%);
 }
 
-.recipe-editor-add-ingredient-btn {
- width: min(280px, 100%);
+.recipe-editor-add-ingredient-btn { /* ajouter un ingredient */
+ width: auto;
+ min-width: 240px;
  min-height: 52px;
  color: #fff;
- border: 1px solid rgba(40, 68, 120, 0.65);
- background: linear-gradient(180deg, #4267a9 0%, #254c89 100%);
+ border: 1px solid rgba(223, 139, 47, 0.72);
+ background: linear-gradient(180deg, #FF8320 0%, #FFC393 100%);
  box-shadow:
-   0 10px 18px rgba(37, 76, 137, 0.20),
+   0 10px 18px rgba(222, 136, 38, 0.20),
    inset 0 1px 0 rgba(255,255,255,0.16);
+}
+
+.recipe-editor-ingredients-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16PX;
+  flex-wrap: wrap;
+  margin-top: 8px;
 }
 
 /* ===== Ingredient picker ===== */
 
-.ingredient-picker-trigger {
+.ingredient-picker-trigger { /* voir les produits*/
  width: 100%;
  min-height: 46px;
  padding: 0 14px;
  font-size: 13px;
  font-weight: 700;
- color: #f9fbff;
- border: 1px solid rgba(40, 68, 120, 0.65);
+ color: #fff;
+ border: 1px solid rgba(223, 139, 47, 0.72);
  border-radius: 12px;
- background: linear-gradient(180deg, #4267a9 0%, #254c89 100%);
- box-shadow: 0 8px 18px rgba(37, 76, 137, 0.18);
+ background: linear-gradient(180deg, #FF8320 0%, #FF9540 100%);
+ box-shadow: 0 8px 18px rgba(222, 136, 38, 0.22);
 }
 
 .ingredient-picker-popover {
@@ -2660,11 +2715,12 @@ creation-compte create-account
 }
 
 .recipe-editor-save-btn {
- min-width: 340px;
- min-height: 64px;
+  width: auto;
+ min-width: 280px;
+ min-height: 52px;
  border-radius: 14px;
  border: 1px solid rgba(67, 122, 39, 0.65);
- font-size: 20px;
+ font-size: 18px;
  font-weight: 800;
  color: #fff;
  background: linear-gradient(180deg, #69b340 0%, #3d8a22 100%);
@@ -2788,6 +2844,14 @@ creation-compte create-account
    gap: 14px;
  }
 
+ .recipe-editor-left-col {
+  grid-template-columns: 1fr;
+  grid-template-areas:
+    "servings"
+    "notes"
+    "summary";
+ }
+
  .recipe-editor-costs {
    grid-template-columns: 1fr;
  }
@@ -2843,15 +2907,17 @@ creation-compte create-account
  }
 
  .recipe-budget-pills {
+   grid-template-columns: repeat(3, minmax(0, 1fr));
    gap: 8px;
    margin-bottom: 14px;
  }
 
  .recipe-budget-pill {
-   flex: 1 1 calc(33.333% - 6px);
+   width: 100%;
    min-width: 0;
    padding: 10px 8px;
    font-size: 13px;
+   white-space: nowrap;
  }
 
  .recipe-analysis-top-item {
@@ -2915,6 +2981,17 @@ creation-compte create-account
  .recipe-editor-crop-actions > * {
    flex: 1 1 100%;
  }
+
+ .recipe-editor-ingredients-actions {
+  flex-direction: column;
+  align-items: stretch;
+ }
+
+ .recipe-editor-add-ingredient-btn,
+ .recipe-editor-save-btn {
+  width: 100ù;
+  min-width: 0;
+ }
 }
 
 @media (max-width: 640px) {
@@ -2973,5 +3050,19 @@ creation-compte create-account
    width: 100% !important;
    height: 42px !important;
    border-radius: 12px !important;
+ }
+
+ .recipe-servings-block {
+  padding: 14px;
+ }
+
+ .recipe-servings-btn {
+  width: 40px;
+  height: 40px;
+ }
+
+ .recipe-servings-input {
+  width: 52px;
+  min-height: 40px;
  }
 }
