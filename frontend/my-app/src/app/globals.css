@@ -1849,7 +1849,8 @@ creation-compte create-account
  grid-template-columns: 180px minmax(0, 1fr);
  grid-template-areas:
   "servings notes"
-  "summary summary";
+  "summary summary"
+  "ingredients ingredients";
  align-items: start; 
 }
 
@@ -2849,7 +2850,8 @@ creation-compte create-account
   grid-template-areas:
     "servings"
     "notes"
-    "summary";
+    "summary"
+    "ingredients";
  }
 
  .recipe-editor-costs {
@@ -2989,7 +2991,7 @@ creation-compte create-account
 
  .recipe-editor-add-ingredient-btn,
  .recipe-editor-save-btn {
-  width: 100ù;
+  width: 100%;
   min-width: 0;
  }
 }
