@@ -10,6 +10,8 @@ import { IngredientPicker } from '@/components/IngredientPicker'
 import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
+import { INGREDIENT_CATEGORY_META } from '@/lib/ingredient-category'
+import { Instagram } from 'lucide-react'
 
 
 type Line = IngredientLine & {
@@ -34,6 +36,7 @@ type Line = IngredientLine & {
  priceMatched?: boolean
  price?: { eurPer: number; perUnit: string } | null
  costEur?: number | null
+ category?: string | null
 }
 
 type Draft = {
@@ -67,6 +70,7 @@ type EnrichIngredientOut = {
  gramsPerPiece?: number | null
  density_g_per_ml?: number | null
  mlPerPiece?: number | null
+ category?: string | null
 }
 
 type EnrichResponse =
@@ -84,6 +88,7 @@ type EnrichResponse =
  newTotalEur?: number | null
  label?: string | null
  note?: string | null
+ category?: string | null
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -738,6 +743,7 @@ function NewRecipeInner() {
           mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
 
           note: typeof e.note === 'string' ? e.note : undefined,
+          category: (old as any).category ?? null, 
         } as any
       }
 
@@ -1067,15 +1073,36 @@ return (
                 return (
                   <div key={idx} className="recipe-editor-ingredient-line">
                     <div className="recipe-editor-ingredient-desktop">
+                      <div className="recipe-editor-ingredient-main">
                       <div className="ingredient-cell-name">
-                        <input
-                          placeholder="Nom de l'ingrédient..."
-                          value={ing.name}
-                          onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                          className="recipe-editor-ingredient-name"
-                        />
-                      </div>
+                        <div className="recipe-editor-ingredient-name-wrap">
+                          {ing.category && INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META] ? (
+                          <span 
+                          className="recipe-editor-ingredient-icon"
+                            style={{
+                              color:
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].color,
+                              background:
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].bg,
+                            }}
+                            >
+                            {(() => {
+                              const Icon = 
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].icon
+                            return <Icon size={16} strokeWidth={2}/>
+                            })()}
+                              </span>
+                            ) : null}
 
+                              <input
+                                placeholder="Nom de l'ingrédient..."
+                                  value={ing.name}
+                                    onChange={(e) => setIngredient(idx, { name: e.target.value })}
+                                      className="recipe-editor-ingredient-name"
+                                      />
+                                      </div>
+                                      </div>
+                      <div className="recipe-editor-ingredient-inline">
                       <div className="recipe-editor-ingredient-picker-wrap">
                         <IngredientPicker
                           querySeed={normalizeIngredientForLookup(ing.name)}
@@ -1084,16 +1111,21 @@ return (
                               name: item.nom,
                               ingredientBaseId: item.id,
                               id: item.id as any,
+                              category: typeof item.category === 'string' ? item.category : null,
                             })
 
                             setTimeout(() => {
                               recalcPrices({ silent: true })
                             }, 0)
                           }}
-                          buttonLabel="Voir les produits"
+                          buttonLabel={
+                            <>
+                            Voir les<br/>produits
+                            </>
+                          }
                         />
                       </div>
-
+                      
                       <input
                         placeholder="Qté"
                         value={qtyInputs[idx] ?? ''}
@@ -1107,21 +1139,23 @@ return (
                         onChange={(e) => setIngredient(idx, { unit: e.target.value })}
                         className="recipe-editor-ingredient-unit"
                       />
-
+                      </div>
+                      </div>
+                      <div className="recipe-editor-ingredient-prices-stack">
                       <div className="recipe-editor-ingredient-pricebox">
-                        <div className="recipe-editor-ingredient-price-label">Coût recette</div>
-                        <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
+                        <div className="recipe-editor-ingredient-price-row">
+                          <span>Coût recette ≈</span>
                           <Price value={costRecipe} blur={blurPrices} />
                         </div>
                       </div>
 
                       <div className="recipe-editor-ingredient-pricebox">
-                        <div className="recipe-editor-ingredient-price-label">Coût courses</div>
-                        <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
+                        <div className="recipe-editor-ingredient-price-row">
+                          <span>Coût courses ≈</span>
                           <Price value={costCourses} blur={blurPrices} />
                         </div>
                       </div>
-
+                      </div>    
                       <div className="ingredient-delete-col">
                         <button
                           type="button"
@@ -1134,73 +1168,111 @@ return (
                     </div>
 
                     <div className="recipe-editor-ingredient-mobile">
-                      <div className="recipe-editor-ingredient-mobile-top">
-                        <input
-                          placeholder="Nom de l'ingrédient..."
-                          value={ing.name}
-                          onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                          className="recipe-editor-ingredient-name"
-                        />
+  <div className="recipe-editor-ingredient-mobile-top">
+    <div className="ingredient-cell-name">
+      <div className="recipe-editor-ingredient-name-wrap">
+        {ing.category &&
+        INGREDIENT_CATEGORY_META[
+          ing.category as keyof typeof INGREDIENT_CATEGORY_META
+        ] ? (
+          <span
+            className="recipe-editor-ingredient-icon"
+            style={{
+              color:
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].color,
+              background:
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].bg,
+            }}
+          >
+            {(() => {
+              const Icon =
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].icon
+              return <Icon size={16} strokeWidth={2} />
+            })()}
+          </span>
+        ) : null}
 
-                        <div className="recipe-editor-ingredient-picker-wrap">
-                          <IngredientPicker
-                            querySeed={normalizeIngredientForLookup(ing.name)}
-                            onPick={(item) => {
-                              setIngredient(idx, {
-                                name: item.nom,
-                                ingredientBaseId: item.id,
-                                id: item.id as any,
-                              })
+        <input
+          placeholder="Nom de l'ingrédient..."
+          value={ing.name}
+          onChange={(e) => setIngredient(idx, { name: e.target.value })}
+          className="recipe-editor-ingredient-name"
+        />
+      </div>
+    </div>
+  </div>
 
-                              setTimeout(() => {
-                                recalcPrices({ silent: true })
-                              }, 0)
-                            }}
-                            buttonLabel="Voir les produits"
-                          />
-                        </div>
-                      </div>
+  <div className="recipe-editor-ingredient-mobile-meta">
+    <div className="recipe-editor-ingredient-picker-wrap">
+      <IngredientPicker
+        querySeed={normalizeIngredientForLookup(ing.name)}
+        onPick={(item) => {
+          setIngredient(idx, {
+            name: item.nom,
+            ingredientBaseId: item.id,
+            id: item.id as any,
+            category: typeof item.category === 'string' ? item.category : null,
+          })
 
-                      <div className="recipe-editor-ingredient-mobile-meta">
-                        <input
-                          placeholder="Qté"
-                          value={qtyInputs[idx] ?? ''}
-                          onChange={(e) => setQtyInput(idx, e.target.value)}
-                          className="recipe-editor-ingredient-qty"
-                        />
+          setTimeout(() => {
+            recalcPrices({ silent: true })
+          }, 0)
+        }}
+        buttonLabel={
+          <>
+            Voir les
+            <br />
+            produits
+          </>
+        }
+      />
+    </div>
 
-                        <input
-                          placeholder="Unité"
-                          value={ing.unit}
-                          onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                          className="recipe-editor-ingredient-unit"
-                        />
-                      </div>
+    <input
+      placeholder="Qté"
+      value={qtyInputs[idx] ?? ''}
+      onChange={(e) => setQtyInput(idx, e.target.value)}
+      className="recipe-editor-ingredient-qty"
+    />
 
-                      <div className="recipe-editor-ingredient-mobile-prices">
-                        <div className="recipe-editor-ingredient-pricebox">
-                          <div className="recipe-editor-ingredient-price-label">Coût recette</div>
-                          <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-recipe">
-                            <Price value={costRecipe} blur={blurPrices} />
-                          </div>
-                        </div>
+    <input
+      placeholder="Unité"
+      value={ing.unit}
+      onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+      className="recipe-editor-ingredient-unit"
+    />
+  </div>
 
-                        <div className="recipe-editor-ingredient-pricebox">
-                          <div className="recipe-editor-ingredient-price-label">Coût courses</div>
-                          <div className="recipe-editor-ingredient-price-value recipe-editor-cost-row-courses">
-                            <Price value={costCourses} blur={blurPrices} />
-                          </div>
-                        </div>
+  <div className="recipe-editor-ingredient-mobile-prices">
+    <div className="recipe-editor-ingredient-pricebox">
+      <div className="recipe-editor-ingredient-price-row">
+        <span>Coût recette ≈</span>
+        <Price value={costRecipe} blur={blurPrices} />
+      </div>
+    </div>
 
-                        <button
-                          type="button"
-                          onClick={() => removeIngredient(idx)}
-                          className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
-                        >
-                          ✕
-                        </button>
-                      </div>
-                    </div>
+    <div className="recipe-editor-ingredient-pricebox">
+      <div className="recipe-editor-ingredient-price-row">
+        <span>Coût courses ≈</span>
+        <Price value={costCourses} blur={blurPrices} />
+      </div>
+    </div>
+
+    <button
+      type="button"
+      onClick={() => removeIngredient(idx)}
+      className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
+    >
+      ✕
+    </button>
+  </div>
+</div>
                   </div>
                 )
               })}

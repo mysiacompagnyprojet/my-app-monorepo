@@ -45,6 +45,7 @@ router.get('/', async (req, res) => {
                 'synonyme',
                 'gramme_par_piece',
                 'prix_kg_l_piece',
+                'category,'
                 
         ].join(','))
         .order('nom', { ascending: true })
@@ -83,6 +84,7 @@ router.get('/suggest', async (req, res) => {
                 'synonyme',
                 'gramme_par_piece',
                 'prix_kg_l_piece',
+                'category',
             `)
         .or(`nom.ilike.%${q}%,synonyme.ilike.%${q}%,nom.ilike.%${head}%,synonyme.ilike.%${head}%`)//.ilike('nom', `%${q}%`)
         .order('nom', { ascending: true })

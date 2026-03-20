@@ -130,7 +130,7 @@ function OcrPageInner() {
        </h1>
 
        <p className="mt-2 app-muted">
-         Pinterest, Instagram, Facebook, photo de livre, capture d’écran…
+         Capture d’écran de Pinterest, Instagram, Facebook, photo de livre…
        </p>
 
        {/* Instructions (ancienne version conservée) */}

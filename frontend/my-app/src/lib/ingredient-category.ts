@@ -1,0 +1,130 @@
+import {
+ Carrot,
+ Apple,
+ Beef,
+ Fish,
+ Milk,
+ Egg,
+ Wheat,
+ Bean,
+ Croissant,
+ Candy,
+ Droplets,
+ Snowflake,
+ Package,
+ CookingPot,
+ Salad,
+} from 'lucide-react'
+
+export const INGREDIENT_CATEGORY_META = {
+ vegetable: {
+   label: 'Légume',
+   icon: Carrot,
+   color: '#4F9A43',
+   bg: '#EAF6E5',
+ },
+ fruit: {
+   label: 'Fruit',
+   icon: Apple,
+   color: '#D96C3F',
+   bg: '#FCE9E2',
+ },
+ meat: {
+   label: 'Viande',
+   icon: Beef,
+   color: '#C94B4B',
+   bg: '#FBE7E7',
+ },
+ fish: {
+   label: 'Poisson',
+   icon: Fish,
+   color: '#3D7DB3',
+   bg: '#E6F0FA',
+ },
+ seafood: {
+   label: 'Fruits de mer',
+   icon: Fish,
+   color: '#2F8F9D',
+   bg: '#E3F6F8',
+ },
+ dairy: {
+   label: 'Produits laitiers',
+   icon: Milk,
+   color: '#5B7FC1',
+   bg: '#EAF0FF',
+ },
+ egg: {
+   label: 'Œuf',
+   icon: Egg,
+   color: '#C58A2B',
+   bg: '#FFF3DD',
+ },
+ starch: {
+   label: 'Féculent',
+   icon: Wheat,
+   color: '#A97A2B',
+   bg: '#F8EEDC',
+ },
+ legume: {
+   label: 'Légumineuse',
+   icon: Bean,
+   color: '#7B8F3A',
+   bg: '#EEF4D8',
+ },
+ bakery: {
+   label: 'Boulangerie',
+   icon: Croissant,
+   color: '#B8793E',
+   bg: '#F7E8DA',
+ },
+ spice: {
+   label: 'Épice',
+   icon: CookingPot,
+   color: '#C96A2B',
+   bg: '#FBE9DD',
+ },
+ condiment: {
+   label: 'Condiment',
+   icon: Salad,
+   color: '#6A8F4E',
+   bg: '#ECF5E5',
+ },
+ fat: {
+   label: 'Matière grasse',
+   icon: Droplets,
+   color: '#D39A34',
+   bg: '#FFF1D9',
+ },
+ sweet: {
+   label: 'Sucré',
+   icon: Candy,
+   color: '#C95A8A',
+   bg: '#FBE6F0',
+ },
+ drink: {
+   label: 'Boisson',
+   icon: Droplets,
+   color: '#3A8FB7',
+   bg: '#E5F4FB',
+ },
+ frozen: {
+   label: 'Surgelé',
+   icon: Snowflake,
+   color: '#5C8FD6',
+   bg: '#E8F1FF',
+ },
+ processed: {
+   label: 'Transformé',
+   icon: Package,
+   color: '#8A6F5A',
+   bg: '#EFE7E1',
+ },
+ other: {
+   label: 'Autre',
+   icon: Package,
+   color: '#7B7B7B',
+   bg: '#F1F1F1',
+ },
+} as const
+
+export type IngredientCategory = keyof typeof INGREDIENT_CATEGORY_META

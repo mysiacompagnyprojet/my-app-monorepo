@@ -13,12 +13,13 @@ type IngredientBaseItem = {
     quantite_de_reference?: number | null
     prix_d_achat?: number | null
     prix_kg_l_piece?: number | null
+    category?: string | null
 }
 
 type Props = {
     querySeed: string
     onPick: (item: IngredientBaseItem) => void
-    buttonLabel?: string
+    buttonLabel?: React.ReactNode
 }
 
 export function IngredientPicker({
@@ -105,7 +106,36 @@ export function IngredientPicker({
                     className="ingredient-picker-trigger"
                     onClick={() => setOpen((v) => !v)}
                 >
-                    {open ? 'Fermer' : buttonLabel}
+                    {open ? (
+                        'Fermer' 
+                    ) : (
+                        <>
+                        <span className="ingredient-picker-icon" aria-hidden="true">
+                            <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <circle
+                            cx="11"
+                            cy="11"
+                            r="7"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            />
+                            <path
+                            d="M20 20L16.65 16.65"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            />
+                            </svg>    
+                        </span>
+                    <span>{buttonLabel}</span>
+                    </>
+                    )}
                 </button>
             </div>
 
