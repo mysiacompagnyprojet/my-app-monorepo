@@ -11,7 +11,7 @@ import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 import { INGREDIENT_CATEGORY_META } from '@/lib/ingredient-category'
-import { Instagram } from 'lucide-react'
+
 
 
 type Line = IngredientLine & {
