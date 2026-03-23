@@ -8,6 +8,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
 import { apiFetch } from 'src/lib/api'
 import { createClient } from '@supabase/supabase-js'
+import { FolderOpen, Camera, Plus } from 'lucide-react'
 
 // --- Lecture des variables d'environnement (côté client) ---
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
@@ -215,23 +216,26 @@ export default function HeaderClient() {
          </a>
 
          {!isNewRecipe && (
- <div className="app-nav-actions">
+ <div className="app-nav-actions app-nav-actions--signed">
    {isLoggedIn ? (
      <>
        <button
-         type="button"
-         className="app-btn app-btn-utility"
-         onClick={handleRecipesClick}
-         >
-         📜 Mes recettes
-       </button>
+          type="button"
+          className="header-nav-pill header-nav-pill--recipes"
+          onClick={handleRecipesClick}
+        >
+          <span className="header-nav-pill__icon"><FolderOpen size={20} /></span>
+          <span>Mes recettes</span>
+        </button>
 
-       <a className="app-btn app-btn-utility" href="/import/ocr">
-         📷 Import OCR
+       <a className="header-nav-pill header-nav-pill--ocr" href="/import/ocr">
+         <span className="header-nav-pill__icon"><Camera size={20} /></span>
+         <span>Import OCR</span>
        </a>
 
-       <a className="app-btn app-btn-utility" href="/recipes/new">
-         ➕ Nouvelle recette
+       <a className="header-nav-pill header-nav-pill--new" href="/recipes/new">
+          <span className="header-nav-pill__icon"><Plus size={20} /></span>
+          <span>Nouvelle recette</span>
        </a>
      </>
    ) : (

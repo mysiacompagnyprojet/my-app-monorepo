@@ -339,6 +339,8 @@ async function getCroppedBlob(
 function NewRecipeInner() {
   const router = useRouter()
   const search = useSearchParams()
+  const editId = search.get('edit')
+  const isEdit = Boolean(editId)
 
   const [title, setTitle] = useState('')
   const [servings, setServings] = useState(1)
@@ -607,7 +609,9 @@ function NewRecipeInner() {
             return { name: row, quantity: 0, unit: '', buyRecalced: false }
           }
           if (row.raw) {
-            return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+            return { 
+              name: String(row.raw), 
+              quantity: 0, unit: '', buyRecalced: false }
           }
 
           const buyPriceEur =
@@ -664,6 +668,57 @@ function NewRecipeInner() {
       console.error('prefill parse error', e)
     }
   }, [prefill])
+
+  useEffect(() => {
+  if (!editId) return
+
+  async function loadRecipe() {
+    try {
+      const data = await apiFetch<{ ok?: boolean; recipe?: any }>(`/recipes/${editId}`)
+
+      const r = (data as any)?.recipe
+      if (!r) return
+
+      setTitle(String(r.title || ''))
+      setServings(Number(r.servings || 1) || 1)
+      setImageUrl(String(r.imageUrl || ''))
+      setNotes(String(r.notes || ''))
+
+      const s = Array.isArray(r.steps)
+        ? r.steps.map((x: any) => String(x || '').trim()).filter(Boolean)
+        : []
+      setSteps(s.length ? s : [''])
+
+      const ing = Array.isArray(r.ingredients) ? r.ingredients : []
+
+      const normalized = ing.map((row: any) => ({
+        name: String(row.name || '').trim(),
+        quantity: Number(row.quantity || 0) || 0,
+        unit: String(row.unit || ''),
+        buyRecalced: false,
+
+        costEur: typeof row.costRecipe === 'number' ? row.costRecipe : null,
+        buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : null,
+
+        category: typeof row.category === 'string' ? row.category : null,
+
+        id: row.id ?? null,
+        ingredientBaseId: row.airtableId ?? row.id ?? null,
+      }))
+
+      const finalIngredients = normalized.length
+        ? normalized
+        : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
+      setIngredients(finalIngredients as Line[])
+      setQtyInputs(finalIngredients.map((i: any) => formatQtyForInput(i.quantity)))
+    } catch (e) {
+      console.error('loadRecipe error', e)
+    }
+  }
+
+  loadRecipe()
+}, [editId])
 
   function setIngredient(idx: number, patch: Partial<Line>) {
     setIngredients((prev) => {
@@ -771,7 +826,8 @@ function NewRecipeInner() {
             ingredientBaseId: (i as any).ingredientBaseId ?? null,
           }
         })
-        .filter(Boolean) as Array<{ name: string; quantity: number; unit: string }>
+        .filter(Boolean) as Array<{ 
+          name: string; quantity: number; unit: string }>
 
       if (!list.length) {
         if (!silent) setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.')
@@ -886,12 +942,15 @@ function NewRecipeInner() {
           .filter((i) => i.name),
       }
 
-      await apiFetch('/recipes', {
-        method: 'POST',
+      const endpoint = isEdit ? `/recipes/${editId}`: '/recipes'
+      const method = isEdit ? 'PUT' : 'POST'
+
+      await apiFetch(endpoint, {
+        method,
         body: JSON.stringify(payload),
       })
 
-      setStatus('✅ Recette enregistrée')
+      setStatus(isEdit ? '✅ Recette mise à jour' : '✅ Recette enregistrée')
       try {
         sessionStorage.removeItem('recipeDraft')
       } catch {}
@@ -1297,7 +1356,7 @@ return (
                   onClick={save}
                   className="recipe-editor-btn recipe-editor-btn-primary recipe-editor-save-btn"
                 >
-                  Enregistrer la recette
+                  {isEdit ? 'Enregistrer les modifications' : 'Enregistrer la recette'}
                 </button>
               </div>
 

@@ -124,41 +124,6 @@ function RecipesInner() {
 
  return (
    <main style={{ marginTop: 24 }}>
-     {/*<section className="app-card p-6">
-       <div className="flex flex-wrap items-center justify-between gap-3">
-         <div>
-           <h1 className="text-2xl font-extrabold app-title">📖 Mes recettes</h1>
-           <p className="mt-1 app-muted">Retrouve tes recettes dans un espace clair et organisé.</p>
-
-           {/* ✅ NEW: info freemium 
-           {limits?.blurPrices && (
-             <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
-               ⚠️ Limite atteinte : les prix sont floutés.
-             </p>
-           )}
-         </div>
-
-         <a
-           href="/recipes/new"
-           className="app-btn-primary"
-           style={{
-             borderRadius: 14,
-             paddingLeft: 16,
-             paddingRight: 16,
-             boxShadow: '0 8px 16px rgba(139, 106, 79, 0.12)',
-           }}
-           onMouseEnter={(e) => {
-             ;(e.currentTarget as HTMLAnchorElement).style.filter = 'brightness(0.98)'
-           }}
-           onMouseLeave={(e) => {
-             ;(e.currentTarget as HTMLAnchorElement).style.filter = 'none'
-           }}
-           >
-           ➕ Nouvelle recette
-         </a>
-       </div>
-     </section>
-    */}
      {cat && (
        <section
          className="app-card p-4"
@@ -223,124 +188,82 @@ function RecipesInner() {
              </div>
            </div>
          ) : (
-           <ul
-             style={{
-               display: 'grid',
-               gap: 16,
-               gridTemplateColumns: 'repeat(auto-fit, 260px)',
-               justifyContent: 'center',
-               listStyle: 'none',
-               padding: 0,
-               margin: 0,
-             }}
-             >
-             {recipes.map((r) => {
-               const costPerServing = getCostPerServing(r)
-               const budgetLabel = getBudgetLabel(costPerServing)
-               // on garde ton helper (utile ailleurs), mais ici on passe par <Price />
 
-               return (
-                 <li key={r.id} className="app-card p-4" style={{ padding: 0 }}>
-                   <Link
-                     href={`/recipes/${r.id}`}
-                     className="block recipe-card-link"
-                     style={{
-                       padding: 16,
-                       textDecoration: 'none',
-                       color: 'inherit',
-                       cursor: 'pointer',
-                     }}
-                     >
-                     {r.imageUrl ? (
-                       <img
-                         src={r.imageUrl}
-                         alt={r.title}
-                         style={{
-                           width: '100%',
-                           height: 160,
-                           objectFit: 'cover',
-                           borderRadius: 10,
-                           marginBottom: 10,
-                           border: '1px solid var(--border)',
-                         }}
-                       />
-                     ) : (
-                       <div
-                         className="app-card"
-                         style={{
-                           height: 160,
-                           borderRadius: 10,
-                           boxShadow: 'none',
-                           background: 'rgba(255,255,255,0.7)',
-                           borderColor: 'var(--border)',
-                           display: 'flex',
-                           alignItems: 'center',
-                           justifyContent: 'center',
-                           marginBottom: 10,
-                         }}
-                         >
-                         <span className="app-muted text-sm">Recette importée</span>
-                       </div>
-                     )}
 
-                     <div
-                       className="font-semibold"
-                       style={{
-                         color: 'var(--primary)',
-                         marginBottom: 10,
-                         lineHeight: 1.25,
-                       }}
-                       >
-                       {r.title}
-                     </div>
 
-                     {budgetLabel && (
- <div style={{ marginBottom: 10 }}>
-   <span className="app-badge">{budgetLabel}</span>
- </div>
-)}
+           <ul className="recipes-grid">
+  {recipes.map((r) => {
+    const costPerServing = getCostPerServing(r)
+    const budgetLabel = getBudgetLabel(costPerServing)
 
-<div
- style={{
-   fontSize: 20,
-   fontWeight: 800,
-   color: 'var(--primary)',
-   lineHeight: 1.1,
-   marginBottom: 8,
- }}
->
- <Price value={costPerServing} blur={limits?.blurPrices} />/pers
-</div>
+    return (
+      <li key={r.id} className="recipes-card">
+        <Link href={`/recipes/${r.id}`} className="recipes-card-link">
+          {r.imageUrl ? (
+            <img
+              src={r.imageUrl}
+              alt={r.title}
+              className="recipes-card-image"
+            />
+          ) : (
+            <div className="recipes-card-image recipes-card-image--placeholder">
+              <span className="recipes-card-placeholder-text">Recette importée</span>
+            </div>
+          )}
 
-<div
- className="text-sm app-muted"
- style={{ display: 'grid', gap: 4, marginBottom: 10 }}
->
- <div>
-   Coût recette : <Price value={r.totalCostEur} blur={limits?.blurPrices} />
- </div>
+          <div className="recipes-card-body">
+            <h3 className="recipes-card-title">{r.title}</h3>
 
- <div>
-   Coût courses : <Price value={r.totalCoursesEur} blur={limits?.blurPrices} />
- </div>
-</div>
+            {budgetLabel && (
+              <div className="recipes-card-budget">
+                <span 
+                  className={`recipes-card-budget-badge ${
+                    budgetLabel === 'Budget léger'
+                    ? 'is-light'
+                    : budgetLabel === 'Budget moyen'
+                    ? 'is-medium'
+                    : 'is-high'
+                  }`}
+                >
+                  {budgetLabel}  
+                </span>
+              </div>
+            )}
 
-<div
- className="text-sm app-muted"
- style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}
->
- <span className="app-badge">
-   {r.servings} portion{r.servings > 1 ? 's' : ''}
- </span>
+            <div className="recipes-card-price-main">
+              <Price value={costPerServing} blur={limits?.blurPrices} />/pers
+            </div>
 
- <span>{new Date(r.createdAt).toLocaleDateString('fr-FR')}</span>
-</div>
+            <div className="recipes-card-costs">
+              <div>
+                Coût recette : <Price value={r.totalCostEur} blur={limits?.blurPrices} />
+              </div>
+              <div>
+                Coût courses : <Price value={r.totalCoursesEur} blur={limits?.blurPrices} />
+              </div>
+            </div>
 
-                   </Link>
-                 </li>
-               )
-             })}
-           </ul>
+            <div className="recipes-card-footer">
+              <span className="recipes-card-servings">
+                {r.servings} portion{r.servings > 1 ? 's' : ''}
+              </span>
+
+              <span className="recipes-card-date">
+                {new Date(r.createdAt).toLocaleDateString('fr-FR')}
+              </span>
+            </div>
+          </div>
+        </Link>
+      </li>
+    )
+  })}
+</ul>
+
+
+
+
+
+
          )}
        </section>
      )}
