@@ -64,6 +64,7 @@ return {
 id: enriched?.id ?? ing?.id ?? null,
 unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
 costRecipe: enriched?.costRecipe ?? ing?.costRecipe ?? null,
+category: enriched?.category ?? null,
 
 // ✅ Champs "produit/pack" (ce que tu veux afficher sur la fiche recette)
 buyPriceEur: enriched?.buyPriceEur ?? null,
@@ -301,6 +302,7 @@ ingredients: {
 // ✅ (facultatif mais utile) si présent en DB
 id: true,
 unitPriceBuy: true,
+airtableId: true,
 },
 },
 },
@@ -392,6 +394,7 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
          gramsPerPiece: enriched?.gramsPerPiece ?? null,
          density_g_per_ml: enriched?.density_g_per_ml ?? null,
          mlPerPiece: enriched?.mlPerPiece ?? null,
+         category: enriched?.category ?? null,
 
          // ✅ statut/message ligne
          priceStatus: enriched?.priceStatus ?? null,
@@ -649,6 +652,111 @@ console.error('POST /recipes error:', e)
 return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
 }
 })
+
+// ─────────────────────────────────────────────
+// PUT /recipes/:id → modification d’une recette
+// ─────────────────────────────────────────────
+router.put('/:id', needAuth, async (req, res) => {
+  try {
+    const { id } = req.params
+    const { userId } = req.user
+
+    const body = req.body ?? {}
+    let { title, servings, steps, imageUrl, notes, ingredients } = body
+
+    if (typeof steps === 'string') {
+      try {
+        steps = JSON.parse(steps)
+      } catch {
+        steps = []
+      }
+    }
+
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" })
+    }
+
+    servings = Number(servings ?? 1)
+    if (!Number.isFinite(servings) || servings < 1) {
+      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
+    }
+
+    steps = Array.isArray(steps) ? steps : []
+    notes = typeof notes === 'string' ? notes : ''
+    ingredients = Array.isArray(ingredients) ? ingredients : []
+
+    const existingRecipe = await prisma.recipe.findFirst({
+      where: { id, userId },
+      select: { id: true },
+    })
+
+    if (!existingRecipe) {
+      return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
+    }
+
+    // 1) normalisation
+    const normalized = cleanAndNormalizeIngredients(
+      ingredients.map((i) => ({
+        name: i?.name,
+        quantity: i?.quantity,
+        unit: i?.unit,
+      }))
+    )
+
+    // 2) enrichissement prix
+    const ingData = await Promise.all(
+      normalized.map(async (i) => {
+        const base = {
+          name: i.nameCanon,
+          quantity: i.quantityNum ?? 0,
+          unit: i.unit || 'piece',
+        }
+
+        const enriched = await enrichIngredientWithCost(base)
+
+        return {
+          ...base,
+          id: enriched?.id ?? null,
+          unitPriceBuy: enriched?.unitPriceBuy ?? null,
+          costRecipe: enriched?.costRecipe ?? null,
+        }
+      })
+    )
+
+    // 3) garde-fou final
+    const ingDataFinal = ingData.map((i) => ({
+      name: tidyName(i.name),
+      quantity: Number(i.quantity || 0),
+      unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
+      airtableId: i.id ?? null,
+      unitPriceBuy: i.unitPriceBuy ?? null,
+      costRecipe: i.costRecipe ?? null,
+    }))
+
+    // 4) update recette + reset ingrédients
+    const recipe = await prisma.recipe.update({
+      where: { id },
+      data: {
+        title: title.trim(),
+        servings,
+        steps,
+        imageUrl: imageUrl || null,
+        notes,
+        ingredients: {
+          deleteMany: {},
+          ...(ingDataFinal.length ? { createMany: { data: ingDataFinal } } : {}),
+        },
+      },
+      include: { ingredients: true },
+    })
+
+    return res.json({ ok: true, recipe })
+  } catch (e) {
+    console.error('PUT /recipes/:id error:', e)
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
+  }
+})
+
 
 // ─────────────────────────────────────────────
 // GET /recipes/:id → détail d’une recette

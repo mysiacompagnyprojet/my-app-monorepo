@@ -103,20 +103,22 @@ model beta_invites {
 /// This model or at least one of its fields has comments in the database, and requires an additional setup for migrations: Read more: https://pris.ly/d/database-comments
 /// This model contains row level security and requires additional setup for migrations. Visit https://pris.ly/d/row-level-security for more info.
 model ingredients_base {
-  nom                                                                                String
-  unite_g_ml_piece                                                                   Decimal?                 @db.Decimal
-  type_unite                                                                         String?
-  nombre                                                                             Decimal?                 @db.Decimal
-  densite_g_ml                                                                       Decimal?                 @db.Decimal
-  quantite_de_reference                                                              Int?
-  prix_d_achat                                                                       Decimal?                 @db.Decimal
-  synonyme                                                                           String?
-  recommandation_pour_x2_x3_ou_plus_portions                                         String?
-  id                                                                                 String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  gramme_par_piece                                                                   Decimal?                 @default(dbgenerated("round((unite_g_ml_piece / NULLIF(nombre, (0)::numeric)), 1)")) @db.Decimal
-  prix_kg_l_piece                                                                    Decimal?                 @default(dbgenerated("round(((prix_d_achat / NULLIF(unite_g_ml_piece, (0)::numeric)) * (quantite_de_reference)::numeric), 2)")) @db.Decimal
-  substitutionsFrom IngredientSubstitution[] @relation("SubSource")
-  substitutionsTo   IngredientSubstitution[] @relation("SubTarget")
+  nom                                        String
+  unite_g_ml_piece                           Decimal?                 @db.Decimal
+  type_unite                                 String?
+  nombre                                     Decimal?                 @db.Decimal
+  densite_g_ml                               Decimal?                 @db.Decimal
+  quantite_de_reference                      Int?
+  prix_d_achat                               Decimal?                 @db.Decimal
+  synonyme                                   String?
+  recommandation_pour_x2_x3_ou_plus_portions String?
+  id                                         String                   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  gramme_par_piece                           Decimal?                 @default(dbgenerated("round((unite_g_ml_piece / NULLIF(nombre, (0)::numeric)), 1)")) @db.Decimal
+  prix_kg_l_piece                            Decimal?                 @default(dbgenerated("round(((prix_d_achat / NULLIF(unite_g_ml_piece, (0)::numeric)) * (quantite_de_reference)::numeric), 2)")) @db.Decimal
+  substitutionsFrom                          IngredientSubstitution[] @relation("SubSource")
+  substitutionsTo                            IngredientSubstitution[] @relation("SubTarget")
+  category                                   IngredientCategory? 
+
 }
 
 model RecipeCategory {
@@ -147,19 +149,40 @@ model RecipeOnCategory {
 }
 
 model IngredientSubstitution {
-  id                                                                           String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  sourceIngredientId                                                           String           @db.Uuid
-  targetIngredientId                                                           String           @db.Uuid
-  label                                                                        String?          @default("Alternative possible selon la recette")
-  substitutionType                                                             String?
-  note                                                                         String?
-  rank                                                                         Int              @default(1)
-  createdAt                                                                    DateTime         @default(now()) @db.Timestamptz(6)
-  updatedAt                                                                    DateTime         @default(now()) @db.Timestamptz(6)
-  sourceIngredient ingredients_base @relation("SubSource", fields: [sourceIngredientId], references: [id], onDelete: Cascade)
-  targetIngredient ingredients_base @relation("SubTarget", fields: [targetIngredientId], references: [id], onDelete: Cascade)
+  id                 String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceIngredientId String           @db.Uuid
+  targetIngredientId String           @db.Uuid
+  label              String?          @default("Alternative possible selon la recette")
+  substitutionType   String?
+  note               String?
+  rank               Int              @default(1)
+  createdAt          DateTime         @default(now()) @db.Timestamptz(6)
+  updatedAt          DateTime         @default(now()) @db.Timestamptz(6)
+  sourceIngredient   ingredients_base @relation("SubSource", fields: [sourceIngredientId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  targetIngredient   ingredients_base @relation("SubTarget", fields: [targetIngredientId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([sourceIngredientId, targetIngredientId], map: "IngredientSubstitution_source_target_key")
   @@index([sourceIngredientId], map: "IngredientSubstitution_source_idx")
   @@index([targetIngredientId], map: "IngredientSubstitution_target_idx")
+}
+
+enum IngredientCategory {
+ vegetable
+ fruit
+ meat
+ fish
+ seafood
+ dairy
+ egg
+ starch
+ legume
+ bakery
+ spice
+ condiment
+ fat
+ sweet
+ drink
+ frozen
+ processed
+ other
 }

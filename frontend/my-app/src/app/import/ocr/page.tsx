@@ -123,172 +123,157 @@ function OcrPageInner() {
    : 'info'
 
  return (
-   <main className="app-container" style={{ margin: '20px auto 40px' }}>
-     <section className="app-card p-5">
-       <h1 className="text-2xl font-extrabold app-title">
-         Importer une recette depuis une ou des images
-       </h1>
+   <main className="app-container ocr-page">
+     <section className="ocr-shell">
+        <header className="ocr-head">
+          <p className="ocr-eyebrow">Import OCR</p>
+          <h1 className="ocr-title">
+            Importer une recette depuis une ou des images
+          </h1>
 
-       <p className="mt-2 app-muted">
-         Pinterest, Instagram, Facebook, photo de livre, capture d’écran…
-       </p>
+          <p className="ocr-subtitle">
+            Capture d’écran Pinterest, Instagram, Facebook, photo de livre ou fiche recette :
+            <br />
+            MySia rassemble tout pour préparer une recette exploitable.
+          </p>
+        </header>  
 
        {/* Instructions (ancienne version conservée) */}
-       <div
-         className="mt-4 app-card"
-         style={{
-           borderColor: 'var(--border)',
-           boxShadow: 'none',
-           background: 'rgba(255,255,255,0.7)',
-           paddingTop: 16,
-           paddingBottom: 16,
-           paddingLeft: 16,
-           paddingRight: 16,
-         }}
-         >
-         <div className="text-sm font-bold" style={{ color: 'var(--primary)' }}>
-           Comment faire
-         </div>
+        <section className="ocr-how-card">
+          <h2 className="ocr-section-title">Comment ça marche</h2>
+          <div className="ocr-how-grid">
+            <article className="ocr-step-card">
+              <span className="ocr-step-number">1</span>
+              <div>
+                <h3>📸 Prends tes captures</h3>
+                <p>Pinterest, Instagram, Facebook, livre ou fiche recette.</p>
+              </div>
+            </article>  
 
-         <div className="mt-3" style={{ fontSize: 13, lineHeight: 1.75 }}>
-           <div style={{ marginTop: 6 }}>📸 Prends une ou plusieurs captures</div>
-           <div style={{ marginTop: 6 }}>🖼️ Sélectionne toutes les images</div>
-           <div style={{ marginTop: 6 }}>✨ On fusionne tout en une recette</div>
-         </div>
-       </div>
+            <article className="ocr-step-card">
+              <span className="ocr-step-number">2</span>
+              <div>
+                <h3>🖼️ Sélectionne les images</h3>
+                <p>Tu peux envoyer plusieurs images d'une même recette.</p>
+              </div>
+            </article>
+
+            <article className="ocr-step-card">
+              <span className="ocr-step-number">3</span>
+              <div>
+                <h3>✨ MySia regroupe tout</h3>
+                <p>Les ingrédients sont fusionnés dans un brouillon prêt à être retravaillé</p>
+              </div>
+            </article>
+          </div>
+        </section>  
 
        {/* Upload */}
-       <div className="mt-5">
-         <label className="text-sm font-semibold" htmlFor="ocrFiles">
-           Images de la recette
-         </label>
+        <section className="ocr-import-card">
+          <div className="ocr-import-head">
+            <div>
+              <h2 className="ocr-section-title">Ajouter les images</h2>
+              <p className="ocr-section-text">
+                Sélectionne entre 1 et {MAX_FILES} image(s). Plus les captures sont nettes,
+                meilleur sera le résultat.
+              </p>
+            </div>
 
-         <input
-           id="ocrFiles"
-           type="file"
-           accept="image/*"
-           multiple
-           onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
-           className="mt-2 w-full"
-           style={{
-             background: 'white',
-             border: '1px solid var(--border)',
-             borderRadius: 12,
-             padding: 12,
-           }}
-         />
+            {files.length > 0 && (
+              <div className="ocr-count-badge">
+                {files.length} image(s) sélectionnée(s)
+              </div>
+            )}
+          </div>
 
-         <p className="mt-2 text-sm app-muted">
-           Tu peux sélectionner plusieurs images en même temps.
-         </p>
+          <label className="ocr-upload-box" htmlFor="ocrFiles">
+            <div className="ocr-upload-icon">📷</div>
+            <div className="ocr-upload-title">Choisir une ou plusieurs images</div>
+            <div className="ocr-upload-text">
+              Formats image classiques acceptés. Maximum {MAX_FILES} fichiers.
+            </div>
 
-         {files.length > 0 && (
-           <div className="mt-3 flex flex-wrap items-center gap-2">
-             <span className="app-badge">{files.length} image(s) sélectionnée(s)</span>
+            <input
+              id="ocrFiles"
+              type="file"
+              accept="image/*"
+              multiple
+              onChange={(e) => setFiles(Array.from(e.target.files ?? []))}
+              className="ocr-file-input"
+            />
+          </label>
 
-             <span className="text-sm app-muted">
-               max {MAX_FILES}
-               {files.length > MAX_FILES ? ' — ❌ trop d’images' : ''}
-             </span>
-           </div>
-         )}
+          <p className="ocr-help-text">
+            Tu peux sélectionner plusieurs images en même temps.
+            {files.length > MAX_FILES ? ` Trop d’images : maximum ${MAX_FILES}.` : ''}
+          </p>
 
-         {/* CTA */}
-         <div className="mt-4 ocr-actions">
-           <button
-             onClick={run}
-             disabled={!canRun}
-             className="app-btn-primary"
-             style={{
-               width: '100%',
-               maxWidth: 420,
-               alignSelf: 'stretch',
-               paddingTop: 12,
-               paddingBottom: 12,
-               borderRadius: 12,
-               boxShadow: '0 8px 18px rgba(139, 106, 79, 0.18)',
-               border: '1px solid rgba(139, 106, 79, 0.22)',
-             }}
-             >
-             {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
-           </button>
+          <div className="ocr-actions">
+            <button
+              onClick={run}
+              disabled={!canRun}
+              className="ocr-run-btn"
+              type="button"
+            >
+              {isRunning ? 'Traitement en cours…' : 'Lancer l’OCR'}
+            </button>
 
-           {isDebug && (
-             <span className="app-badge" style={{ background: 'rgba(168,184,161,0.35)' }}>
-               Debug actif
-             </span>
-           )}
-         </div>
+            {isDebug && (
+              <span className="app-badge ocr-debug-badge">
+                Debug actif
+              </span>
+            )}
+          </div>
+        </section>
 
-         {/* ✅ nouveau : info freemium (ne change rien si absent) */}
-         {pricingPolicy && (
-           <div className="mt-3 text-sm app-muted">
-             {pricingPolicy.blurPrices
-               ? 'Limite atteinte : les prix sont floutés.'
-               : `Il te reste ${pricingPolicy.remaining} recette(s) avec prix visibles sur ${pricingPolicy.limit}.`}
-           </div>
-         )}
+        {/* ✅ nouveau : info freemium (ne change rien si absent) */}
+        {pricingPolicy && (
+          <div className="ocr-policy-text">
+            {pricingPolicy.blurPrices
+              ? 'Limite atteinte : les prix sont floutés.'
+              : `Il te reste ${pricingPolicy.remaining} recette(s) avec prix visibles sur ${pricingPolicy.limit}.`}
+          </div>
+        )}
 
-         {/* bloc du paywall*/}
-         {pricingPolicy?.blurPrices && (
+        {/* bloc du paywall*/}
+        {pricingPolicy?.blurPrices && (
           <PricingPaywallNotice remaining={pricingPolicy.remaining} context="import" />
-         )}
+        )}
 
-         {/* Aperçu (ancienne version conservée, mais prix via <Price/> + blur) */}
-         {draft && (
-           <div
-             className="mt-4 app-card p-4"
-             style={{
-               boxShadow: 'none',
-               borderColor: 'var(--border)',
-               background: 'rgba(255,255,255,0.7)',
-             }}
-             >
-             <h3 className="text-lg font-extrabold app-title">
-               Aperçu ingrédients + prix
-             </h3>
+        {/* Aperçu (ancienne version conservée, mais prix via <Price/> + blur) */}
+        {draft && (
+          <div className="ocr-preview-card">
+            <h3 className="ocr-section-title">Aperçu ingrédients + prix</h3>
+            <div className="ocr-preview-list">
+              {draft.ingredients?.map((ing, idx) => (
+                <div key={idx} className="ocr-preview-item">
+                  <div className="ocr-preview-row">
+                    <div>
+                      <strong>{ing.name}</strong>{' '}
+                      <span style={{ opacity: 0.8 }}>
+                        {ing.quantity ? `${ing.quantity}` : ''} {ing.unit || ''}
+                      </span>
+                    </div>
 
-             <div className="mt-3 grid gap-3">
-               {draft.ingredients?.map((ing, idx) => (
-                 <div
-                   key={idx}
-                   style={{
-                     padding: '8px 0',
-                     borderBottom: '1px solid var(--border)',
-                   }}
-                   >
-                   <div
-                     style={{
-                       display: 'flex',
-                       justifyContent: 'space-between',
-                       gap: 12,
-                     }}
-                     >
-                     <div>
-                       <strong>{ing.name}</strong>{' '}
-                       <span style={{ opacity: 0.8 }}>
-                         {ing.quantity ? `${ing.quantity}` : ''} {ing.unit || ''}
-                       </span>
-                     </div>
+                    <div className="ocr-preview-price">
+                      <Price value={(ing as any).costEur} blur={pricingPolicy?.blurPrices} />
+                    </div>
+                  </div>
 
-                     <div style={{ minWidth: 90, textAlign: 'right' }}>
-                       <Price value={(ing as any).costEur} blur={pricingPolicy?.blurPrices} />
-                     </div>
-                   </div>
-
-                   {(ing as any).priceMatched === false && (
-                     <div style={{ fontSize: 12, opacity: 0.85, color: '#ffb020' }}>
-                       Prix non trouvé dans Airtable (0 appliqué)
-                     </div>
-                   )}
-                 </div>
-               ))}
-
-               <div className="cost-summary">
-                 <div className="cost-pill">
-                   <div className="cost-pill-row">
-                     <div className="cost-pill-label">Coût recette ≈</div>
-                     <div className="cost-pill-value">
+                  {(ing as any).priceMatched === false && (
+                    <div className="ocr-preview-warning">
+                      Prix non trouvé dans Airtable (0 appliqué)
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+              <div className="ocr-preview-total">
+                <div className="cost-summary">
+                  <div className="cost-pill">
+                    <div className="cost-pill-row">
+                      <div className="cost-pill-label">Coût recette ≈</div>
+                      <div className="cost-pill-value">
                        <span className="amount">
                          <Price
                            value={(draft as any).totalCostEur}
@@ -300,73 +285,47 @@ function OcrPageInner() {
                  </div>
                </div>
              </div>
-           </div>
-         )}
+          </div>   
+        )}
 
-         {/* Status (ancienne version conservée) */}
-         {status && (
-           <div
-             className="mt-4 app-card p-3 text-sm"
-             style={{
-               boxShadow: 'none',
-               borderColor:
-                 statusKind === 'success'
-                   ? 'rgba(168,184,161,0.7)'
-                   : statusKind === 'error'
-                   ? 'rgba(176,0,32,0.25)'
-                   : 'var(--border)',
-               background:
-                 statusKind === 'success'
-                   ? 'rgba(168,184,161,0.15)'
-                   : statusKind === 'error'
-                   ? 'rgba(176,0,32,0.06)'
-                   : 'rgba(255,255,255,0.7)',
-             }}
-             >
-             <span
-               style={{
-                 fontWeight: 700,
-                 color:
-                   statusKind === 'success'
-                     ? 'rgba(43,43,43,0.95)'
-                     : statusKind === 'error'
-                     ? '#b00020'
-                     : 'rgba(43,43,43,0.9)',
-               }}
-               >
-               {status}
-             </span>
-           </div>
-         )}
+        {/* Status (ancienne version conservée) */}
+        {status && (
+          <div
+            className={`ocr-status-card ${
+              statusKind === 'success'
+                ? 'is-success'
+                : statusKind === 'error'
+                ? 'is-error'
+                : 'is-info'
+            }`}
+            
+          >
+            <span className="ocr-status-text">
+              {status}
+            </span>
+          </div>
+        )}
 
-         {isDebug && (
-           <p className="mt-3 text-sm app-muted">
-             Mode debug actif : l’API renvoie un objet debug, sans redirection.
-           </p>
-         )}
-       </div>
-     </section>
+        {isDebug && (
+          <p className="mt-3 text-sm app-muted">
+            Mode debug actif : l’API renvoie un objet debug, sans redirection.
+          </p>
+        )}
+       
+        {/* Debug output (ancienne version conservée) */}
+        {debugOut && (
+          <section className="ocr-debug-card">
+            <h2 className="text-lg font-extrabold app-title">Debug</h2>
 
-     {/* Debug output (ancienne version conservée) */}
-     {debugOut && (
-       <section className="app-card p-5" style={{ marginTop: 16 }}>
-         <h2 className="text-lg font-extrabold app-title">Debug</h2>
-
-         <pre
-           className="mt-3 app-card p-3 text-sm overflow-auto"
-           style={{
-             borderColor: 'var(--border)',
-             boxShadow: 'none',
-             background: 'rgba(255,255,255,0.7)',
-             maxHeight: 420,
-           }}
-           >
-           {JSON.stringify(debugOut, null, 2)}
-         </pre>
-       </section>
-     )}
+            <pre
+              className="ocr-debug-pre">
+              {JSON.stringify(debugOut, null, 2)}
+            </pre>
+          </section>
+        )} 
+      </section>  
    </main>
- )
+  )
 }
 
 export default function Page() {
@@ -377,7 +336,7 @@ export default function Page() {
          Chargement…
        </div>
      }
-     >
+    >
      <OcrPageInner />
    </Suspense>
  )

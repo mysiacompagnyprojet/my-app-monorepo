@@ -13,12 +13,13 @@ type IngredientBaseItem = {
     quantite_de_reference?: number | null
     prix_d_achat?: number | null
     prix_kg_l_piece?: number | null
+    category?: string | null
 }
 
 type Props = {
     querySeed: string
     onPick: (item: IngredientBaseItem) => void
-    buttonLabel?: string
+    buttonLabel?: React.ReactNode
 }
 
 export function IngredientPicker({
@@ -102,48 +103,50 @@ export function IngredientPicker({
             <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                 <button
                     type="button"
-                    className="app-btn-secondary"
+                    className="ingredient-picker-trigger"
                     onClick={() => setOpen((v) => !v)}
-                    style={{
-                   padding: '6px 10px',
-                   borderRadius: 10,
-                   fontSize: 11,
-                   lineHeight: '12px',
-                   whiteSpace: 'nowrap',
-                    }}
-            >
-                    {open ? 'Fermer' : buttonLabel}
+                >
+                    {open ? (
+                        'Fermer' 
+                    ) : (
+                        <>
+                        <span className="ingredient-picker-icon" aria-hidden="true">
+                            <svg
+                            width="18"
+                            height="18"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            xmlns="http://www.w3.org/2000/svg"
+                        >
+                            <circle
+                            cx="11"
+                            cy="11"
+                            r="7"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            />
+                            <path
+                            d="M20 20L16.65 16.65"
+                            stroke="currentColor"
+                            strokeWidth="2.4"
+                            strokeLinecap="round"
+                            />
+                            </svg>    
+                        </span>
+                    <span>{buttonLabel}</span>
+                    </>
+                    )}
                 </button>
             </div>
 
        {open && (
-           <div
-               style={{
-                   position: 'absolute',
-                   top: 'calc(100% + 8px)',
-                   left: 0,
-                   zIndex: 30,
-                   width: 320,
-                   maxWidth: 'min(320px, 80vw)',
-                   border: '1px solid rgba(0,0,0,0.08)',
-                   borderRadius: 14,
-                   background: 'white',
-                   boxShadow: '0 14px 34px rgba(0,0,0,0.12)',
-                   padding: 10,
-               }}
-            >
+           <div className="ingredient-picker-popover">
                <div style={{ display: 'grid', gap: 8 }}>
                    <input
                        value={q}
                        onChange={(e) => setQ(e.target.value)}
                        placeholder="Rechercher (ex: beurre)"
-                       style={{
-                           background: 'white',
-                           border: '1px solid var(--border)',
-                           borderRadius: 12,
-                           padding: 10,
-                           width: '100%',
-                       }}
+                       className="ingredient-picker-search"
                    />
 
                    {loading && (
@@ -160,13 +163,7 @@ export function IngredientPicker({
 
                    {!loading && !error && items.length > 0 && (
                        <div
-                           style={{
-                               border: '1px solid rgba(0,0,0,0.06)',
-                               borderRadius: 12,
-                               overflow: 'auto',
-                               background: 'white',
-                               maxHeight: 260,
-                           }}
+                           className="ingredient-picker-results"
                         >
                            {items.slice(0, 12).map((it) => (
                                <button
@@ -176,16 +173,7 @@ export function IngredientPicker({
                                        onPick(it)
                                        setOpen(false)
                                    }}
-                                   style={{
-                                       display: 'block',
-                                       width: '100%',
-                                       textAlign: 'left',
-                                       padding: '10px 12px',
-                                       border: 'none',
-                                       borderBottom: '1px solid rgba(0,0,0,0.05)',
-                                       background: 'transparent',
-                                       cursor: 'pointer',
-                                   }}
+                                    className="ingredient-picker-item"
                                 >
                                    <div style={{ fontWeight: 600 }}>{it.nom}</div>
                                    <div style={{ fontSize: 12, opacity: 0.7 }}>

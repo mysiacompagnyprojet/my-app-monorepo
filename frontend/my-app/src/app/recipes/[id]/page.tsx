@@ -72,6 +72,7 @@ export default function RecipeDetailPage() {
  const [loading, setLoading] = useState(true)
  const [err, setErr] = useState<string | null>(null)
  const [limits, setLimits] = useState<Limits | null>(null)
+ const [economySuggestions, setEconomySuggestions] = useState<any[]>([])
 
  useEffect(() => {
    if (!id) return
@@ -98,6 +99,32 @@ export default function RecipeDetailPage() {
      }
    })()
  }, [id])
+
+ useEffect(() => {
+  if (!recipe) return
+  if (!recipe.ingredients?.length) return
+
+  const currentRecipe = recipe
+  async function loadEconomy(){
+    try{
+
+      const res = await apiFetch('/recipes/economy-suggestion', {
+        method: 'POST',
+        body: JSON.stringify({
+          ingredients: currentRecipe.ingredients,
+          totalCostEur: currentRecipe.totalCostEur
+        })
+      })
+
+      if(res?.suggestion) {
+        setEconomySuggestions([res.suggestion])
+      }
+    }catch(e) {
+      console.error(e)
+    }
+  }
+  loadEconomy()
+ },[recipe])
 
  const blurPrices = Boolean(limits?.blurPrices)
  const ingredients = recipe?.ingredients ?? []
@@ -191,445 +218,364 @@ export default function RecipeDetailPage() {
  }
 
  return (
-   <main className={`${inter.className} app-container`} style={{ margin: '40px auto' }}>
-     {/* Header */}
-     <section className="app-card p-6">
-       <div className="flex flex-wrap items-center justify-between gap-3">
-         <div>
-           <h1 className="text-2xl font-extrabold">📄 Détail recette</h1>
-           <p className="app-muted">ID : {recipe.id}</p>
-         </div>
+  <main className={`${inter.className} app-container recipe-detail-page`}>
+    <section className="recipe-detail-hero">
+      <div className="recipe-detail-hero__media">
+        {recipe.imageUrl ? (
+          <RecipeImagePreview imageUrl={recipe.imageUrl} />
+        ) : (
+        <div className="recipe-detail-hero__placeholder">
+          <div className="recipe-detail-hero__placeholder-inner">
+            <div className="recipe-detail-hero__placeholder-badge">+</div>
+            <p className="recipe-detail-hero__placeholder-title">Aucune photo ajoutée</p>
+            <p className="recipe-detail-hero__placeholder-text">
+              Cette recette a été enregistrée sans image. Tu peux en ajouter une en la modifiant.
+            </p>
+          </div>  
+        </div>
+        )}
+      </div>
 
-         <button className="app-btn-secondary" onClick={() => router.push('/recipes')}>
-           ← Retour
-         </button>
-       </div>
-     </section>
+      <div className="recipe-detail-hero__content">
+        <div className="recipe-detail-hero__top">
+          <div>
+            <p className="recipe-detail-eyebrow">Recette enregistrée</p>
 
-     {/* Image + titre */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <RecipeImagePreview imageUrl={recipe.imageUrl} />
+            <h1 className={`${playfair.className} recipe-detail-title`}>
+              {recipe.title}
+            </h1>
 
-       <h2
-         className={playfair.className}
-         style={{
-           fontSize: 30,
-           fontWeight: 700,
-           lineHeight: 1.15,
-           marginBottom: 6,
-         }}
-        > 
-         {recipe.title}
-       </h2>
+            <div className="recipe-detail-meta">
+              <span className="recipe-detail-meta-badge">
+                {recipe.servings} portion{recipe.servings > 1 ? 's' : ''}
+              </span>
 
-       <div className="mt-2 text-sm app-muted">
-         <span className="app-badge">Portions : {recipe.servings}</span>
-         <span style={{ marginLeft: 10 }}>
-           Créée le {new Date(recipe.createdAt).toLocaleDateString('fr-FR')}
-         </span>
-       </div>
+              <span className="recipe-detail-meta-date">
+                Créée le {new Date(recipe.createdAt).toLocaleDateString('fr-FR')}
+              </span>
+            </div>
+          </div>
 
-       {limits && Number.isFinite(limits.limit) && (
-         <div className="mt-3 text-sm app-muted">
-           Analyses gratuites utilisées : {limits.used}/{limits.limit} • il reste {limits.remaining}
-         </div>
-       )}
-     </section>
+          <div className="recipe-detail-actions">
+            <button
+              className="app-btn app-btn-utility"
+              onClick={() => router.push(`/recipes/new?edit=${recipe.id}`)}
+            >
+              Modifier la recette
+            </button>
 
-     {limits?.blurPrices && <PricingPaywallNotice remaining={limits.remaining} context="recipes" />}
+            <button
+              className="app-btn app-btn-secondary"
+              onClick={() => router.push('/recipes')}
+            >
+              ← Retour
+            </button>
+          </div>
+        </div>
 
+        {limits && Number.isFinite(limits.limit) && (
+          <p className="recipe-detail-limit-text">
+            Analyses gratuites utilisées : {limits.used}/{limits.limit} • il reste {limits.remaining}
+          </p>
+        )}
+      </div>
+    </section>
 
-       {/* Coûts visibles en haut */}
-<section className="app-card p-6" style={{ marginTop: 16 }}>
- <div className="cost-summary">
-   <div className="cost-pill paper-ui">
-     <div className="cost-pill-row cost-pill-row-recipe">
-       <span className="cost-pill-label recipe-color-2">
-         Coût recette
-       </span>
+    {limits?.blurPrices && (
+      <PricingPaywallNotice remaining={limits.remaining} context="recipes" />
+    )}
 
-       <span className="amount">
-         ≈ <Price value={totalRecipeCost} blur={blurPrices} />
-       </span>
-     </div>
-   </div>
+    <section className="recipe-detail-top-grid">
+  <div className="recipe-detail-costs-card">
+    <div className="recipe-detail-costs-grid">
+      <div className="recipe-detail-cost-pill recipe-detail-cost-pill--recipe">
+        <div className="recipe-detail-cost-label">Coût recette</div>
+        <div className="recipe-detail-cost-value">
+          ≈ <Price value={totalRecipeCost} blur={blurPrices} />
+        </div>
+      </div>
 
-   <div className="cost-pill paper-ui">
-     <div className="cost-pill-row cost-pill-row-courses">
-       <span className="cost-pill-label recipe-color-2">
-         Coût courses
-       </span>
+      <div className="recipe-detail-cost-pill recipe-detail-cost-pill--courses">
+        <div className="recipe-detail-cost-label">Coût courses</div>
+        <div className="recipe-detail-cost-value">
+          ≈ <Price value={totalProductsCost} blur={blurPrices} />
+        </div>
+      </div>
 
-       <span className="amount">
-         ≈ <Price value={totalProductsCost} blur={blurPrices} />
-       </span>
-     </div>
-   </div>
- </div>
+      <div className="recipe-detail-cost-pill recipe-detail-cost-pill--serving">
+        <div className="recipe-detail-cost-label">Prix par personne</div>
+        <div className="recipe-detail-cost-value">
+          ≈ <Price value={costPerServing} blur={blurPrices} />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div className="recipe-detail-right-col">
+    {totalRecipeCost > 0 && (
+      <section className="recipe-detail-analysis-card">
+        <h2 className="recipe-detail-section-title">
+          Ce que coûte vraiment cette recette
+        </h2>
+
+        {budgetLevel && (
+          <div className="recipe-budget-pills recipe-detail-budget-pills">
+            <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
+              Budget malin
+            </div>
+
+            <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
+              Budget moyen
+            </div>
+
+            <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
+              Budget élevé
+            </div>
+          </div>
+        )}
+
+        {topIngredients.length > 0 && (
+          <div className="recipe-detail-top-block">
+            <h3 className="recipe-detail-subtitle">
+              Les ingrédients les plus élevés
+            </h3>
+
+            <div className="recipe-detail-top-list">
+              {topIngredients.map((i, index) => (
+                <div key={index} className="recipe-detail-top-item">
+                  <span>
+                    • {index + 1} {i.name}
+                  </span>
+
+                  <span className="recipe-detail-top-price">
+                    <Price value={i.cost} blur={blurPrices} />
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+    )}
+
+    {economySuggestions.length > 0 && (
+      <section className="recipe-detail-economy-card">
+        <h2 className="recipe-detail-section-title">
+          Comment réduire le coût
+        </h2>
+
+        <div className="recipe-detail-accordion-list">
+          {economySuggestions.map((s: any, i) => (
+            <details key={i} className="recipe-detail-accordion">
+              <summary className="recipe-detail-accordion-summary">
+                <div className="recipe-detail-accordion-main">
+                  <div className="recipe-detail-accordion-title">
+                    {s.ingredientName}
+                  </div>
+
+                  {s.savingEur && (
+                    <div className="recipe-detail-accordion-saving">
+                      Économie estimée ≈ {s.savingEur.toFixed(2)} €
+                    </div>
+                  )}
+                </div>
+
+                <div className="recipe-detail-accordion-icon">+</div>
+              </summary>
+
+              <div className="recipe-detail-accordion-content">
+                {s.substitutions?.length > 0 && (
+                  <div>
+                    <div className="recipe-detail-saving-label">
+                      Alternatives possibles :
+                    </div>
+
+                    <div className="recipe-detail-saving-list">
+                      {s.substitutions.map((sub: any, j: number) => (
+                        <div key={j} className="recipe-detail-saving-item">
+                          • {sub.name}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {s.newTotalEur && (
+                  <div className="recipe-detail-accordion-metrics">
+                    <div className="recipe-detail-saving-meta">
+                      Nouveau coût recette ≈ {s.newTotalEur.toFixed(2)} €
+                    </div>
+
+                    <div className="recipe-detail-saving-meta">
+                      Nouveau prix par personne ≈ {(s.newTotalEur / recipe.servings).toFixed(2)} €
+                    </div>
+                  </div>
+                )}
+              </div>
+            </details>
+          ))}
+        </div>
+      </section>
+    )}
+  </div>
 </section>
 
 
-     {/* Analyse recette*/}
-     {totalRecipeCost > 0 && (
-       <section
-         className="app-card p-6"
-         style={{
-           marginTop: 16,
-           background: 'rgba(176,188,140,0.08)',
-           border: '1px solid rgba(176,188,140,0.25)',
-         }}
-        >
-         <h3
-           style={{
-             fontWeight: 800,
-             marginBottom: 12,
-             color: 'var(--primary)',
-             fontSize: 18,
-           }}
-          > 
-           Ce que coûte vraiment cette recette
-         </h3>
+    <section className="recipe-detail-section-card">
+      <div className="recipe-detail-section-head">
+        <h2 className="recipe-detail-section-title">Ingrédients</h2>
+      </div>
 
-         <div
-           style={{
-             fontSize: 13,
-             opacity: 0.7,
-             marginBottom: 12,
-           }}
-          >
-           Les ingrédients les plus chers sont ceux qui font monter le budget.
-         </div>
+      {ingredients.length ? (
+        <div className="recipe-detail-section-body">
+          <div className="recipe-detail-table-desktop">
+            <div className="recipe-detail-table-head app-muted">
+              <div style={{ textAlign: 'right' }}>Qté</div>
+              <div>Unité</div>
+              <div style={{ paddingLeft: 14 }}>Ingrédient</div>
+              <div style={{ textAlign: 'right' }}>Coût recette</div>
+              <div style={{ textAlign: 'right' }}>Coût produit</div>
+            </div>
 
-         {costPerServing && (
-           <div style={{ marginBottom: 14 }}>
-             <div className="app-muted" style={{ fontWeight: 700 }}>
-               Prix par personne
-             </div>
+            <div>
+              {ingredients.map((ing, i) => (
+                <div key={i} className="recipe-detail-table-row">
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    {formatQty(ing.quantity)}
+                  </div>
 
-             <div style={{ fontSize: 20, fontWeight: 800 }}>
-               <Price value={costPerServing} blur={blurPrices} />
-             </div>
+                  <div style={{ opacity: 0.85 }}>{ing.unit}</div>
 
-             <div
-               style={{
-                 fontSize: 13,
-                 opacity: 0.7,
-               }}
-              > 
-               {recipe.servings} portions
-             </div>
+                  <div style={{ paddingLeft: 14 }}>{ing.name}</div>
 
-             {budgetLevel && (
-               <div
-                 style={{
-                   display: 'flex',
-                   gap: 8,
-                   flexWrap: 'wrap',
-                   marginTop: 10,
-                 }}
-                >
-                 <div
-                   style={{
-                     padding: '6px 12px',
-                     borderRadius: 999,
-                     fontSize: 13,
-                     fontWeight: 700,
-                     background:
-                       budgetLevel === 'smart' ? 'rgba(176,188,140,0.28)' : 'rgba(0,0,0,0.06)',
-                     color:
-                       budgetLevel === 'smart' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-                   }}
-                  >
-                   Budget malin
-                 </div>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
+                  </div>
 
-                 <div
-                   style={{
-                     padding: '6px 12px',
-                     borderRadius: 999,
-                     fontSize: 13,
-                     fontWeight: 700,
-                     background:
-                       budgetLevel === 'medium' ? 'rgba(230,190,120,0.30)' : 'rgba(0,0,0,0.06)',
-                     color:
-                       budgetLevel === 'medium' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-                   }}
-                  >
-                   Budget moyen
-                 </div>
+                  <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
+                    <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
+                  </div>
+                </div>
+              ))}
+            </div>
 
-                 <div
-                   style={{
-                     padding: '6px 12px',
-                     borderRadius: 999,
-                     fontSize: 13,
-                     fontWeight: 700,
-                     background:
-                       budgetLevel === 'high' ? 'rgba(180,120,120,0.18)' : 'rgba(0,0,0,0.06)',
-                     color:
-                       budgetLevel === 'high' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-                   }}
-                  >
-                   Budget élevé
-                 </div>
+            <div className="recipe-detail-table-total">
+              <div />
+              <div />
+              <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
 
-                 <div
-                   style={{
-                     padding: '6px 12px',
-                     borderRadius: 999,
-                     fontSize: 13,
-                     fontWeight: 700,
-                     background:
-                       budgetLevel === 'occasion'
-                         ? 'rgba(123,68,46,0.16)'
-                         : 'rgba(0,0,0,0.06)',
-                     color:
-                       budgetLevel === 'occasion' ? 'var(--primary)' : 'rgba(43,43,43,0.75)',
-                   }}
-                  >
-                   Occasion
-                 </div>
-               </div>
-             )}
-           </div>
-         )}
+              <div style={{ textAlign: 'right', fontWeight: 800 }}>
+                <Price value={totalRecipeCost} blur={blurPrices} />
+              </div>
 
-         {topIngredients.length > 0 && (
-           <div>
-             <div
-               className="app-muted"
-               style={{
-                 fontWeight: 700,
-                 marginBottom: 6,
-               }}
-              >
-               Ce qui coûte le plus
-             </div>
+              <div style={{ textAlign: 'right', fontWeight: 800 }}>
+                <Price value={totalProductsCost} blur={blurPrices} />
+              </div>
+            </div>
+          </div>
 
-             <div style={{ display: 'grid', gap: 4 }}>
-               {topIngredients.map((i, index) => (
-                 <div
-                   key={index}
-                   style={{
-                     display: 'flex',
-                     justifyContent: 'space-between',
-                     gap: 12,
-                   }}
-                  >
-                   <span>
-                     #{index + 1} {i.name}
-                   </span>
+          <div className="recipe-detail-mobile-list">
+            {ingredients.map((ing, i) => (
+              <div key={i} className="recipe-detail-mobile-card">
+                <div className="recipe-detail-mobile-name">{ing.name}</div>
 
-                   <span
-                     style={{
-                       fontWeight: 700,
-                       color: 'var(--primary)',
-                       whiteSpace: 'nowrap',
-                     }}
-                    >
-                     <Price value={i.cost} blur={blurPrices} />
-                   </span>
-                 </div>
-               ))}
-             </div>
-           </div>
-         )}
-       </section>
-     )}
+                <div className="recipe-detail-mobile-meta">
+                  <span>
+                    <strong>Qté :</strong> {formatQty(ing.quantity)}
+                  </span>
+                  <span>
+                    <strong>Unité :</strong> {ing.unit}
+                  </span>
+                </div>
 
-     {/* Ingrédients */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <h3 className="text-lg font-extrabold">Ingrédients</h3>
+                <div className="recipe-detail-mobile-prices">
+                  <div>
+                    <div className="recipe-detail-mobile-label">Coût recette</div>
+                    <div className="recipe-detail-mobile-value recipe-cost-recipe">
+                      <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
+                    </div>
+                  </div>
 
-       {ingredients.length ? (
-         <div style={{ marginTop: 12 }}>
-           {/* DESKTOP */}
-           <div className="recipe-detail-table-desktop">
-             <div className="recipe-detail-table-head app-muted">
-               <div style={{ textAlign: 'right' }}>Qté</div>
-               <div>Unité</div>
-               <div style={{ paddingLeft: 14 }}>Ingrédient</div>
-               <div style={{ textAlign: 'right' }}>Coût recette</div>
-               <div style={{ textAlign: 'right' }}>Coût produit</div>
-             </div>
+                  <div>
+                    <div className="recipe-detail-mobile-label">Coût produit</div>
+                    <div className="recipe-detail-mobile-value recipe-cost-product">
+                      <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
 
-             <div>
-               {ingredients.map((ing, i) => (
-                 <div key={i} className="recipe-detail-table-row">
-                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                     {formatQty(ing.quantity)}
-                   </div>
+            <div className="recipe-detail-mobile-card recipe-detail-mobile-total">
+              <div className="recipe-detail-mobile-name">Totaux</div>
 
-                   <div style={{ opacity: 0.85 }}>{ing.unit}</div>
+              <div className="recipe-detail-mobile-prices">
+                <div>
+                  <div className="recipe-detail-mobile-label">Coût recette</div>
+                  <div className="recipe-detail-mobile-value recipe-cost-recipe">
+                    <Price value={totalRecipeCost} blur={blurPrices} />
+                  </div>
+                </div>
 
-                   <div style={{ paddingLeft: 14 }}>{ing.name}</div>
+                <div>
+                  <div className="recipe-detail-mobile-label">Coût produit</div>
+                  <div className="recipe-detail-mobile-value recipe-cost-product">
+                    <Price value={totalProductsCost} blur={blurPrices} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
 
-                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                     <Price value={isNum(ing.costRecipe) ? ing.costRecipe : null} blur={blurPrices} />
-                   </div>
+          {missingBuyCount > 0 && (
+            <p className="recipe-detail-note">
+              ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s).
+            </p>
+          )}
 
-                   <div style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>
-                     <Price value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null} blur={blurPrices} />
-                   </div>
-                 </div>
-               ))}
-             </div>
+          {blurPrices && (
+            <p className="recipe-detail-note">
+              🔒 Limite gratuite atteinte : les prix sont floutés.
+            </p>
+          )}
+        </div>
+      ) : (
+        <p className="app-muted" style={{ marginTop: 10 }}>
+          Aucun ingrédient
+        </p>
+      )}
+    </section>
 
-             <div className="recipe-detail-table-total">
-               <div />
-               <div />
-               <div style={{ paddingLeft: 14, fontWeight: 800 }}>Totaux</div>
+    <section className="recipe-detail-section-card">
+      <div className="recipe-detail-section-head">
+        <h2 className="recipe-detail-section-title">Étapes</h2>
+      </div>
 
-               <div style={{ textAlign: 'right', fontWeight: 800 }}>
-                 <Price value={totalRecipeCost} blur={blurPrices} />
-               </div>
+      {recipe.steps?.length ? (
+        <div className="recipe-detail-steps-list">
+          {recipe.steps.map((s, i) => {
+            const isAlt = i % 2 === 1
 
-               <div style={{ textAlign: 'right', fontWeight: 800 }}>
-                 <Price value={totalProductsCost} blur={blurPrices} />
-               </div>
-             </div>
-           </div>
+            return (
+              <div key={i} className={`recipe-step-card${isAlt ? ' is-alt' : ''}`}>
+                <div style={{ marginBottom: 8 }}>
+                  <span className="recipe-step-badge">Étape {i + 1}</span>
+                </div>
 
-           {/* MOBILE */}
-           <div className="recipe-detail-mobile-list">
-             {ingredients.map((ing, i) => (
-               <div key={i} className="recipe-detail-mobile-card">
-                 <div className="recipe-detail-mobile-name">{ing.name}</div>
+                <div className="recipe-step-text">{String(s)}</div>
+              </div>
+            )
+          })}
+        </div>
+      ) : (
+        <p className="app-muted" style={{ marginTop: 10 }}>
+          Aucune étape
+        </p>
+      )}
+    </section>
+  </main>
 
-                 <div className="recipe-detail-mobile-meta">
-                   <span>
-                     <strong>Qté :</strong> {formatQty(ing.quantity)}
-                   </span>
-                   <span>
-                     <strong>Unité :</strong> {ing.unit}
-                   </span>
-                 </div>
 
-                 <div className="recipe-detail-mobile-prices">
-                   <div>
-                     <div className="recipe-detail-mobile-label">Coût recette</div>
-                     <div className="recipe-detail-mobile-value recipe-cost-recipe">
-                       <Price
-                         value={isNum(ing.costRecipe) ? ing.costRecipe : null}
-                         blur={blurPrices}
-                       />
-                     </div>
-                   </div>
 
-                   <div>
-                     <div className="recipe-detail-mobile-label">Coût produit</div>
-                     <div className="recipe-detail-mobile-value recipe-cost-product">
-                       <Price
-                         value={isNum(ing.buyPriceEur) ? ing.buyPriceEur : null}
-                         blur={blurPrices}
-                       />
-                     </div>
-                   </div>
-                 </div>
-               </div>
-             ))}
-
-             <div className="recipe-detail-mobile-card recipe-detail-mobile-total">
-               <div className="recipe-detail-mobile-name">Totaux</div>
-
-               <div className="recipe-detail-mobile-prices">
-                 <div>
-                   <div className="recipe-detail-mobile-label">Coût recette</div>
-                   <div className="recipe-detail-mobile-value recipe-cost-recipe">
-                     <Price value={totalRecipeCost} blur={blurPrices} />
-                   </div>
-                 </div>
-
-                 <div>
-                   <div className="recipe-detail-mobile-label">Coût produit</div>
-                   <div className="recipe-detail-mobile-value recipe-cost-product">
-                     <Price value={totalProductsCost} blur={blurPrices} />
-                   </div>
-                 </div>
-               </div>
-             </div>
-           </div>
-
-           {missingBuyCount > 0 && (
-             <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
-               ⚠️ Coût produit manquant pour {missingBuyCount} ingrédient(s).
-             </p>
-           )}
-
-           {blurPrices && (
-             <p className="app-muted" style={{ marginTop: 10, fontSize: 12 }}>
-               🔒 Limite gratuite atteinte : les prix sont floutés.
-             </p>
-           )}
-         </div>
-       ) : (
-         <p className="app-muted" style={{ marginTop: 10 }}>
-           Aucun ingrédient
-         </p>
-       )}
-     </section>
-
-     {/* Étapes */}
-     <section className="app-card p-6" style={{ marginTop: 16 }}>
-       <h3 className="text-lg font-extrabold">Étapes</h3>
-
-       {recipe.steps?.length ? (
-         <div style={{ marginTop: 12 }}>
-           {recipe.steps.map((s, i) => {
-             const isAlt = i % 2 === 1
-
-             return (
-               <div
-                 key={i}
-                 className={`recipe-step-card${isAlt ? ' is-alt' : ''}`}
-                 style={{
-                   margin: '0 0 16px 0',
-                   width: '100%',
-                   maxWidth: 650,
-                   background: 'var(--bg)',
-                   border: '1px solid var(--border)',
-                   borderRadius: 20,
-                   padding: '12px 14px',
-                 }}
-                >
-                 <div style={{ marginBottom: 8 }}>
-                   <span
-                     style={{
-                       display: 'inline-block',
-                       fontSize: 11,
-                       fontWeight: 500,
-                       lineHeight: '18px',
-                       padding: '0 8px',
-                       borderRadius: 999,
-                       background: 'rgba(122, 92, 67, 0.10)',
-                       border: '1px solid rgba(122, 92, 67, 0.14)',
-                       color: 'var(--primary)',
-                       verticalAlign: 'middle',
-                     }}
-                    >
-                     Étape {i + 1}
-                   </span>
-                 </div>
-
-                 <div
-                   style={{
-                     whiteSpace: 'pre-wrap',
-                     lineHeight: 1.65,
-                     fontSize: 14,
-                   }}
-                  >
-                   {String(s)}
-                 </div>
-               </div>
-             )
-           })}
-         </div>
-       ) : (
-         <p className="app-muted" style={{ marginTop: 10 }}>
-           Aucune étape
-         </p>
-       )}
-     </section>
-   </main>
  )
 }

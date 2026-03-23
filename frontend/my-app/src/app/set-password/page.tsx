@@ -2,6 +2,7 @@
 
 'use client'
 
+import Image from 'next/image'
 import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
@@ -60,77 +61,85 @@ function SetPasswordInner() {
  }
 
  return (
-   <main className="app-container" style={{ margin: '40px auto' }}>
-     <section className="app-card p-6">
-       <h1 className="text-2xl font-extrabold app-title">Créer ton mot de passe</h1>
+   <main className="app-container authPage">
+     <section className="authShell">
+       <div className="authIntroCard">
+         <p className="authEyebrow">Bienvenue sur</p>
+         <h1 className="authIntroTitle">MySia</h1>
 
-       <p className="mt-2 app-muted">
-         Ton accès est validé. Choisis maintenant un mot de passe pour tes prochaines connexions.
-       </p>
+         <p className="authIntroText">
+           Importez vos recettes et voyez leur vrai coût avant de faire les courses.
+         </p>
 
-       <form onSubmit={onSubmit} className="mt-5 grid gap-4">
-         <label className="grid gap-1 text-sm font-semibold">
-           Mot de passe
-           <input
-             type="password"
-             value={password}
-             onChange={(e) => setPassword(e.target.value)}
-             required
-             style={{
-               background: 'white',
-               border: '1px solid var(--border)',
-               borderRadius: 10,
-               padding: 10,
-             }}
-           />
-         </label>
+         <ul className="authBenefits">
+           <li><span className="authCheck">✓</span><span>Coût de la recette</span></li>
+           <li><span className="authCheck">✓</span><span>Coût total des courses</span></li>
+           <li><span className="authCheck">✓</span><span>Prix par personne</span></li>
+         </ul>
 
-         <label className="grid gap-1 text-sm font-semibold">
-           Confirmer le mot de passe
-           <input
-             type="password"
-             value={confirmPassword}
-             onChange={(e) => setConfirmPassword(e.target.value)}
-             required
-             style={{
-               background: 'white',
-               border: '1px solid var(--border)',
-               borderRadius: 10,
-               padding: 10,
-             }}
-           />
-         </label>
-
-         <button disabled={busy} type="submit" className="app-btn-primary mt-2">
-           {busy ? 'Enregistrement…' : 'Créer mon mot de passe'}
-         </button>
-       </form>
-
-       {error && (
-         <div
-           className="mt-4 app-card p-3 text-sm"
-           style={{
-             boxShadow: 'none',
-             borderColor: 'rgba(176,0,32,0.25)',
-             background: 'rgba(176,0,32,0.06)',
-           }}
-           >
-           <strong style={{ color: '#b00020' }}>Erreur :</strong> {error}
+         <div className="authPhoneWrap">
+           <div className="authPhone">
+             <div className="authPhoneImage">
+               <Image
+                 src="/landing-phone-shot.jpg"
+                 alt="Aperçu MySia"
+                 fill
+                 className="authPhoneImageImg"
+                 sizes="(max-width: 760px) 70vw, 270px"
+                 priority
+               />
+             </div>
+           </div>
          </div>
-       )}
+       </div>
 
-       {success && (
-         <div
-           className="mt-4 app-card p-3 text-sm"
-           style={{
-             boxShadow: 'none',
-             borderColor: 'rgba(168,184,161,0.7)',
-             background: 'rgba(168,184,161,0.15)',
-           }}
-           >
-           <strong>{success}</strong>
-         </div>
-       )}
+       <section className="authFormCard">
+         <h2 className="authTitle">Créer ton mot de passe</h2>
+
+         <p className="authText">
+           Ton accès est validé. Choisis maintenant un mot de passe pour tes prochaines connexions.
+         </p>
+
+         <form onSubmit={onSubmit} className="authForm">
+           <label className="authLabel">
+             Mot de passe
+             <input
+               className="authInput"
+               type="password"
+               value={password}
+               onChange={(e) => setPassword(e.target.value)}
+               required
+             />
+           </label>
+
+           <label className="authLabel">
+             Confirmer le mot de passe
+             <input
+               className="authInput"
+               type="password"
+               value={confirmPassword}
+               onChange={(e) => setConfirmPassword(e.target.value)}
+               required
+             />
+           </label>
+
+           <button disabled={busy} type="submit" className="authPrimaryBtn">
+             {busy ? 'Enregistrement…' : 'Créer ton mot de passe'}
+           </button>
+         </form>
+
+         {error && (
+           <div className="authAlertError">
+             <strong>Erreur :</strong> {error}
+           </div>
+         )}
+
+         {success && (
+           <div className="authAlertSuccess">
+             <strong>{success}</strong>
+           </div>
+         )}
+       </section>
      </section>
    </main>
  )

@@ -3,6 +3,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
+import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 
@@ -47,87 +48,141 @@ export default function Home() {
 
  if (checking) return null
 
- return (
- <main className="app-container" style={{ margin: '20px auto 40px' }}>
-    <section className="seo-block">
- <div className="hero-layout">
-   <div className="hero-copy">
-     <p className="hero-kicker">
-       Calculer le prix réel des recettes des réseaux sociaux
-     </p>
+  return (
+    <main className="app-container landing-page">
+      <section className="landing-hero app-card">
+        <div className="landing-hero__grid">
+          <div className="landing-hero__copy">
+            <h1 className="landing-hero__title">
+              Calculez le vrai prix des recettes des réseaux sociaux
+            </h1>
 
-     <h1>Importez une recette. Voyez son prix. Décidez.</h1>
+            <p className="landing-hero__text">
+              Importez une recette depuis Instagram, TikTok ou Pinterest et voyez son coût
+              avant de faire les courses.
+            </p>
+          </div>
 
-     <p className="hero-description">
-       MySia permet d'importer des recettes depuis Instagram, TikTok ou Pinterest
-       et de voir immédiatement combien elles vont coûter avant de faire les courses.
-     </p>
+          <div className="landing-hero__visual">
+            <div className="landing-phone-card">
+              <div className="landing-phone-card__top">
+                <span className="landing-phone-card__brand">MySia</span>
+                <span className="landing-phone-card__menu">☰</span>
+              </div>
 
-     <div className="value-box">
-       <h2>Décidez avant de faire les courses</h2>
-       <p>
-         Visualisez le coût total de la recette et le coût total des courses
-         pour éviter les mauvaises surprises en caisse.
-       </p>
-     </div>
-   </div>
+              <div className="landing-phone-card__stats">
+                <div>
+                  <span className="landing-phone-card__label">Coût recette</span>
+                  <strong>9,07 €</strong>
+                </div>
+                <div>
+                  <span className="landing-phone-card__label">Coût courses</span>
+                  <strong>29,25 €</strong>
+                </div>
+              </div>
 
-   <div className="hero-visual">
-     <div className="hero-image-placeholder">
-       Capture MySia à venir
-     </div>
-   </div>
- </div>
+              <div className="landing-phone-card__image">
+                <Image
+                  src="/imagehome copie.png"
+                  alt="Aperçu MySia"
+                  fill
+                  className="landing-phone-card__img"
+                  sizes="(max-width: 760px) 80vw, 320px"
+                  priority
+                />
+              </div>
 
- <div className="features-section">
-  <div className="features-grid">
+              <div className="landing-phone-card__bottom">
+                <div>
+                  <strong>1,81 €/pers</strong>
+                  <span>5 portions</span>
+                </div>
+                <div>
+                  <strong>1,34 €</strong>
+                  <span>économie possible</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-   <div className="feature-card">
-    <div className="feature-head">
- <div className="feature-icon">📷</div>
- <h3>Importer</h3>
- </div>
- <p>Importez une recette depuis une photo.</p>
-</div>
+      <section className="landing-how app-card">
+        <h2 className="landing-section-title">Comment ça marche</h2>
 
-<div className="feature-card">
-  <div className="feature-head">
- <div className="feature-icon">🧮</div>
- <h3>Calculer</h3>
- </div>
- <p>Visualisez immédiatement le coût total de la recette.</p>
-</div>
+        <div className="landing-how__grid">
+          <article className="landing-step">
+            <div className="landing-step__number">1</div>
+            <div>
+              <h3>Import rapide</h3>
+              <p>Photo ou capture Instagram, TikTok ou Pinterest.</p>
+            </div>
+          </article>
 
-<div className="feature-card">
-  <div className="feature-head">
- <div className="feature-icon">🧾</div>
- <h3>Détailler</h3>
- </div>
- <p>Consultez le prix des ingrédients.</p>
-</div>
+          <article className="landing-step">
+            <div className="landing-step__number">2</div>
+            <div>
+              <h3>Calculer</h3>
+              <p>Coût par personne + économies possibles.</p>
+            </div>
+          </article>
 
-<div className="feature-card">
-   <div className="feature-head">
- <div className="feature-icon">🔖</div>
- <h3>Enregistrer</h3>
- </div>
- <p>Gardez vos recettes au même endroit.</p>
-</div>
-  
- </div>
+          <article className="landing-step">
+            <div className="landing-step__number">3</div>
+            <div>
+              <h3>Budget plus malin</h3>
+              <p>Repérez les ingrédients les plus coûteux.</p>
+            </div>
+          </article>
+        </div>
+      </section>
 
- <div className="audience-section">
-   <h2>Pour qui</h2>
+      <section className="landing-cta app-card">
+        <h2>
+          Essayez MySia <span>gratuitement</span>
+        </h2>
 
-   <p>
-     MySia s’adresse aux <strong>parents</strong>, <strong>aux familles</strong> et à toute personne souhaitant
-     cuisiner en maîtrisant son budget courses.
-   </p>
+        <p>
+          Transformez dès maintenant une recette en calculant son coût en 10 secondes.
+        </p>
 
-   <p className="availability">Disponible en version web.</p>
-   </div>
- </div>
-</section>
+        <div className="landing-cta__actions">
+          <Link href="/create-account" className="app-btn landing-btn-primary">
+            Créer mon compte
+          </Link>
+        </div>
+      </section>
 
-  </main>
-)}
+      <section className="landing-mobile-extra app-card">
+        <div className="landing-mobile-extra__actions">
+          <Link href="/login" className="app-btn landing-btn-primary">
+            Connexion
+          </Link>
+        </div>
+
+        <div className="landing-mobile-benefits">
+          <article>
+            <h3>Import rapide</h3>
+            <p>Coût des recettes. Photos, captures écran Instagram ou TikTok.</p>
+          </article>
+
+          <article>
+            <h3>Prix immédiat</h3>
+            <p>Coût recette + coût courses + prix/personne.</p>
+          </article>
+
+          <article>
+            <h3>Budget plus malin</h3>
+            <p>Repérez les ingrédients qui pèsent le plus dans la recette.</p>
+          </article>
+        </div>
+
+        <div className="landing-mobile-extra__bottom">
+          <Link href="/create-account" className="app-btn landing-btn-primary">
+            Créer mon compte
+          </Link>
+        </div>
+      </section>
+    </main>
+  )
+}

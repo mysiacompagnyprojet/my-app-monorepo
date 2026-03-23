@@ -10,6 +10,8 @@ import { IngredientPicker } from '@/components/IngredientPicker'
 import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
+import { INGREDIENT_CATEGORY_META } from '@/lib/ingredient-category'
+import { Instagram } from 'lucide-react'
 
 
 type Line = IngredientLine & {
@@ -34,6 +36,7 @@ type Line = IngredientLine & {
  priceMatched?: boolean
  price?: { eurPer: number; perUnit: string } | null
  costEur?: number | null
+ category?: string | null
 }
 
 type Draft = {
@@ -67,6 +70,7 @@ type EnrichIngredientOut = {
  gramsPerPiece?: number | null
  density_g_per_ml?: number | null
  mlPerPiece?: number | null
+ category?: string | null
 }
 
 type EnrichResponse =
@@ -84,6 +88,7 @@ type EnrichResponse =
  newTotalEur?: number | null
  label?: string | null
  note?: string | null
+ category?: string | null
 }
 
 /* ──────────────────────────────────────────────────────────────
@@ -332,1270 +337,1268 @@ async function getCroppedBlob(
 }
 
 function NewRecipeInner() {
- const router = useRouter()
- const search = useSearchParams()
-
- const [title, setTitle] = useState('')
- const [servings, setServings] = useState(1)
- const [imageUrl, setImageUrl] = useState('')
- const [notes, setNotes] = useState('')
- const [steps, setSteps] = useState<string[]>([''])
- const [ingredients, setIngredients] = useState<Line[]>([
-   { name: '', quantity: 0, unit: '', buyRecalced: false },
- ])
- const [qtyInputs, setQtyInputs] = useState<string[]>([''])
- const [trash, setTrash] = useState<string>('')
- const [status, setStatus] = useState<string>('')
-
- const [isRepricing, setIsRepricing] = useState(false)
- const [economySuggestions, setEconomySuggestions] = useState<EconomySuggestion[]>([])
-
- const [blurPrices, setBlurPrices] = useState(false)
- useEffect(() => {
-   try {
-     setBlurPrices(localStorage.getItem('pricing_blur') === '1')
-   } catch {}
- }, [])
-
- const [isCropping, setIsCropping] = useState(false)
- const [crop, setCrop] = useState({ x: 0, y: 0 })
- const [zoom, setZoom] = useState(1)
- const [croppedAreaPixels, setCroppedAreaPixels] = useState<{
-   x: number
-   y: number
-   width: number
-   height: number
- } | null>(null)
- const [isUploadingCrop, setIsUploadingCrop] = useState(false)
-
- const onCropComplete = (_: any, croppedPixels: any) => {
-   setCroppedAreaPixels(croppedPixels)
- }
-
- const prefill = useMemo(() => search.get('prefill') === '1', [search])
- const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
-
- const totalCost = useMemo(() => {
-   return ingredients.reduce(
-     (acc, i) =>
-       acc + (typeof (i as any).costEur === 'number' ? ((i as any).costEur as number) : 0),
-     0
-   )
- }, [ingredients])
-
- const totalProducts = useMemo(() => {
-   return ingredients.reduce((acc, ing) => {
-     const v = computeCostCourses(ing)
-     return acc + (typeof v === 'number' ? v : 0)
-   }, 0)
- }, [ingredients])
-
- const costPerServing = useMemo(() => {
-   if (!servings || servings <= 0) return null
-   if (!totalCost || totalCost <= 0) return null
-   return totalCost / servings
- }, [totalCost, servings])
-
- function getBudgetLevel(pricePerPerson: number | null) {
-   if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
-   if (pricePerPerson < 3) return 'smart'
-   if (pricePerPerson <= 5) return 'medium'
-   if (pricePerPerson <= 8) return 'high'
-   return 'occasion'
- }
-
- const budgetLevel = getBudgetLevel(costPerServing)
-
- const topIngredients = useMemo(() => {
-   return ingredients
-     .map((ing) => {
-       const costCourses = computeCostCourses(ing)
-       return {
-         name: ing.name,
-         cost: typeof costCourses === 'number' ? costCourses : 0,
-       }
-     })
-     .filter((i) => i.name && i.cost > 0)
-     .sort((a, b) => b.cost - a.cost)
-     .slice(0, 3)
- }, [ingredients])
-
- useEffect(() => {
-   const validIngredients = ingredients
-     .map((ing) => ({
-       name: String(ing.name || '').trim(),
-       costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
-       coursesCost: (() => {
-         const v = computeCostCourses(ing)
-         return typeof v === 'number' ? v : 0
-       })(),
-       ingredientBaseId:
-         typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
-       id: typeof ing.id === 'string' ? ing.id : null,
-     }))
-     .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
-
-   const replaceableIngredients = validIngredients
-     .filter((ing) => ing.ingredientBaseId !== null)
-     .sort((a, b) => {
-       if (b.coursesCost !== a.coursesCost) return b.coursesCost - a.coursesCost
-       return b.costEur - a.costEur
-     })
-     .slice(0, 4)
-
-   if (!replaceableIngredients.length || totalCost <= 0) {
-     setEconomySuggestions([])
-     return
-   }
-
-   const timer = setTimeout(async () => {
-     try {
-       const suggestions: EconomySuggestion[] = []
-
-       for (const ing of replaceableIngredients) {
-         const json = await apiFetch<{
-           ok: boolean
-           suggestion?: EconomySuggestion | null
-         }>('/recipes/economy-suggestion', {
-           method: 'POST',
-           body: JSON.stringify({
-             ingredients: [
-               {
-                 name: ing.name,
-                 costEur: ing.costEur,
-                 ingredientBaseId: ing.ingredientBaseId,
-                 id: ing.id,
-               },
-             ],
-             totalCostEur: totalCost,
-           }),
-         })
-
-         if (json?.ok && json.suggestion) {
-           suggestions.push(json.suggestion)
-         }
-       }
-
-       setEconomySuggestions(suggestions)
-     } catch {
-       setEconomySuggestions([])
-     }
-   }, 300)
-
-   return () => clearTimeout(timer)
- }, [ingredients, totalCost])
-
- useEffect(() => {
-   if (!fromOcr) return
-
-   const raw = sessionStorage.getItem('recipeDraft')
-   if (!raw || raw === 'null' || raw === 'undefined') return
-
-   try {
-     const d = JSON.parse(raw) as OcrDraft
-
-     setTitle(String((d as any).title || ''))
-     setServings(Number((d as any).servings || 1) || 1)
-     setImageUrl(String((d as any).imageUrl || ''))
-     setNotes(String((d as any).notes || ''))
-
-     const s = Array.isArray((d as any).steps)
-       ? (d as any).steps.map((x: any) => String(x || '').trim()).filter(Boolean)
-       : []
-     setSteps(s.length ? s : [''])
-
-     const ing = Array.isArray((d as any).ingredients) ? (d as any).ingredients : []
-     const normalized = ing
-       .map((row: any): Line | null => {
-         if (!row) return null
-         if (typeof row === 'string') {
-           return { name: row, quantity: 0, unit: '', buyRecalced: false }
-         }
-         if (row.raw) {
-           return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
-         }
-
-         const buyPriceEur =
-           typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
-
-         return {
-           name: String(row.name || '').trim(),
-           quantity: Number(row.quantity || 0) || 0,
-           unit: String(row.unit || ''),
-           quantityRaw:
-             typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
-
-           price: row.price ?? null,
-           costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
-           unitPriceBuy:
-             typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
-           priceMatched:
-             typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
-           id: row.id ?? null,
-
-           buyPriceEur,
-           buyLabel:
-             typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
-           buyRefQty:
-             typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-           buyRefUnit:
-             typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
-           gramsPerPiece:
-             typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
-           density_g_per_ml:
-             typeof row.density_g_per_ml === 'number'
-               ? row.density_g_per_ml
-               : row.density_g_per_ml ?? null,
-
-           buyRecalced: typeof buyPriceEur === 'number',
-           note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
-         } as any
-       })
-       .filter((x: any): x is Line => x !== null)
-
-     const finalIngredients = normalized.length
-       ? normalized
-       : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
-
-     setIngredients(finalIngredients)
-     setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
-
-     const tr = Array.isArray((d as any).trash)
-       ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean)
-       : []
-     setTrash(tr.join('\n'))
-   } catch (e) {
-     console.error('ocrDraft parse error', e)
-   }
-
-   try {
-     sessionStorage.removeItem('recipeDraft')
-   } catch {}
- }, [fromOcr])
-
- useEffect(() => {
-   if (!prefill) return
-
-   try {
-     const raw = sessionStorage.getItem('recipeDraft')
-     if (!raw || raw === 'null' || raw === 'undefined') return
-
-     const d: Draft = JSON.parse(raw)
-
-     setTitle(String(d.title || ''))
-     setServings(Number(d.servings || 1) || 1)
-     setImageUrl(String(d.imageUrl || ''))
-     setNotes(String(d.notes || ''))
-
-     const s = Array.isArray(d.steps)
-       ? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
-       : []
-     setSteps(s.length ? s : [''])
-
-     const ing = Array.isArray(d.ingredients) ? d.ingredients : []
-     const normalized = ing
-       .map((row: any): Line | null => {
-         if (!row) return null
-         if (typeof row === 'string') {
-           return { name: row, quantity: 0, unit: '', buyRecalced: false }
-         }
-         if (row.raw) {
-           return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
-         }
-
-         const buyPriceEur =
-           typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
-
-         return {
-           name: String(row.name || '').trim(),
-           quantity: Number(row.quantity || 0) || 0,
-           unit: String(row.unit || ''),
-           quantityRaw:
-             typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
-
-           price: row.price ?? null,
-           costEur: typeof row.costEur === 'number' ? row.costEur : null,
-           unitPriceBuy:
-             typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
-           priceMatched: row.priceMatched ?? false,
-           id: row.id ?? null,
-
-           buyPriceEur,
-           buyLabel:
-             typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
-           buyRefQty:
-             typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
-           buyRefUnit:
-             typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
-           gramsPerPiece:
-             typeof row.gramsPerPiece === 'number' ? row.gramsPerPiece : row.gramsPerPiece ?? null,
-           density_g_per_ml:
-             typeof row.density_g_per_ml === 'number'
-               ? row.density_g_per_ml
-               : row.density_g_per_ml ?? null,
-
-           buyRecalced: typeof buyPriceEur === 'number',
-           note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
-         } as any
-       })
-       .filter((x: any): x is Line => x !== null)
-
-     const finalIngredients = normalized.length
-       ? normalized
-       : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
-
-     setIngredients(finalIngredients)
-     setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
-
-     const tr = Array.isArray(d.trash)
-       ? d.trash.map((x) => String(x || '').trim()).filter(Boolean)
-       : []
-     setTrash(tr.join('\n'))
-   } catch (e) {
-     console.error('prefill parse error', e)
-   }
- }, [prefill])
-
- function setIngredient(idx: number, patch: Partial<Line>) {
-   setIngredients((prev) => {
-     const copy = [...prev]
-     copy[idx] = {
-       ...copy[idx],
-       ...patch,
-       buyRecalced: false,
-     }
-     return copy
-   })
- }
-
- function setQtyInput(idx: number, raw: string) {
-   setQtyInputs((prev) => {
-     const copy = [...prev]
-     copy[idx] = raw
-     return copy
-   })
-
-   setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined } as any)
- }
-
- function removeIngredient(idx: number) {
-   setIngredients((prev) => {
-     const copy = prev.filter((_, i) => i !== idx)
-     return copy.length ? copy : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
-   })
-
-   setQtyInputs((prev) => {
-     const copy = prev.filter((_, i) => i !== idx)
-     return copy.length ? copy : ['']
-   })
- }
-
- function removeStep(idx: number) {
-   setSteps((prev) => {
-     const copy = prev.filter((_, i) => i !== idx)
-     return copy.length ? copy : ['']
-   })
- }
-
- function applyEnriched(enriched: EnrichIngredientOut[], idxs: number[]) {
-   setIngredients((prev) => {
-     const copy = [...prev]
-
-     for (let k = 0; k < enriched.length; k++) {
-       const idx = idxs[k]
-       const old = copy[idx]
-       const e = enriched[k] as any
-
-       const cost =
-         typeof e.costEur === 'number'
-           ? e.costEur
-           : typeof e.costRecipe === 'number'
-           ? e.costRecipe
-           : null
-
-       copy[idx] = {
-         ...old,
-         quantityRaw: (old as any)?.quantityRaw,
-         costEur: typeof cost === 'number' ? cost : null,
-         unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
-         priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.id),
-         id: e.id ?? null,
-         price: e.price ?? (old as any)?.price ?? null,
-
-         buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
-         buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
-         buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
-         buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
-         buyRecalced: true,
-
-         gramsPerPiece: typeof e.gramsPerPiece === 'number' ? e.gramsPerPiece : null,
-         density_g_per_ml:
-           typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
-         mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
-
-         note: typeof e.note === 'string' ? e.note : undefined,
-       } as any
-     }
-
-     return copy
-   })
- }
-
- async function recalcPrices(opts?: { silent?: boolean }) {
-   const silent = Boolean(opts?.silent)
-
-   try {
-     setIsRepricing(true)
-     if (!silent) setStatus('⏳ Recalcul des prix…')
-
-     const idxs: number[] = []
-     const list = ingredients
-       .map((i, idx) => {
-         const name = normalizeIngredientForLookup(i.name)
-         if (!name) return null
-         idxs.push(idx)
-         return {
-           name,
-           quantity: Number(i.quantity || 0) || 0,
-           unit: String(i.unit || '').trim(),
-           ingredientBaseId: (i as any).ingredientBaseId ?? null,
-         }
-       })
-       .filter(Boolean) as Array<{ name: string; quantity: number; unit: string }>
-
-     if (!list.length) {
-       if (!silent) setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.')
-       return
-     }
-
-     const json = await apiFetch<EnrichResponse>('/recipes/enrich-ingredients', {
-       method: 'POST',
-       body: JSON.stringify({ ingredients: list }),
-     })
-
-     if (!json || (json as any).ok !== true) {
-       const msg = (json as any)?.message || (json as any)?.error || 'Erreur inconnue'
-       if (!silent) setStatus('❌ Recalcul impossible: ' + msg)
-       return
-     }
-
-     const enriched = Array.isArray((json as any).ingredients)
-       ? (json as any).ingredients
-       : []
-
-     if (!enriched.length) {
-       if (!silent) setStatus('❌ Recalcul impossible: réponse vide.')
-       return
-     }
-
-     applyEnriched(enriched, idxs)
-     if (!silent) setStatus('✅ Prix recalculés')
-   } catch (e: any) {
-     if (!silent) setStatus('❌ ' + (e?.message || 'Erreur'))
-   } finally {
-     setIsRepricing(false)
-   }
- }
-
- const repricingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
- const lastSigRef = useRef<string>('')
-
- const ingredientsSig = useMemo(() => {
-   return ingredients
-     .map(
-       (i) =>
-         `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`
-     )
-     .join('||')
- }, [ingredients])
-
- useEffect(() => {
-   if (!ingredients.length) return
-   const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
-   if (!hasRealIngredient) return
-
-   if (ingredientsSig === lastSigRef.current) return
-   lastSigRef.current = ingredientsSig
-
-   if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
-
-   repricingTimerRef.current = setTimeout(() => {
-     recalcPrices({ silent: true })
-   }, 500)
-
-   return () => {
-     if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
-   }
- }, [ingredientsSig])
-
- async function uploadCroppedImage(croppedBlob: Blob) {
-   const form = new FormData()
-   form.append('file', croppedBlob, 'recipe.jpg')
-
-   const res = await apiFetch<{ ok: true; imageUrl: string }>('/upload/recipe-image', {
-     method: 'POST',
-     body: form as any,
-   })
-
-   setImageUrl(res.imageUrl)
- }
-
- async function confirmCrop() {
-   if (!imageUrl || !croppedAreaPixels) return
-   try {
-     setIsUploadingCrop(true)
-     setStatus('⏳ Recadrage en cours…')
-     const blob = await getCroppedBlob(imageUrl, croppedAreaPixels)
-     await uploadCroppedImage(blob)
-     setIsCropping(false)
-     setStatus('✅ Image recadrée')
-   } catch (e: any) {
-     console.error(e)
-     setStatus('❌ ' + (e?.message || 'Erreur recadrage'))
-   } finally {
-     setIsUploadingCrop(false)
-   }
- }
-
- async function save() {
-   try {
-     setStatus('⏳ Enregistrement…')
-
-     const payload = {
-       title: title.trim() || 'Recette',
-       servings: Number(servings || 1) || 1,
-       imageUrl: imageUrl.trim() || null,
-       notes: (notes || '').trim(),
-       steps: steps.map((s) => String(s || '').trim()).filter(Boolean),
-       ingredients: ingredients
-         .map((i) => ({
-           name: String(i.name || '').trim(),
-           quantity: Number(i.quantity || 0) || 0,
-           unit: String(i.unit || '').trim(),
-         }))
-         .filter((i) => i.name),
-     }
-
-     await apiFetch('/recipes', {
-       method: 'POST',
-       body: JSON.stringify(payload),
-     })
-
-     setStatus('✅ Recette enregistrée')
-     try {
-       sessionStorage.removeItem('recipeDraft')
-     } catch {}
-     router.push('/recipes')
-   } catch (e: any) {
-     setStatus('❌ ' + (e?.message || 'Erreur'))
-   }
- }
-
- const statusKind = status.startsWith('✅')
-   ? 'success'
-   : status.startsWith('❌')
-   ? 'error'
-   : status
-   ? 'info'
-   : null
-
- const smallXBtnStyle: React.CSSProperties = {
-   width: 30,
-   height: 30,
-   padding: 0,
-   display: 'grid',
-   placeItems: 'center',
-   fontSize: 14,
-   lineHeight: '14px',
-   borderRadius: 10,
- }
-
- const sectionTitleStyle: React.CSSProperties = {
-   fontSize: '1.13rem',
-   fontWeight: 800,
-   color: 'var(--primary)',
- }
-
- return (
-   <main className="app-container recipe-editor-page">
-     <section className="recipe-editor-head">
-       <input
-         value={title}
-         onChange={(e) => setTitle(e.target.value)}
-         placeholder="Titre de la recette"
-         className="recipe-title editable-title"
-         style={{
-           background: 'transparent',
-           border: 'none',
-           outline: 'none',
-           width: '100%',
-         }}
-       />
-
-       <p className="recipe-editor-subtitle">
-         Remplis l’essentiel. Tu peux toujours ajuster plus tard.
-       </p>
-
-       {blurPrices && (
-         <p className="mt-2 text-sm app-muted" style={{ fontWeight: 800 }}>
-           ⚠️ Limite atteinte : les prix sont floutés.
-         </p>
-       )}
-     </section>
-
-     {blurPrices && <PricingPaywallNotice context="import" />}
-
-     {trash.trim() && (
-       <section className="app-card p-5" style={{ marginTop: 16 }}>
-         <details>
-           <summary
-             style={{
-               cursor: 'pointer',
-               fontWeight: 800,
-               color: 'var(--primary)',
-             }}
-            >
-             🗑️ Corbeille (texte non-recette détecté)
-           </summary>
-
-           <p className="mt-2 text-sm app-muted">
-             Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
-           </p>
-
-           <textarea
-             value={trash}
-             onChange={(e) => setTrash(e.target.value)}
-             rows={6}
-             className="mt-3 w-full"
-             style={{
-               background: 'white',
-               border: '1px solid var(--border)',
-               borderRadius: 12,
-               padding: 12,
-             }}
-           />
-         </details>
-       </section>
-     )}
-
-     <section className="app-card recipe-editor-hero-card">
-       <div className="recipe-form-top-grid">
-         <div style={{ display: 'grid', gap: 21 }}>
-           <label className="recipe-servings-block">
-             <span className="recipe-servings-label">Portions</span>
-
-             <div className="recipe-servings-control">
-               <button
-                 type="button"
-                 className="app-btn app-btn-utility recipe-servings-btn"
-                 onClick={() => setServings((prev) => Math.max(1, prev - 1))}
-                 aria-label="Réduire le nombre de portions"
-                >
-                 −
-               </button>
-
-               <input
-                 type="number"
-                 min={1}
-                 inputMode="numeric"
-                 value={servings}
-                 onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
-                 className="app-btn app-btn-utility recipe-servings-input"
-               />
-
-               <button
-                 type="button"
-                 className="app-btn app-btn-utility recipe-servings-btn"
-                 onClick={() => setServings((prev) => prev + 1)}
-                 aria-label="Augmenter le nombre de portions"
-                >
-                 +
-               </button>
-             </div>
-           </label>
-
-           <label className="grid gap-1 text-sm font-semibold app-btn app-btn-utility paper-ui recipe-color-2">
-             Notes
-
-             <textarea
-               value={notes}
-               onChange={(e) => setNotes(e.target.value)}
-               rows={6}
-               style={{ minHeight: 170 }}
-             />
-           </label>
-         </div>
-
-         <div style={{ display: 'grid', gap: 14 }}>
-           <label className="recipe-editor-image-drop">
-             <input
-               type="file"
-               accept="image/*"
-               style={{ display: 'none' }}
-               onChange={(e) => {
-                 const file = e.target.files?.[0]
-                 if (!file) return
-
-                 const localUrl = URL.createObjectURL(file)
-                 setImageUrl(localUrl)
-               }}
-             />
-
-             {imageUrl ? (
-               <div className="recipe-editor-image-stack">
-                 <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
-
-                 <input
-                   value={imageUrl}
-                   onClick={(e) => e.stopPropagation()}
-                   onChange={(e) => setImageUrl(e.target.value)}
-                   className="recipe-editor-image-url"
-                 />
-
-                 <button
-                   type="button"
-                   className="app-btn recipe-editor-secondary-btn"
-                   onClick={(e) => {
-                     e.preventDefault()
-                     setCrop({ x: 0, y: 0 })
-                     setZoom(1)
-                     setCroppedAreaPixels(null)
-                     setIsCropping(true)
-                   }}
-                  >
-                   Recadrer l’image
-                 </button>
-               </div>
-             ) : (
-               <>
-                 <div className="recipe-editor-image-plus">+</div>
-
-                 <div className="recipe-editor-image-title">Ajouter une image</div>
-
-                 <div className="recipe-editor-image-hint">
-                   Clique sur le + pour choisir une photo
-                 </div>
-               </>
-             )}
-           </label>
-
-           <div className="recipe-editor-costs">
-             <div className="recipe-editor-costs-card">
-               <div className="cost-pill-row cost-pill-row-recipe">
-                 <span className="cost-pill-label recipe-color-2">Coût de la recette</span>
-                 <span className="amount">
-                   {' ≈ '} <Price value={totalCost} blur={blurPrices} />
-                 </span>
-               </div>
-             </div>
-
-             <div className="recipe-editor-costs-card">
-               <div className="cost-pill-row cost-pill-row-courses">
-                 <span className="cost-pill-label recipe-color-2">Coût des courses</span>
-                 <span className="amount">
-                   {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
-                 </span>
-               </div>
-             </div>
-           </div>
-
-           {totalCost > 0 && (
-             <div
-               className="recipe-analysis-card"
-               style={{
-                 marginTop: 16,
-                 background: 'rgba(176,188,140,0.08)',
-                 border: '1px solid rgba(176,188,140,0.25)',
-               }}
+  const router = useRouter()
+  const search = useSearchParams()
+  const editId = search.get('edit')
+  const isEdit = Boolean(editId)
+
+  const [title, setTitle] = useState('')
+  const [servings, setServings] = useState(1)
+  const [imageUrl, setImageUrl] = useState('')
+  const [notes, setNotes] = useState('')
+  const [steps, setSteps] = useState<string[]>([''])
+  const [ingredients, setIngredients] = useState<Line[]>([
+    { name: '', quantity: 0, unit: '', buyRecalced: false },
+  ])
+  const [qtyInputs, setQtyInputs] = useState<string[]>([''])
+  const [trash, setTrash] = useState<string>('')
+  const [status, setStatus] = useState<string>('')
+
+  const [isRepricing, setIsRepricing] = useState(false)
+  const [economySuggestions, setEconomySuggestions] = useState<EconomySuggestion[]>([])
+
+  const [blurPrices, setBlurPrices] = useState(false)
+  useEffect(() => {
+    try {
+      setBlurPrices(localStorage.getItem('pricing_blur') === '1')
+    } catch {}
+  }, [])
+
+  const [isCropping, setIsCropping] = useState(false)
+  const [crop, setCrop] = useState({ x: 0, y: 0 })
+  const [zoom, setZoom] = useState(1)
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<{
+    x: number
+    y: number
+    width: number
+    height: number
+  } | null>(null)
+  const [isUploadingCrop, setIsUploadingCrop] = useState(false)
+
+  const onCropComplete = (_: any, croppedPixels: any) => {
+    setCroppedAreaPixels(croppedPixels)
+  }
+
+  const prefill = useMemo(() => search.get('prefill') === '1', [search])
+  const fromOcr = useMemo(() => search.get('from') === 'ocr', [search])
+
+  const totalCost = useMemo(() => {
+    return ingredients.reduce(
+      (acc, i) =>
+        acc + (typeof (i as any).costEur === 'number' ? ((i as any).costEur as number) : 0),
+      0
+    )
+  }, [ingredients])
+
+  const totalProducts = useMemo(() => {
+    return ingredients.reduce((acc, ing) => {
+      const v = computeCostCourses(ing)
+      return acc + (typeof v === 'number' ? v : 0)
+    }, 0)
+  }, [ingredients])
+
+  const costPerServing = useMemo(() => {
+    if (!servings || servings <= 0) return null
+    if (!totalCost || totalCost <= 0) return null
+    return totalCost / servings
+  }, [totalCost, servings])
+
+  function getBudgetLevel(pricePerPerson: number | null) {
+    if (pricePerPerson == null || !Number.isFinite(pricePerPerson)) return null
+    if (pricePerPerson < 3) return 'smart'
+    if (pricePerPerson <= 5) return 'medium'
+    if (pricePerPerson <= 8) return 'high'
+    return 'high'
+  }
+
+  const budgetLevel = getBudgetLevel(costPerServing)
+
+  const topIngredients = useMemo(() => {
+    return ingredients
+      .map((ing) => {
+        const costCourses = computeCostCourses(ing)
+        return {
+          name: ing.name,
+          cost: typeof costCourses === 'number' ? costCourses : 0,
+        }
+      })
+      .filter((i) => i.name && i.cost > 0)
+      .sort((a, b) => b.cost - a.cost)
+      .slice(0, 3)
+  }, [ingredients])
+
+  useEffect(() => {
+    const validIngredients = ingredients
+      .map((ing) => ({
+        name: String(ing.name || '').trim(),
+        costEur: typeof ing.costEur === 'number' ? ing.costEur : 0,
+        coursesCost: (() => {
+          const v = computeCostCourses(ing)
+          return typeof v === 'number' ? v : 0
+        })(),
+        ingredientBaseId:
+          typeof ing.ingredientBaseId === 'string' ? ing.ingredientBaseId : null,
+        id: typeof ing.id === 'string' ? ing.id : null,
+      }))
+      .filter((ing) => ing.name && ing.costEur > 0 && (ing.ingredientBaseId || ing.id))
+
+    const replaceableIngredients = validIngredients
+      .filter((ing) => ing.ingredientBaseId !== null)
+      .sort((a, b) => {
+        if (b.coursesCost !== a.coursesCost) return b.coursesCost - a.coursesCost
+        return b.costEur - a.costEur
+      })
+      .slice(0, 4)
+
+    if (!replaceableIngredients.length || totalCost <= 0) {
+      setEconomySuggestions([])
+      return
+    }
+
+    const timer = setTimeout(async () => {
+      try {
+        const suggestions: EconomySuggestion[] = []
+
+        for (const ing of replaceableIngredients) {
+          const json = await apiFetch<{
+            ok: boolean
+            suggestion?: EconomySuggestion | null
+          }>('/recipes/economy-suggestion', {
+            method: 'POST',
+            body: JSON.stringify({
+              ingredients: [
+                {
+                  name: ing.name,
+                  costEur: ing.costEur,
+                  ingredientBaseId: ing.ingredientBaseId,
+                  id: ing.id,
+                },
+              ],
+              totalCostEur: totalCost,
+            }),
+          })
+
+          if (json?.ok && json.suggestion) {
+            suggestions.push(json.suggestion)
+          }
+        }
+
+        setEconomySuggestions(suggestions)
+      } catch {
+        setEconomySuggestions([])
+      }
+    }, 300)
+
+    return () => clearTimeout(timer)
+  }, [ingredients, totalCost])
+
+  useEffect(() => {
+    if (!fromOcr) return
+
+    const raw = sessionStorage.getItem('recipeDraft')
+    if (!raw || raw === 'null' || raw === 'undefined') return
+
+    try {
+      const d = JSON.parse(raw) as OcrDraft
+
+      setTitle(String((d as any).title || ''))
+      setServings(Number((d as any).servings || 1) || 1)
+      setImageUrl(String((d as any).imageUrl || ''))
+      setNotes(String((d as any).notes || ''))
+
+      const s = Array.isArray((d as any).steps)
+        ? (d as any).steps.map((x: any) => String(x || '').trim()).filter(Boolean)
+        : []
+      setSteps(s.length ? s : [''])
+
+      const ing = Array.isArray((d as any).ingredients) ? (d as any).ingredients : []
+      const normalized = ing
+        .map((row: any): Line | null => {
+          if (!row) return null
+          if (typeof row === 'string') {
+            return { name: row, quantity: 0, unit: '', buyRecalced: false }
+          }
+          if (row.raw) {
+            return { name: String(row.raw), quantity: 0, unit: '', buyRecalced: false }
+          }
+
+          const buyPriceEur =
+            typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+
+          return {
+            name: String(row.name || '').trim(),
+            quantity: Number(row.quantity || 0) || 0,
+            unit: String(row.unit || ''),
+            quantityRaw:
+              typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+
+            price: row.price ?? null,
+            costEur: typeof row.costEur === 'number' ? row.costEur : row.costEur ?? null,
+            unitPriceBuy:
+              typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+            priceMatched:
+              typeof row.priceMatched === 'boolean' ? row.priceMatched : undefined,
+            id: row.id ?? null,
+
+            buyPriceEur,
+            buyLabel:
+              typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
+            buyRefQty:
+              typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
+            buyRefUnit:
+              typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+            gramsPerPiece:
+              typeof row.gramsPerPiece === 'number'
+                ? row.gramsPerPiece
+                : row.gramsPerPiece ?? null,
+            density_g_per_ml:
+              typeof row.density_g_per_ml === 'number'
+                ? row.density_g_per_ml
+                : row.density_g_per_ml ?? null,
+
+            buyRecalced: typeof buyPriceEur === 'number',
+            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
+          } as any
+        })
+        .filter((x: any): x is Line => x !== null)
+
+      const finalIngredients = normalized.length
+        ? normalized
+        : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
+      setIngredients(finalIngredients)
+      setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
+
+      const tr = Array.isArray((d as any).trash)
+        ? (d as any).trash.map((x: any) => String(x || '').trim()).filter(Boolean)
+        : []
+      setTrash(tr.join('\n'))
+    } catch (e) {
+      console.error('ocrDraft parse error', e)
+    }
+
+    try {
+      sessionStorage.removeItem('recipeDraft')
+    } catch {}
+  }, [fromOcr])
+
+  useEffect(() => {
+    if (!prefill) return
+
+    try {
+      const raw = sessionStorage.getItem('recipeDraft')
+      if (!raw || raw === 'null' || raw === 'undefined') return
+
+      const d: Draft = JSON.parse(raw)
+
+      setTitle(String(d.title || ''))
+      setServings(Number(d.servings || 1) || 1)
+      setImageUrl(String(d.imageUrl || ''))
+      setNotes(String(d.notes || ''))
+
+      const s = Array.isArray(d.steps)
+        ? d.steps.map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+      setSteps(s.length ? s : [''])
+
+      const ing = Array.isArray(d.ingredients) ? d.ingredients : []
+      const normalized = ing
+        .map((row: any): Line | null => {
+          if (!row) return null
+          if (typeof row === 'string') {
+            return { name: row, quantity: 0, unit: '', buyRecalced: false }
+          }
+          if (row.raw) {
+            return { 
+              name: String(row.raw), 
+              quantity: 0, unit: '', buyRecalced: false }
+          }
+
+          const buyPriceEur =
+            typeof row.buyPriceEur === 'number' ? row.buyPriceEur : row.buyPriceEur ?? null
+
+          return {
+            name: String(row.name || '').trim(),
+            quantity: Number(row.quantity || 0) || 0,
+            unit: String(row.unit || ''),
+            quantityRaw:
+              typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
+
+            price: row.price ?? null,
+            costEur: typeof row.costEur === 'number' ? row.costEur : null,
+            unitPriceBuy:
+              typeof row.unitPriceBuy === 'number' ? row.unitPriceBuy : row.unitPriceBuy ?? null,
+            priceMatched: row.priceMatched ?? false,
+            id: row.id ?? null,
+
+            buyPriceEur,
+            buyLabel:
+              typeof row.buyLabel === 'string' ? row.buyLabel : row.buyLabel ?? null,
+            buyRefQty:
+              typeof row.buyRefQty === 'number' ? row.buyRefQty : row.buyRefQty ?? null,
+            buyRefUnit:
+              typeof row.buyRefUnit === 'string' ? row.buyRefUnit : row.buyRefUnit ?? null,
+            gramsPerPiece:
+              typeof row.gramsPerPiece === 'number'
+                ? row.gramsPerPiece
+                : row.gramsPerPiece ?? null,
+            density_g_per_ml:
+              typeof row.density_g_per_ml === 'number'
+                ? row.density_g_per_ml
+                : row.density_g_per_ml ?? null,
+
+            buyRecalced: typeof buyPriceEur === 'number',
+            note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
+          } as any
+        })
+        .filter((x: any): x is Line => x !== null)
+
+      const finalIngredients = normalized.length
+        ? normalized
+        : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
+      setIngredients(finalIngredients)
+      setQtyInputs(finalIngredients.map((r: any) => formatQtyForInput(r.quantity, r.quantityRaw)))
+
+      const tr = Array.isArray(d.trash)
+        ? d.trash.map((x) => String(x || '').trim()).filter(Boolean)
+        : []
+      setTrash(tr.join('\n'))
+    } catch (e) {
+      console.error('prefill parse error', e)
+    }
+  }, [prefill])
+
+  useEffect(() => {
+  if (!editId) return
+
+  async function loadRecipe() {
+    try {
+      const data = await apiFetch<{ ok?: boolean; recipe?: any }>(`/recipes/${editId}`)
+
+      const r = (data as any)?.recipe
+      if (!r) return
+
+      setTitle(String(r.title || ''))
+      setServings(Number(r.servings || 1) || 1)
+      setImageUrl(String(r.imageUrl || ''))
+      setNotes(String(r.notes || ''))
+
+      const s = Array.isArray(r.steps)
+        ? r.steps.map((x: any) => String(x || '').trim()).filter(Boolean)
+        : []
+      setSteps(s.length ? s : [''])
+
+      const ing = Array.isArray(r.ingredients) ? r.ingredients : []
+
+      const normalized = ing.map((row: any) => ({
+        name: String(row.name || '').trim(),
+        quantity: Number(row.quantity || 0) || 0,
+        unit: String(row.unit || ''),
+        buyRecalced: false,
+
+        costEur: typeof row.costRecipe === 'number' ? row.costRecipe : null,
+        buyPriceEur: typeof row.buyPriceEur === 'number' ? row.buyPriceEur : null,
+
+        category: typeof row.category === 'string' ? row.category : null,
+
+        id: row.id ?? null,
+        ingredientBaseId: row.airtableId ?? row.id ?? null,
+      }))
+
+      const finalIngredients = normalized.length
+        ? normalized
+        : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+
+      setIngredients(finalIngredients as Line[])
+      setQtyInputs(finalIngredients.map((i: any) => formatQtyForInput(i.quantity)))
+    } catch (e) {
+      console.error('loadRecipe error', e)
+    }
+  }
+
+  loadRecipe()
+}, [editId])
+
+  function setIngredient(idx: number, patch: Partial<Line>) {
+    setIngredients((prev) => {
+      const copy = [...prev]
+      copy[idx] = {
+        ...copy[idx],
+        ...patch,
+        buyRecalced: false,
+      }
+      return copy
+    })
+  }
+
+  function setQtyInput(idx: number, raw: string) {
+    setQtyInputs((prev) => {
+      const copy = [...prev]
+      copy[idx] = raw
+      return copy
+    })
+
+    setIngredient(idx, { quantity: parseQtyInput(raw), quantityRaw: undefined } as any)
+  }
+
+  function removeIngredient(idx: number) {
+    setIngredients((prev) => {
+      const copy = prev.filter((_, i) => i !== idx)
+      return copy.length ? copy : [{ name: '', quantity: 0, unit: '', buyRecalced: false }]
+    })
+
+    setQtyInputs((prev) => {
+      const copy = prev.filter((_, i) => i !== idx)
+      return copy.length ? copy : ['']
+    })
+  }
+
+  function removeStep(idx: number) {
+    setSteps((prev) => {
+      const copy = prev.filter((_, i) => i !== idx)
+      return copy.length ? copy : ['']
+    })
+  }
+
+  function applyEnriched(enriched: EnrichIngredientOut[], idxs: number[]) {
+    setIngredients((prev) => {
+      const copy = [...prev]
+
+      for (let k = 0; k < enriched.length; k++) {
+        const idx = idxs[k]
+        const old = copy[idx]
+        const e = enriched[k] as any
+
+        const cost =
+          typeof e.costEur === 'number'
+            ? e.costEur
+            : typeof e.costRecipe === 'number'
+            ? e.costRecipe
+            : null
+
+        copy[idx] = {
+          ...old,
+          quantityRaw: (old as any)?.quantityRaw,
+          costEur: typeof cost === 'number' ? cost : null,
+          unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
+          priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.id),
+          id: e.id ?? null,
+          price: e.price ?? (old as any)?.price ?? null,
+
+          buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
+          buyLabel: typeof e.buyLabel === 'string' ? e.buyLabel : null,
+          buyRefQty: typeof e.buyRefQty === 'number' ? e.buyRefQty : null,
+          buyRefUnit: typeof e.buyRefUnit === 'string' ? e.buyRefUnit : null,
+          buyRecalced: true,
+
+          gramsPerPiece: typeof e.gramsPerPiece === 'number' ? e.gramsPerPiece : null,
+          density_g_per_ml:
+            typeof e.density_g_per_ml === 'number' ? e.density_g_per_ml : null,
+          mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
+
+          note: typeof e.note === 'string' ? e.note : undefined,
+          category: (old as any).category ?? null, 
+        } as any
+      }
+
+      return copy
+    })
+  }
+
+  async function recalcPrices(opts?: { silent?: boolean }) {
+    const silent = Boolean(opts?.silent)
+
+    try {
+      setIsRepricing(true)
+      if (!silent) setStatus('⏳ Recalcul des prix…')
+
+      const idxs: number[] = []
+      const list = ingredients
+        .map((i, idx) => {
+          const name = normalizeIngredientForLookup(i.name)
+          if (!name) return null
+          idxs.push(idx)
+          return {
+            name,
+            quantity: Number(i.quantity || 0) || 0,
+            unit: String(i.unit || '').trim(),
+            ingredientBaseId: (i as any).ingredientBaseId ?? null,
+          }
+        })
+        .filter(Boolean) as Array<{ 
+          name: string; quantity: number; unit: string }>
+
+      if (!list.length) {
+        if (!silent) setStatus('❌ Ajoute au moins un ingrédient avant de recalculer.')
+        return
+      }
+
+      const json = await apiFetch<EnrichResponse>('/recipes/enrich-ingredients', {
+        method: 'POST',
+        body: JSON.stringify({ ingredients: list }),
+      })
+
+      if (!json || (json as any).ok !== true) {
+        const msg = (json as any)?.message || (json as any)?.error || 'Erreur inconnue'
+        if (!silent) setStatus('❌ Recalcul impossible: ' + msg)
+        return
+      }
+
+      const enriched = Array.isArray((json as any).ingredients)
+        ? (json as any).ingredients
+        : []
+
+      if (!enriched.length) {
+        if (!silent) setStatus('❌ Recalcul impossible: réponse vide.')
+        return
+      }
+
+      applyEnriched(enriched, idxs)
+      if (!silent) setStatus('✅ Prix recalculés')
+    } catch (e: any) {
+      if (!silent) setStatus('❌ ' + (e?.message || 'Erreur'))
+    } finally {
+      setIsRepricing(false)
+    }
+  }
+
+  const repricingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastSigRef = useRef<string>('')
+
+  const ingredientsSig = useMemo(() => {
+    return ingredients
+      .map(
+        (i) =>
+          `${String(i.name || '').trim()}|${Number(i.quantity || 0) || 0}|${String(i.unit || '').trim()}`
+      )
+      .join('||')
+  }, [ingredients])
+
+  useEffect(() => {
+    if (!ingredients.length) return
+    const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
+    if (!hasRealIngredient) return
+
+    if (ingredientsSig === lastSigRef.current) return
+    lastSigRef.current = ingredientsSig
+
+    if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
+
+    repricingTimerRef.current = setTimeout(() => {
+      recalcPrices({ silent: true })
+    }, 500)
+
+    return () => {
+      if (repricingTimerRef.current) clearTimeout(repricingTimerRef.current)
+    }
+  }, [ingredientsSig])
+
+  async function uploadCroppedImage(croppedBlob: Blob) {
+    const form = new FormData()
+    form.append('file', croppedBlob, 'recipe.jpg')
+
+    const res = await apiFetch<{ ok: true; imageUrl: string }>('/upload/recipe-image', {
+      method: 'POST',
+      body: form as any,
+    })
+
+    setImageUrl(res.imageUrl)
+  }
+
+  async function confirmCrop() {
+    if (!imageUrl || !croppedAreaPixels) return
+    try {
+      setIsUploadingCrop(true)
+      setStatus('⏳ Recadrage en cours…')
+      const blob = await getCroppedBlob(imageUrl, croppedAreaPixels)
+      await uploadCroppedImage(blob)
+      setIsCropping(false)
+      setStatus('✅ Image recadrée')
+    } catch (e: any) {
+      console.error(e)
+      setStatus('❌ ' + (e?.message || 'Erreur recadrage'))
+    } finally {
+      setIsUploadingCrop(false)
+    }
+  }
+
+  async function save() {
+    try {
+      setStatus('⏳ Enregistrement…')
+
+      const payload = {
+        title: title.trim() || 'Recette',
+        servings: Number(servings || 1) || 1,
+        imageUrl: imageUrl.trim() || null,
+        notes: (notes || '').trim(),
+        steps: steps.map((s) => String(s || '').trim()).filter(Boolean),
+        ingredients: ingredients
+          .map((i) => ({
+            name: String(i.name || '').trim(),
+            quantity: Number(i.quantity || 0) || 0,
+            unit: String(i.unit || '').trim(),
+          }))
+          .filter((i) => i.name),
+      }
+
+      const endpoint = isEdit ? `/recipes/${editId}`: '/recipes'
+      const method = isEdit ? 'PUT' : 'POST'
+
+      await apiFetch(endpoint, {
+        method,
+        body: JSON.stringify(payload),
+      })
+
+      setStatus(isEdit ? '✅ Recette mise à jour' : '✅ Recette enregistrée')
+      try {
+        sessionStorage.removeItem('recipeDraft')
+      } catch {}
+      router.push('/recipes')
+    } catch (e: any) {
+      setStatus('❌ ' + (e?.message || 'Erreur'))
+    }
+  }
+
+  const statusKind = status.startsWith('✅')
+  ? 'success'
+  : status.startsWith('❌')
+  ? 'error'
+  : status
+  ? 'info'
+  : null
+
+return (
+  <main className="app-container recipe-editor-page">
+    <section className="recipe-editor-head">
+      <input
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        placeholder="Titre de la recette"
+        className="recipe-editor-title-input recipe-editor-title-field"
+      />
+
+      <p className="recipe-editor-subtitle">
+        Remplis l’essentiel. Tu peux toujours ajuster plus tard.
+      </p>
+
+      {blurPrices && (
+        <p className="recipe-editor-section-text recipe-editor-alert-text">
+          ⚠️ Limite atteinte : les prix sont floutés.
+        </p>
+      )}
+    </section>
+
+    {blurPrices && <PricingPaywallNotice context="import" />}
+
+    {trash.trim() && (
+      <section className="recipe-editor-trash-card">
+        <details>
+          <summary className="recipe-editor-trash-summary">
+            🗑️ Corbeille (texte non-recette détecté)
+          </summary>
+
+          <p className="recipe-editor-trash-text">
+            Rien n’est envoyé en base ici : c’est juste pour voir ce qui a été filtré.
+          </p>
+
+          <textarea
+            value={trash}
+            onChange={(e) => setTrash(e.target.value)}
+            rows={6}
+            className="recipe-editor-trash-textarea"
+          />
+        </details>
+      </section>
+    )}
+
+    <section className="recipe-editor-hero-card">
+      <div className="recipe-form-top-grid">
+        <div className="recipe-editor-left-col">
+          <label className="recipe-servings-block">
+            <span className="recipe-servings-label">Portions</span>
+
+            <div className="recipe-servings-control">
+              <button
+                type="button"
+                className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
+                onClick={() => setServings((prev) => Math.max(1, prev - 1))}
+                aria-label="Réduire le nombre de portions"
               >
-               {budgetLevel && (
-                 <div className="recipe-budget-pills">
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}
-                    >
-                     Budget malin
-                   </div>
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}
-                    >
-                     Budget moyen
-                   </div>
-                   <div
-                     className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}
-                    >
-                     Budget élevé
-                   </div>
-                 </div>
-               )}
+                −
+              </button>
 
-               {topIngredients.length > 0 && (
-                 <div>
-                   <h3 className="recipe-analysis-section-title">
-                     Les ingrédients les plus élevés :
-                   </h3>
+              <input
+                type="number"
+                min={1}
+                inputMode="numeric"
+                value={servings}
+                onChange={(e) => setServings(Math.max(1, Number(e.target.value || 1)))}
+                className="recipe-editor-input recipe-servings-input"
+              />
 
-                   <div style={{ display: 'grid', gap: 4 }}>
-                     {topIngredients.map((i, index) => (
-                       <div key={index} className="recipe-analysis-top-item">
-                         <span>
-                           • {index + 1} {i.name}
-                         </span>
+              <button
+                type="button"
+                className="recipe-editor-btn recipe-editor-btn-ghost recipe-servings-btn"
+                onClick={() => setServings((prev) => prev + 1)}
+                aria-label="Augmenter le nombre de portions"
+              >
+                +
+              </button>
+            </div>
+          </label>
 
-                         <span className="recipe-analysis-price">
-                           <Price value={i.cost} blur={blurPrices} />
-                         </span>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
+          <label className="recipe-editor-notes-card">
+            <span className="recipe-editor-notes-label">Notes</span>
 
-               {costPerServing && (
-                 <div className="recipe-analysis-serving-card">
-                   <div className="recipe-analysis-serving-label">Prix par personne :</div>
-                   <div className="recipe-analysis-serving-value">
-                     <Price value={costPerServing} blur={blurPrices} />
-                   </div>
-                   <div className="recipe-analysis-serving-meta">{servings} portions</div>
-                 </div>
-               )}
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={6}
+              className="recipe-editor-notes-textarea"
+            />
+          </label>
 
-               {economySuggestions.length > 0 && (
-                 <div style={{ marginTop: 16 }}>
-                   <div className="recipe-analysis-section-title">
-                     Comment réduire le coût :
-                   </div>
+          {totalCost > 0 && (
+            <div className="recipe-analysis-card recipe-analysis-card--summary">
+              {budgetLevel && (
+                <div className="recipe-budget-pills">
+                  <div className={`recipe-budget-pill ${budgetLevel === 'smart' ? 'is-active' : ''}`}>
+                    Budget malin
+                  </div>
 
-                   <div style={{ display: 'grid', gap: 12 }}>
-                     {economySuggestions.map((suggestion, index) => (
-                       <div
-                         key={`${suggestion.ingredientName}-${index}`}
-                         className="recipe-analysis-saving-box"
+                  <div className={`recipe-budget-pill ${budgetLevel === 'medium' ? 'is-active' : ''}`}>
+                    Budget moyen
+                  </div>
+
+                  <div className={`recipe-budget-pill ${budgetLevel === 'high' ? 'is-active' : ''}`}>
+                    Budget élevé
+                  </div>
+                </div>
+              )}
+
+              {topIngredients.length > 0 && (
+                <div className="recipe-analysis-top-block">
+                  <h3 className="recipe-analysis-section-title">
+                    Les ingrédients les plus élevés :
+                  </h3>
+
+                  <div className="recipe-analysis-top-list">
+                    {topIngredients.map((i, index) => (
+                      <div key={index} className="recipe-analysis-top-item">
+                        <span>
+                          • {index + 1} {i.name}
+                        </span>
+
+                        <span className="recipe-analysis-price">
+                          <Price value={i.cost} blur={blurPrices} />
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <section className="recipe-editor-ingredients-section">
+            <div className="recipe-editor-ingredients-head">
+              <div className="recipe-editor-section-heading">
+                <h2 className="recipe-editor-section-title">
+                  Ingrédients
+                </h2>
+
+                <p className="recipe-editor-section-text">
+                  Un ingrédient par ligne : nom, quantité, unité.
+                </p>
+              </div>
+
+              <button
+                onClick={() => recalcPrices({ silent: false })}
+                disabled={isRepricing}
+                className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-recalc-btn"
+                type="button"
+              >
+                {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
+              </button>
+            </div>
+
+            <div className="recipe-editor-ingredients-shell">
+              {ingredients.map((ing, idx) => {
+                const costCourses = computeCostCourses(ing)
+                const costRecipe =
+                  typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
+
+                return (
+                  <div key={idx} className="recipe-editor-ingredient-line">
+                    <div className="recipe-editor-ingredient-desktop">
+                      <div className="recipe-editor-ingredient-main">
+                      <div className="ingredient-cell-name">
+                        <div className="recipe-editor-ingredient-name-wrap">
+                          {ing.category && INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META] ? (
+                          <span 
+                          className="recipe-editor-ingredient-icon"
+                            style={{
+                              color:
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].color,
+                              background:
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].bg,
+                            }}
+                            >
+                            {(() => {
+                              const Icon = 
+                              INGREDIENT_CATEGORY_META[ing.category as keyof typeof INGREDIENT_CATEGORY_META].icon
+                            return <Icon size={16} strokeWidth={2}/>
+                            })()}
+                              </span>
+                            ) : null}
+
+                              <input
+                                placeholder="Nom de l'ingrédient..."
+                                  value={ing.name}
+                                    onChange={(e) => setIngredient(idx, { name: e.target.value })}
+                                      className="recipe-editor-ingredient-name"
+                                      />
+                                      </div>
+                                      </div>
+                      <div className="recipe-editor-ingredient-inline">
+                      <div className="recipe-editor-ingredient-picker-wrap">
+                        <IngredientPicker
+                          querySeed={normalizeIngredientForLookup(ing.name)}
+                          onPick={(item) => {
+                            setIngredient(idx, {
+                              name: item.nom,
+                              ingredientBaseId: item.id,
+                              id: item.id as any,
+                              category: typeof item.category === 'string' ? item.category : null,
+                            })
+
+                            setTimeout(() => {
+                              recalcPrices({ silent: true })
+                            }, 0)
+                          }}
+                          buttonLabel={
+                            <>
+                            Voir les<br/>produits
+                            </>
+                          }
+                        />
+                      </div>
+                      
+                      <input
+                        placeholder="Qté"
+                        value={qtyInputs[idx] ?? ''}
+                        onChange={(e) => setQtyInput(idx, e.target.value)}
+                        className="recipe-editor-ingredient-qty"
+                      />
+
+                      <input
+                        placeholder="Unité"
+                        value={ing.unit}
+                        onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+                        className="recipe-editor-ingredient-unit"
+                      />
+                      </div>
+                      </div>
+                      <div className="recipe-editor-ingredient-prices-stack">
+                      <div className="recipe-editor-ingredient-pricebox">
+                        <div className="recipe-editor-ingredient-price-row">
+                          <span>Coût recette ≈</span>
+                          <Price value={costRecipe} blur={blurPrices} />
+                        </div>
+                      </div>
+
+                      <div className="recipe-editor-ingredient-pricebox">
+                        <div className="recipe-editor-ingredient-price-row">
+                          <span>Coût courses ≈</span>
+                          <Price value={costCourses} blur={blurPrices} />
+                        </div>
+                      </div>
+                      </div>    
+                      <div className="ingredient-delete-col">
+                        <button
+                          type="button"
+                          onClick={() => removeIngredient(idx)}
+                          className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
                         >
-                         <div className="recipe-analysis-saving-main">
-                           • {suggestion.ingredientName}
-                         </div>
+                          ✕
+                        </button>
+                      </div>
+                    </div>
 
-                         {suggestion.substitutions?.length > 0 && (
-                           <div style={{ marginBottom: 10 }}>
-                             <div className="recipe-analysis-saving-label">
-                               {suggestion.label || 'Alternative possible selon la recette'} :
-                             </div>
-
-                             <div className="recipe-analysis-saving-list">
-                               {suggestion.substitutions.map((sub) => (
-                                 <div key={sub.id} className="recipe-analysis-saving-item">
-                                   . {sub.name}
-                                 </div>
-                               ))}
-                             </div>
-                           </div>
-                         )}
-
-                         {suggestion.note && (
-                           <div className="recipe-analysis-saving-note">
-                             {suggestion.note}
-                           </div>
-                         )}
-
-                         <div className="recipe-analysis-saving-strong">
-                           Économie estimée : ~
-                           <Price value={suggestion.savingEur} blur={blurPrices} />
-                         </div>
-
-                         <div className="recipe-analysis-saving-meta">
-                           Nouveau coût recette :{' '}
-                           <Price value={suggestion.newTotalEur} blur={blurPrices} />
-                         </div>
-
-                         <div className="recipe-analysis-saving-meta">
-                           Nouveau prix/personne :{' '}
-                           <Price
-                             value={
-                               suggestion.newTotalEur != null && servings > 0
-                                 ? suggestion.newTotalEur / servings
-                                 : null
-                             }
-                             blur={blurPrices}
-                           />
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
-               )}
-             </div>
-           )}
-         </div>
-       </div>
-     </section>
-
-     <section className="app-card app-card-no-border p-6" style={{ marginTop: 16 }}>
-       <div className="ingredients-top">
-         <div className="ingredients-head grid gap-1 text-sm font-semibold">
-           <h2 className="recipe-color-2" style={sectionTitleStyle}>
-             Ingrédients
-           </h2>
-
-           <p className="mt-2 text-sm app-muted">
-             Un ingrédient par ligne : nom, quantité, unité, prix.
-           </p>
-         </div>
-
-         <button
-           onClick={() => recalcPrices({ silent: false })}
-           disabled={isRepricing}
-           className="app-btn app-btn-utility ingredients-recalc recipe-color-2"
-           type="button"
+                    <div className="recipe-editor-ingredient-mobile">
+  <div className="recipe-editor-ingredient-mobile-top">
+    <div className="ingredient-cell-name">
+      <div className="recipe-editor-ingredient-name-wrap">
+        {ing.category &&
+        INGREDIENT_CATEGORY_META[
+          ing.category as keyof typeof INGREDIENT_CATEGORY_META
+        ] ? (
+          <span
+            className="recipe-editor-ingredient-icon"
+            style={{
+              color:
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].color,
+              background:
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].bg,
+            }}
           >
-           {isRepricing ? 'Recalcul…' : 'Recalculer les prix'}
-         </button>
-       </div>
+            {(() => {
+              const Icon =
+                INGREDIENT_CATEGORY_META[
+                  ing.category as keyof typeof INGREDIENT_CATEGORY_META
+                ].icon
+              return <Icon size={16} strokeWidth={2} />
+            })()}
+          </span>
+        ) : null}
 
-       <div className="mt-4 grid gap-3">
-         {ingredients.map((ing, idx) => {
-           const costCourses = computeCostCourses(ing)
-           const costRecipe =
-             typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
+        <input
+          placeholder="Nom de l'ingrédient..."
+          value={ing.name}
+          onChange={(e) => setIngredient(idx, { name: e.target.value })}
+          className="recipe-editor-ingredient-name"
+        />
+      </div>
+    </div>
+  </div>
 
-           return (
-             <div key={idx} className="app-card p-3">
-               <div className="ingredient-row-desktop">
-                 <div className="ingredient-cell-name">
-                   <input
-                     placeholder="Nom de l'ingrédient..."
-                     value={ing.name}
-                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     style={{
-                       border: '1px solid var(--border)',
-                       borderRadius: 12,
-                       padding: 10,
-                       width: '100%',
-                     }}
-                   />
-                 </div>
+  <div className="recipe-editor-ingredient-mobile-meta">
+    <div className="recipe-editor-ingredient-picker-wrap">
+      <IngredientPicker
+        querySeed={normalizeIngredientForLookup(ing.name)}
+        onPick={(item) => {
+          setIngredient(idx, {
+            name: item.nom,
+            ingredientBaseId: item.id,
+            id: item.id as any,
+            category: typeof item.category === 'string' ? item.category : null,
+          })
 
-                 <div className="ingredient-picker-wrap">
-                   <IngredientPicker
-                     querySeed={normalizeIngredientForLookup(ing.name)}
-                     onPick={(item) => {
-                       setIngredient(idx, {
-                         name: item.nom,
-                         ingredientBaseId: item.id,
-                         id: item.id as any,
-                       })
+          setTimeout(() => {
+            recalcPrices({ silent: true })
+          }, 0)
+        }}
+        buttonLabel={
+          <>
+            Voir les
+            <br />
+            produits
+          </>
+        }
+      />
+    </div>
 
-                       setTimeout(() => {
-                         recalcPrices({ silent: true })
-                       }, 0)
-                     }}
-                     buttonLabel="Voir les produits"
-                   />
-                 </div>
+    <input
+      placeholder="Qté"
+      value={qtyInputs[idx] ?? ''}
+      onChange={(e) => setQtyInput(idx, e.target.value)}
+      className="recipe-editor-ingredient-qty"
+    />
 
-                 <input
-                   placeholder="Qté"
-                   value={qtyInputs[idx] ?? ''}
-                   onChange={(e) => setQtyInput(idx, e.target.value)}
-                   className="app-btn app-btn-utility"
-                   style={{
-                     borderRadius: 12,
-                     padding: 10,
-                     width: '100%',
-                     justifyContent: 'flex-start',
-                     fontWeight: 500,
-                   }}
-                 />
+    <input
+      placeholder="Unité"
+      value={ing.unit}
+      onChange={(e) => setIngredient(idx, { unit: e.target.value })}
+      className="recipe-editor-ingredient-unit"
+    />
+  </div>
 
-                 <input
-                   placeholder="Unité"
-                   value={ing.unit}
-                   onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                   className="app-btn app-btn-utility"
-                   style={{
-                     borderRadius: 12,
-                     padding: 10,
-                     width: '100%',
-                   }}
-                 />
+  <div className="recipe-editor-ingredient-mobile-prices">
+    <div className="recipe-editor-ingredient-pricebox">
+      <div className="recipe-editor-ingredient-price-row">
+        <span>Coût recette ≈</span>
+        <Price value={costRecipe} blur={blurPrices} />
+      </div>
+    </div>
 
-                 <div className="ingredient-price-col">
-                   <div className="ingredient-price-label">Coût recette</div>
-                   <div className="ingredient-price-value cost-pill-row-recipe">
-                     <Price value={costRecipe} blur={blurPrices} />
-                   </div>
-                 </div>
+    <div className="recipe-editor-ingredient-pricebox">
+      <div className="recipe-editor-ingredient-price-row">
+        <span>Coût courses ≈</span>
+        <Price value={costCourses} blur={blurPrices} />
+      </div>
+    </div>
 
-                 <div className="ingredient-price-col">
-                   <div className="ingredient-price-label">Coût courses</div>
-                   <div className="ingredient-price-value cost-pill-row-courses">
-                     <Price value={costCourses} blur={blurPrices} />
-                   </div>
-                 </div>
+    <button
+      type="button"
+      onClick={() => removeIngredient(idx)}
+      className="recipe-editor-btn recipe-editor-btn-ghost recipe-editor-ingredient-delete"
+    >
+      ✕
+    </button>
+  </div>
+</div>
+                  </div>
+                )
+              })}
 
-                 <div className="ingredient-delete-col">
-                   <button
-                     type="button"
-                     onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility"
-                     style={smallXBtnStyle}
+              <div className="recipe-editor-ingredients-actions">
+                <button
+                  onClick={() => {
+                    setIngredients((p) => [
+                      ...p,
+                      { name: '', quantity: 0, unit: '', buyRecalced: false },
+                    ])
+                    setQtyInputs((p) => [...p, ''])
+                  }}
+                  className="recipe-editor-btn recipe-editor-btn-secondary recipe-editor-add-ingredient-btn"
+                  type="button"
+                >
+                  + Ajouter un ingrédient
+                </button>
+
+                <button
+                  type="button"
+                  onClick={save}
+                  className="recipe-editor-btn recipe-editor-btn-primary recipe-editor-save-btn"
+                >
+                  {isEdit ? 'Enregistrer les modifications' : 'Enregistrer la recette'}
+                </button>
+              </div>
+
+              {status && (
+                <p
+                  className={`recipe-editor-status-text ${
+                    statusKind === 'success'
+                      ? 'is-success'
+                      : statusKind === 'error'
+                      ? 'is-error'
+                      : 'is-info'
+                  }`}
+                >
+                  {status}
+                </p>
+              )}
+            </div>
+          </section>
+        </div>
+
+        <div className="recipe-editor-right-col">
+          <label className="recipe-editor-image-drop">
+            <input
+              type="file"
+              accept="image/*"
+              className="recipe-editor-file-input"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+
+                const localUrl = URL.createObjectURL(file)
+                setImageUrl(localUrl)
+              }}
+            />
+
+            {imageUrl ? (
+              <div className="recipe-editor-image-stack">
+                <img src={imageUrl} alt="preview" className="recipe-editor-image-preview" />
+
+                <input
+                  value={imageUrl}
+                  onClick={(e) => e.stopPropagation()}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  className="recipe-editor-image-url"
+                />
+
+                <button
+                  type="button"
+                  className="recipe-editor-btn recipe-editor-btn-secondary"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setCrop({ x: 0, y: 0 })
+                    setZoom(1)
+                    setCroppedAreaPixels(null)
+                    setIsCropping(true)
+                  }}
+                >
+                  Recadrer l’image
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="recipe-editor-image-plus">+</div>
+
+                <div className="recipe-editor-image-title">Ajouter une image</div>
+
+                <div className="recipe-editor-image-hint">
+                  Clique sur le + pour choisir une photo
+                </div>
+              </>
+            )}
+          </label>
+
+          <div className="recipe-editor-costs">
+            <div className="recipe-editor-cost-card">
+              <div className="recipe-editor-cost-row recipe-editor-cost-row-recipe">
+                <span className="recipe-editor-cost-label">Coût de la recette</span>
+                <span className="recipe-editor-cost-amount">
+                  {' ≈ '} <Price value={totalCost} blur={blurPrices} />
+                </span>
+              </div>
+            </div>
+
+            <div className="recipe-editor-cost-card">
+              <div className="recipe-editor-cost-row recipe-editor-cost-row-courses">
+                <span className="recipe-editor-cost-label">Coût des courses</span>
+                <span className="recipe-editor-cost-amount">
+                  {' ≈ '} <Price value={totalProducts} blur={blurPrices} />
+                </span>
+              </div>
+            </div>
+
+            <div className="recipe-editor-cost-card">
+              <div className="recipe-editor-cost-row">
+                <span className="recipe-editor-cost-label">Prix par personne</span>
+                <span className="recipe-editor-cost-amount">
+                  {' ≈ '} <Price value={costPerServing} blur={blurPrices} />
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {economySuggestions.length > 0 && (
+            <div className="recipe-analysis-card recipe-analysis-card--economy">
+              <div className="recipe-analysis-section-title">
+                Comment réduire le coût :
+              </div>
+
+              <div className="recipe-analysis-accordion-list">
+                {economySuggestions.map((suggestion, index) => {
+                  const newPricePerPerson =
+                    suggestion.newTotalEur != null && servings > 0
+                      ? suggestion.newTotalEur / servings
+                      : null
+
+                  return (
+                    <details
+                      key={`${suggestion.ingredientName}-${index}`}
+                      className="recipe-analysis-accordion"
+                      open={index === 0}
                     >
-                     ✕
-                   </button>
-                 </div>
-               </div>
+                      <summary className="recipe-analysis-accordion-summary">
+                        <div className="recipe-analysis-accordion-main">
+                          <span className="recipe-analysis-accordion-title">
+                            {suggestion.ingredientName}
+                          </span>
 
-               <div className="ingredient-row-mobile">
-                 <div className="ingredient-mobile-top">
-                   <input
-                     placeholder="Nom de l'ingrédient..."
-                     value={ing.name}
-                     onChange={(e) => setIngredient(idx, { name: e.target.value })}
-                     style={{
-                       border: '1px solid var(--border)',
-                       borderRadius: 12,
-                       padding: 10,
-                       width: '100%',
-                     }}
-                   />
+                          <span className="recipe-analysis-accordion-saving">
+                            Économie estimée : ~
+                            <Price value={suggestion.savingEur} blur={blurPrices} />
+                          </span>
+                        </div>
 
-                   <div className="ingredient-picker-wrap">
-                     <IngredientPicker
-                       querySeed={normalizeIngredientForLookup(ing.name)}
-                       onPick={(item) => {
-                         setIngredient(idx, {
-                           name: item.nom,
-                           ingredientBaseId: item.id,
-                           id: item.id as any,
-                         })
+                        <span className="recipe-analysis-accordion-icon">+</span>
+                      </summary>
 
-                         setTimeout(() => {
-                           recalcPrices({ silent: true })
-                         }, 0)
-                       }}
-                       buttonLabel="Voir les produits"
-                     />
-                   </div>
-                 </div>
+                      <div className="recipe-analysis-accordion-content">
+                        {suggestion.substitutions?.length > 0 && (
+                          <div className="recipe-analysis-accordion-block">
+                            <div className="recipe-analysis-saving-label">
+                              {suggestion.label || 'Alternative possible selon la recette'} :
+                            </div>
 
-                 <div className="ingredient-mobile-meta">
-                   <input
-                     placeholder="Qté"
-                     value={qtyInputs[idx] ?? ''}
-                     onChange={(e) => setQtyInput(idx, e.target.value)}
-                     className="app-btn-utility"
-                     style={{
-                       borderRadius: 20,
-                       padding: 10,
-                       width: '100%',
-                       justifyContent: 'flex-start',
-                       fontWeight: 500,
-                     }}
-                   />
+                            <div className="recipe-analysis-saving-list">
+                              {suggestion.substitutions.map((sub) => (
+                                <div key={sub.id} className="recipe-analysis-saving-item">
+                                  • {sub.name}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
 
-                   <input
-                     placeholder="Unité"
-                     value={ing.unit}
-                     onChange={(e) => setIngredient(idx, { unit: e.target.value })}
-                     className="app-btn app-btn-utility"
-                     style={{
-                       borderRadius: 20,
-                       padding: '6px 10px',
-                       width: '100%',
-                       justifyContent: 'flex-start',
-                       fontWeight: 500,
-                     }}
-                   />
-                 </div>
+                        {suggestion.note && (
+                          <div className="recipe-analysis-saving-note">
+                            {suggestion.note}
+                          </div>
+                        )}
 
-                 <div className="ingredient-mobile-prices">
-                   <div className="ingredient-mobile-pricebox">
-                     <div className="ingredient-price-label">Coût recette</div>
-                     <div className="ingredient-price-value cost-pill-row-recipe">
-                       <Price value={costRecipe} blur={blurPrices} />
-                     </div>
-                   </div>
+                        <div className="recipe-analysis-accordion-metrics">
+                          <div className="recipe-analysis-saving-meta">
+                            Nouveau coût recette :{' '}
+                            <Price value={suggestion.newTotalEur} blur={blurPrices} />
+                          </div>
 
-                   <div className="ingredient-mobile-pricebox">
-                     <div className="ingredient-price-label">Coût courses</div>
-                     <div className="ingredient-price-value cost-pill-row-courses">
-                       <Price value={costCourses} blur={blurPrices} />
-                     </div>
-                   </div>
+                          <div className="recipe-analysis-saving-meta">
+                            Nouveau prix/personne :{' '}
+                            <Price value={newPricePerPerson} blur={blurPrices} />
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
 
-                   <button
-                     type="button"
-                     onClick={() => removeIngredient(idx)}
-                     className="app-btn app-btn-utility"
-                     style={smallXBtnStyle}
-                    >
-                     ✕
-                   </button>
-                 </div>
-               </div>
-             </div>
-           )
-         })}
+    {isCropping && imageUrl && (
+      <div className="recipe-editor-crop-overlay">
+        <div className="recipe-editor-crop-modal">
+          <div className="recipe-editor-crop-stage">
+            <Cropper
+              image={imageUrl}
+              crop={crop}
+              zoom={zoom}
+              aspect={4 / 3}
+              onCropChange={setCrop}
+              onZoomChange={setZoom}
+              onCropComplete={onCropComplete}
+            />
+          </div>
 
-         <button
-           onClick={() => {
-             setIngredients((p) => [
-               ...p,
-               { name: '', quantity: 0, unit: '', buyRecalced: false },
-             ])
-             setQtyInputs((p) => [...p, ''])
-           }}
-           className="app-btn app-btn-secondary app-btn-utility paper-ui recipe-color-2"
-           style={{ width: 'min(260px, 100%)' }}
-           type="button"
-          >
-           + Ajouter un ingrédient
-         </button>
-       </div>
-     </section>
+          <div className="recipe-editor-crop-zoom">
+            <label className="recipe-editor-crop-zoom-label">
+              Zoom
+              <input
+                type="range"
+                min={1}
+                max={3}
+                step={0.01}
+                value={zoom}
+                onChange={(e) => setZoom(Number(e.target.value))}
+                className="recipe-editor-crop-range"
+              />
+            </label>
+          </div>
 
-     <section className="app-card p-5" style={{ marginTop: 16 }}>
-       <div
-         style={{
-           display: 'flex',
-           justifyContent: 'center',
-           alignItems: 'center',
-           gap: 14,
-           flexWrap: 'wrap',
-         }}
-        >
-         <div>
-           {status && (
-             <p
-               style={{
-                 margin: 0,
-                 fontWeight: 700,
-                 color:
-                   statusKind === 'success'
-                     ? '#2f6f3e'
-                     : statusKind === 'error'
-                     ? '#b00020'
-                     : 'var(--primary)',
-               }}
-               >
-               {status}
-             </p>
-           )}
-         </div>
-
-         <button
-           type="button"
-           onClick={save}
-           className="app-btn app-btn-sage"
-           style={{
-             minWidth: 280,
-             height: 60,
-             fontSize: 35,
-             fontWeight: 800,
-             borderRadius: 14,
-             boxShadow: '0 12px 22px rgba(176,188,140,0.35)',
-           }}
-          >
-           Enregistrer la recette
-         </button>
-       </div>
-     </section>
-
-     {isCropping && imageUrl && (
-       <div
-         style={{
-           position: 'fixed',
-           inset: 0,
-           zIndex: 2000,
-           background: 'rgba(30, 22, 18, 0.72)',
-           display: 'grid',
-           placeItems: 'center',
-           padding: 16,
-         }}
-        >
-         <div
-           className="app-card"
-           style={{
-             width: 'min(920px, 100%)',
-             padding: 16,
-             display: 'grid',
-             gap: 14,
-           }}
-          >
-           <div
-             style={{
-               position: 'relative',
-               width: '100%',
-               height: 'min(70vh, 560px)',
-               borderRadius: 18,
-               overflow: 'hidden',
-               background: '#111',
-             }}
+          <div className="recipe-editor-crop-actions">
+            <button
+              type="button"
+              className="recipe-editor-btn recipe-editor-btn-secondary"
+              onClick={() => setIsCropping(false)}
+              disabled={isUploadingCrop}
             >
-             <Cropper
-               image={imageUrl}
-               crop={crop}
-               zoom={zoom}
-               aspect={4 / 3}
-               onCropChange={setCrop}
-               onZoomChange={setZoom}
-               onCropComplete={onCropComplete}
-             />
-           </div>
+              Annuler
+            </button>
 
-           <div style={{ display: 'grid', gap: 8 }}>
-             <label className="text-sm font-semibold recipe-color-2">
-               Zoom
-               <input
-                 type="range"
-                 min={1}
-                 max={3}
-                 step={0.01}
-                 value={zoom}
-                 onChange={(e) => setZoom(Number(e.target.value))}
-                 style={{ width: '100%' }}
-               />
-             </label>
-           </div>
-
-           <div
-             style={{
-               display: 'flex',
-               justifyContent: 'flex-end',
-               gap: 10,
-               flexWrap: 'wrap',
-             }}
+            <button
+              type="button"
+              className="recipe-editor-btn recipe-editor-btn-primary"
+              onClick={confirmCrop}
+              disabled={isUploadingCrop}
             >
-             <button
-               type="button"
-               className="app-btn app-btn-secondary"
-               onClick={() => setIsCropping(false)}
-               disabled={isUploadingCrop}
-              >
-               Annuler
-             </button>
-
-             <button
-               type="button"
-               className="app-btn app-btn-primary"
-               onClick={confirmCrop}
-               disabled={isUploadingCrop}
-              >
-               {isUploadingCrop ? 'Envoi…' : 'Valider le recadrage'}
-             </button>
-           </div>
-         </div>
-       </div>
-     )}
-   </main>
- )
+              {isUploadingCrop ? 'Envoi…' : 'Valider le recadrage'}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </main>
+)
 }
 
 
 
 export default function Page() {
  return (
-   <Suspense fallback={<div className="app-container" style={{ padding: 24 }}>Chargement…</div>}>
+   <Suspense fallback={<div className="app-container recipe-editor-loading">Chargement…</div>}>
      <NewRecipeInner />
    </Suspense>
  )
