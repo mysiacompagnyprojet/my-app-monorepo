@@ -165,7 +165,7 @@ export function IngredientPicker({
                        <div
                            className="ingredient-picker-results"
                         >
-                           {items.slice(0, 12).map((it) => (
+                           {items.slice(0, 25).map((it) => (
                                <button
                                    key={it.id}
                                    type="button"
