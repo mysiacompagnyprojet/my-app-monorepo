@@ -277,7 +277,7 @@ export default function HeaderClient() {
              borderRight: '1px solid var(--border)',
              padding: 16,
              display: 'grid',
-             gridTemplateRows: 'auto 1fr auto',
+             gridTemplateRows: 'auto minmax(0, 1fr) auto',
              gap: 12,
            }}
            >
@@ -291,7 +291,7 @@ export default function HeaderClient() {
            </div>
 
            {panel === 'menu' ? (
-             <div style={{ overflow: 'auto', paddingRight: 6 }}>
+             <div style={{ overflowY: 'auto', overflowX: 'hidden', paddingRight: 6, minHeight: 0 }}>
                <button
                  type="button"
                  className="app-btn app-btn-secondary app-btn-utility"
@@ -402,7 +402,7 @@ export default function HeaderClient() {
                )}
              </div>
            ) : (
-             <div style={{ overflow: 'auto', paddingRight: 6 }}>
+             <div style={{ overflowY: 'auto', overflowX: 'hidden', paddingRight: 6, minHeight: 0 }}>
                <div className="app-card p-4" style={{ boxShadow: 'none' }}>
                  <div style={{ fontWeight: 900, marginBottom: 10, color: 'var(--primary)' }}>Ajouter</div>
 
