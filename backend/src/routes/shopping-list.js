@@ -16,6 +16,94 @@ function needAuth(req, res, next) {
   next();
 }
 
+/* get/shopping-list
+Liste toutes les listes de coursesde l'utilisateur  */
+router.get('/', needAuth, async (req, res) =>{
+  try {
+     const lists = await prisma.shoppingList.findMany({
+      where: { userId: req.user.userId },
+      orderBy: { createAt: 'desc' },
+      select: {
+        id: true,
+        totalPrice: true,
+        createAt: true,
+        _count: {
+          select: {
+            recipes: true,
+            items: true,
+          },
+        },
+      },
+    });
+    return res.json({
+      ok: true,
+      shoppingLists: lists,
+    });
+  } catch (e) {
+    console.error('GET /shopping-list error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
+
+
+/* get/shopping-list/:id detail d'une liste de courses */
+router.get('/:id', needAuth, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const shoppingList = await prisma.shoppingList.findFirst({
+      where: {
+        id,
+        userId: req.user.userId,
+      },
+      select: {
+        id: true,
+        totalPrice: true,
+        createdAt: true,
+        recipes: {
+          select: {
+            recipe: {
+              select: {
+                id: true,
+                title: true,
+              },
+            },
+          },
+        },
+        items: {
+          orderBy: [
+            { category: 'asc' },
+            { ingredientName: 'asc' },
+          ],
+          select: {
+            id: true,
+            ingredientName: true,
+            totalQuantity: true,
+            unit: true,
+            totalPrice: true,
+            category: true,
+          },
+        },
+      },  
+    });
+
+    if (!shoppingList) {
+      return res.status(404).json({ ok: false, error: 'SHOPPING_LIST_NOT_FOUND' });
+    }
+
+    return res.json({
+      ok: true,
+      shoppingList: {
+        ...shoppingList,
+        recipes: shoppingList.recipes.map((r) => r.recipe),
+      },
+    });
+  } catch (e) {
+    console.error('GET /shopping-list/:id error', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
+
 /**
  * POST /shopping-list
  * body: { recipeIds: string[] }
@@ -99,6 +187,7 @@ router.post('/', needAuth, async (req, res) => {
           buyPrice: recipeCost, // V1: achat = besoin
           id: enriched?.id ?? null,
           unitNormalized: enriched?.unitNormalized ?? null,
+          category: enriched?.unitNormalized ?? null,
           ...(enriched?.note ? { note: enriched.note } : {}),
         };
       })
@@ -114,8 +203,37 @@ router.post('/', needAuth, async (req, res) => {
       { recipeCost: 0, buyPrice: 0 }
     );
 
+    //Création shopping list
+    const shoppingList = await prisma.shoppingList.create({
+      data: {
+        userId: req.user.userId,
+        totalPrice: totals.buyPrice,
+      },
+    });
+
+    //liaison recettes
+    await prisma.shoppingListRecipe.createMany({
+      data: recipes.map(r => ({
+        shoppingListId: shoppingList.id,
+        recipeId: r.id
+      }))
+    });
+
+    // Sauvegarde ingredients
+    await prisma.shoppingListItem.createMany({
+      data: pricedItems.map(item => ({
+        shoppingListId: shoppingList.id,
+        ingredientName: item.name,
+        totalQuantity: item.quantity,
+        unit: item.unit,
+        totalPrice: item.buyPrice || 0,
+        category: item.category || "other"
+      }))
+    });
+
     return res.json({
       ok: true,
+      shoppingListId: shoppingList.id,
       items: pricedItems,
       totals,
     });
@@ -124,5 +242,8 @@ router.post('/', needAuth, async (req, res) => {
     return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
 });
+
+
+
 
 module.exports = router;

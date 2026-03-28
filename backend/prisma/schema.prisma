@@ -21,6 +21,7 @@ model User {
   Recipes            Recipe[]
   RecipeCategories   RecipeCategory[]
   RecipeDrafts       RecipeDraft[]
+  shoppingLists      ShoppingList[]
 }
 
 model Recipe {
@@ -36,6 +37,7 @@ model Recipe {
   ingredients Ingredient[]
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
   categories  RecipeOnCategory[]
+  shoppingLists ShoppingListRecipe[]
 
   @@index([userId], map: "idx_recipe_user")
 }
@@ -185,4 +187,44 @@ enum IngredientCategory {
  frozen
  processed
  other
+}
+
+model ShoppingList {
+  id         String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId     String              @db.Uuid
+  totalPrice Float?              @default(0)
+  createdAt  DateTime            @default(now()) @db.Timestamptz(6)
+  updatedAt  DateTime            @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user       User                @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  recipes    ShoppingListRecipe[]
+  items      ShoppingListItem[]
+
+  @@index([userId], map: "idx_shoppinglist_user")
+}
+
+model ShoppingListRecipe {
+  id             String       @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shoppingListId String       @db.Uuid
+  recipeId       String       @db.Uuid
+
+  shoppingList   ShoppingList @relation(fields: [shoppingListId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  recipe         Recipe       @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([shoppingListId], map: "idx_shoppinglistrecipe_list")
+  @@index([recipeId], map: "idx_shoppinglistrecipe_recipe")
+}
+
+model ShoppingListItem {
+  id             String              @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  shoppingListId String              @db.Uuid
+  ingredientName String
+  totalQuantity  Float
+  unit           String
+  totalPrice     Float?              @default(0)
+  category       IngredientCategory? @default(other)
+
+  shoppingList   ShoppingList        @relation(fields: [shoppingListId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([shoppingListId], map: "idx_shoppinglistitem_list")
 }
