@@ -149,22 +149,41 @@ function looksLikeSocialNoise(line) {
   return false;
 }
 
+// le 29/03/26 remplacé par :
 function postProcessIngredientName(name) {
   let n = normSpaces(name);
+  if (!n) return '';
 
-  if (/^huile\s+olive\b/i.test(n)) n = n.replace(/^huile\s+olive\b/i, "huile d'olive");
+  if (/^huile\s+olive\b/i.test(n)) {
+    n = n.replace(/^huile\s+olive\b/i, "huile d'olive");
+  }
+
+  // retire les débuts parasites fréquents
   n = n.replace(/^de\s+/i, '');
+  n = n.replace(/^(?:à|a)\s*caf[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
+  n = n.replace(/^caf[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
+  n = n.replace(/^af[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
 
-  n = n.replace(/\s+\d{3,6}\s*$/g, '');
-
+  // retire les marques / pollutions OCR
   n = n.replace(/\bRecoltos\b/gi, '');
   n = n.replace(/\bDélico\b/gi, '');
   n = n.replace(/\bDelico\b/gi, '');
   n = n.replace(/\bRecettes?\s+Délice\b/gi, '');
   n = n.replace(/\bRecettes?\s+Delice\b/gi, '');
 
+  // retire les suffixes numériques parasites
+  n = n.replace(/\s+\d{3,6}\s*$/g, '');
+
+  // retire la ponctuation parasite en fin
+  n = n.replace(/\s*[.,;:!?]+$/g, '');
+
+  // nettoie les restes de début/fin
+  n = n.replace(/^[\s"'“”‘’([{]+/g, '');
+  n = n.replace(/[\s"'“”‘’)\]}]+$/g, '');
+
   return normSpaces(n);
 }
+
 
 function normalizeQuantityRawForDisplay(q) {
   let s = normSpaces(q);

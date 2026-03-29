@@ -66,6 +66,7 @@ function canonUnit(uRaw) {
     u === 'unite' || u === 'unites' ||
     u === 'pièce' || u === 'piéce' || u === 'pièces' ||
     u === 'botte' || u === 'bottes' || u === "botte(s)" ||
+    u === 'sachet' || u === 'sachets' ||
 
     //unités OCR courantes
     u === 'gousse' || u === 'gousses' ||

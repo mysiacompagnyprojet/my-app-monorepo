@@ -48,7 +48,9 @@ if (u0 === 'càs' || u0 === 'cas' || u0 === 'cs') return 'tbsp'
 if (u0 === 'càc' || u0 === 'cac' || u0 === 'cc') return 'tsp'
 
 // ✅ pièces (OCR)
-if (u0 === 'pièce' || u0 === 'pièces' || u0 === 'piece' || u0 === 'pieces' || u0 === 'pcs') return 'piece'
+if (u0 === 'pièce' || u0 === 'pièces' || u0 === 'piece' || u0 === 'pieces' || u0 === 'pcs' ||
+    u0 === 'sachet' || u0 === 'sachets'
+) return 'piece'
 
 const u = canonUnit(uRaw) || u0
 if (!u) return null
@@ -56,6 +58,8 @@ if (!u) return null
 // unités OCR → unités canoniques
 if (u === 'gousse' || u === 'gousses') return 'piece'
 if (u === 'tranche' || u === 'tranches') return 'piece'
+if (u === 'sachet' || u === 'sachets') return 'piece'
+
 //if (u === 'cuillere' || u === 'cuillère' || u === 'cuilleres' || u === 'cuillères') return 'piece'
 
 // sécurité (accent)

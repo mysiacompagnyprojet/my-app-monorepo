@@ -130,7 +130,13 @@ function canonUnitFront(uRaw: string): 'g' | 'ml' | 'piece' | 'tbsp' | 'tsp' | n
    u0 === 'gousse' ||
    u0 === 'gousses' ||
    u0 === 'tranche' ||
-   u0 === 'tranches'
+   u0 === 'tranches' ||
+   u0 === 'sachet' ||
+   u0 === 'sachets' ||
+   u0 === 'pincée' ||
+   u0 === 'pincee' ||
+   u0 === 'pincées' ||
+   u0 === 'pincees'
  ) return 'piece'
 
  return null

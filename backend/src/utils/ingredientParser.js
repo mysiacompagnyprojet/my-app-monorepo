@@ -23,6 +23,28 @@ const {
   normalizeUnit,  
 } = require('../utils/ingredientUtils');
 
+//ajoute le 29/03/26
+function normalizeIngredientParseInput(line) {
+  let t = normSpaces(line);
+  if (!t) return '';
+
+  // normalise les variantes cuillère à café
+  t = t.replace(/\bc\s*\.\s*[àa]\s*caf[eé]\b/gi, 'càc');
+  t = t.replace(/\bc\s*\.\s*[àa]\s*c\.\b/gi, 'càc');
+  t = t.replace(/\bc\s*[àa]\s*c\b/gi, 'càc');
+  t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+caf[eé]\b/gi, 'càc');
+
+  // normalise les variantes cuillère à soupe
+  t = t.replace(/\bc\s*\.\s*[àa]\s*soupe\b/gi, 'càs');
+  t = t.replace(/\bc\s*\.\s*[àa]\s*s\.\b/gi, 'càs');
+  t = t.replace(/\bc\s*[àa]\s*s\b/gi, 'càs');
+  t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+soupe\b/gi, 'càs');
+
+  return normSpaces(t);
+}
+
+
+//le 29/03/26, remplacé par :
 function parseOcrIngredient(line) {
   const raw0 = normSpaces(line);
   if (!raw0) return null;
@@ -30,7 +52,7 @@ function parseOcrIngredient(line) {
   // ✅ bruit OCR fréquent : "Og" / "0g" isolé
   if (/^o[gq]$/i.test(raw0) || /^0\s*g$/i.test(raw0)) return null;
 
-  const raw = fixCommonOcrQuantityUnitBugs(raw0);
+  const raw = normalizeIngredientParseInput(fixCommonOcrQuantityUnitBugs(raw0));
 
   if (isIngredientsHeader(raw)) return null;
   if (isPreparationHeader(raw)) return null;
@@ -38,8 +60,6 @@ function parseOcrIngredient(line) {
   if (looksLikeDateNoise(raw)) return null;
   if (looksLikeCountersNoise(raw)) return null;
   if (looksLikeSocialNoise(raw)) return null;
-
-  if (looksLikeStepLine(raw)) return null;
 
   let m = raw.match(/^(un peu de|selon goût|au goût)\s+(.+)$/i);
   if (m) {
@@ -65,65 +85,107 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit };
   }
 
+  // le 29/03/26, remplacé par :
   // cuillère à café
   m = l.match(
     new RegExp(
-      `^${QTY_USED}\\s+(?:${CUILL_RE}\\s*(?:à|a)\\s*caf(?:e|é)|c\\.?\\s*(?:à|a)\\s*c\\.?|càc|cac|cc)\\s*(?:de|d['’])?\\s*(.+)$`,
+      `^${QTY_USED}\\s+(?:càc|cac|cc|${CUILL_RE}\\s*(?:à|a)\\s*caf(?:e|é)|c\\.?\\s*(?:à|a)\\s*c\\.?)\\s*(?:de\\s+|d['’]\\s*)?(.+)$`,
       'i'
     )
   );
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
-    const name = postProcessIngredientName(m[2]);
-    if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càc' };
+    const name = postProcessIngredientName(m[m.length - 1]);
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càc' };
+    }
   }
 
+
+   // le 28/03/26, remplacé par :
   // cuillère à soupe
   m = l.match(
     new RegExp(
-      `^${QTY_USED}\\s+(?:${CUILL_RE}\\s*(?:à|a)\\s*soupe|c\\.?\\s*(?:à|a)\\s*s\\.?|càs|cas|cs)\\s*(?:de|d['’])?\\s*(.+)$`,
+      `^${QTY_USED}\\s+(?:càs|cas|cs|${CUILL_RE}\\s*(?:à|a)\\s*soupe|c\\.?\\s*(?:à|a)\\s*s\\.?)\\s*(?:de\\s+|d['’]\\s*)?(.+)$`,
       'i'
     )
   );
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
-    const name = postProcessIngredientName(m[2]);
-    if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càs' };
+    const name = postProcessIngredientName(m[m.length - 1]);
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càs' };
+    }
   }
 
+
+  // le 29/03/26, remplacé par :
   // unités “humaines”
-  m = l.match(/^(\d+)\s+(gousses?|tranches?|sachets?|verres?|tasses?|pièces?|pieces?)\s+(?:de\s+|d['’])?(.+)$/i);
+  m = l.match(
+    /^(\d+(?:[.,]\d+)?)\s+(gousses?|tranches?|sachets?|verres?|tasses?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\s+(?:de\s+|d['’]\s*)?(.+)$/i
+  );
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
     const unit = normalizeUnit(m[2]);
     const name = postProcessIngredientName(m[3]);
-    if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: unit || '' };
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: unit || '' };
+    }
   }
 
-  // Quantité + nom sans unité : "1/2 blanc de poireau"
+   // le 29/03/26, remplacé par :
+  // Quantité + nom sans unité : "2 œufs", "3 tomates", "1/2 poireau"
   m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
     let name = postProcessIngredientName(m[2]);
 
-    if (/^(min|mins|minute|minutes)\b/i.test(name)) return null;
+    if (!name) return null;
+
+    if (/^(min|mins|minute|minutes|seconde|secondes)\b/i.test(name)) return null;
+    if (/^(°c|degr[ée]s?\b)/i.test(name)) return null;
+    if (/^(préchauffez|prechauffez|m[ée]langez|melangez|ajoutez|versez|faites|laissez|incorporez|enfournez)\b/i.test(name)) return null;
 
     if (looksLikeActionSentence(name) || looksLikeStepVerbLine(name) || looksLikeStepLine(name)) return null;
 
-    if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
+    return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
   }
 
-  // fallback
-  m = l.match(/^(\d+)\s+(.+)$/);
+  // le 29/03/26, remplacé par :
+  // fallback prudent
+  m = l.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/);
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
     const name = postProcessIngredientName(m[2]);
-    if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
+
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
+    }
   }
 
   return null;

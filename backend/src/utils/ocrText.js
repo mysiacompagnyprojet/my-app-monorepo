@@ -1330,6 +1330,13 @@ function splitIngredientsAndSteps(lines) {
       const s = extractServingsFromLine(h);
       if (s && !servings) servings = s;
 
+      //ajoute le 29/03/26
+      const parsed = parseOcrIngredient(h);
+      if (parsed) {
+        ingredientLines.push(h);
+        continue;
+      }
+
       if (looksLikeTimeInfoLine(h)) {
         notesLines.push(h);
         continue;
@@ -1379,17 +1386,31 @@ function splitIngredientsAndSteps(lines) {
         prev = l;
         continue;
       }
+      // le 29/03/26, remplacé par : d'ici à
+      const parsedCurrentIngredient = parseOcrIngredient(l);
+      const prevlooksStep =
+        looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
 
-      const prevlooksStep = looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
-      const curLooksNotIngredient =
-      !isStrictIngredientLine(l) &&//!parseOcrIngredient(l) &&
-      !looksLikeSpoonMeasureIngredient(l) && 
-      !looksLikeListBullet(l);
+      const curLooksIngredient =
+        !!parsedCurrentIngredient ||
+        isStrictIngredientLine(l) ||
+        looksLikeSpoonMeasureIngredient(l) ||
+        looksLikeListBullet(l);
 
-      if (!inSteps && (looksLikeStepLine(l) || looksLikeStepContinuation(prev, l) || (prevlooksStep && curLooksNotIngredient))) {
+      const curLooksNotIngredient = !curLooksIngredient;
+
+      if (
+        !inSteps &&
+        !curLooksIngredient &&
+        (
+          looksLikeStepLine(l) ||
+          looksLikeStepContinuation(prev, l) ||
+          (prevlooksStep && curLooksNotIngredient)
+        )
+      ) {
         inSteps = true;
-      }  
-
+      }
+      //ici
       if (inSteps) stepLines.push(l);
       else {
         const ex = extractParenNote(l);
@@ -1520,9 +1541,13 @@ function splitIngredientsAndSteps(lines) {
     ingredientLines = moved.ingredientLines;
     stepLines = moved.stepLines;
   }
+
+  const ingredientLinesBeforeJoin = [...ingredientLines];
   ingredientLines = joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
-  //console log a enlever
+
+  dlog('[debug ingredientLines before join]', ingredientLinesBeforeJoin);
   dlog('[debug ingredienLines after join]', ingredientLines);
+
   ingredientLines = expandCompoundIngredientLines(ingredientLines);
 
   {
