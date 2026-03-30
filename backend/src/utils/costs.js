@@ -77,6 +77,14 @@ function convertRecipeToPricingUnit(qty, unitRaw, targetUnit) {
     const q = Number(qty || 0)
     if (!Number.isFinite(q)) return null
 
+    const u0 = String(unitRaw || '').trim().toLowerCase()
+    if (
+        u0 === 'pincée' || u0 === 'pincées' || u0 === 'pincee' ||
+        u0 === 'pincees'
+    ) {
+        return null
+    }
+
     if (unitCanon === 'tbsp' || unitCanon === 'tsp') {
     const ml = q * (unitCanon === 'tbsp' ? 15 : 5);
 

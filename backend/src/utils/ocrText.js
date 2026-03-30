@@ -92,6 +92,38 @@ function looksLikeEditorialNoise(line) {
   return false;
 }
 
+//ajouter le 30/03/26 - fonction poubelle
+function looksLikeNonIngredientGarbage(line) {
+  const t = normSpaces(line);
+  if (!t) return true;
+
+  const low = t.toLowerCase();
+
+  if (/^(directions?|préparation|preparation|préparer la pâte|preparer la pate|cuisson et finition|astuce)\s*:?\s*$/i.test(t)) return true;
+
+  if (/^(préchauffez|prechauffez|versez|ajoutez|incorporez|incorporez progressivement|mélangez|melangez|laissez|dégustez|degustez)\b/i.test(low)) return true;
+
+  if (/^\d+\s+[a-z]$/i.test(low)) return true; // ex: 607 Q
+  if (/^[a-z]$/i.test(low)) return true;       // ex: Q
+
+  //if (/^\d+\s+[a-z]$/i.test(low)) return true;   // ex: 607 Q
+  if (/^\d+\s*[a-z]?$/i.test(low)) return true;  // ex: 607, 607 Q
+  //if (/^[a-z]\s*\d+$/i.test(low)) return true;   // cas inversé pourri
+
+  //if (/^(q|g|kg|ml|cl|dl|l)$/i.test(low)) return true;
+
+  if (/^environ\s+\d+(?:[.,]\d+)?\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(low)) return true;
+  if (/\b(directions?|préparation|preparation|astuce|quand)\b/i.test(low)) return true;
+  if (/\b(préchauffez|prechauffez|versez|ajoutez|incorporez|mélangez|laissez|dégustez|degustez)\b/i.test(low)) return true;
+
+  //ajoute le 30/03/26 a 13h56
+  if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true;      // ex: 10,5 K
+  if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true; // ex: 302 10,5 K
+  if (/^\d{1,4}\s+[a-z]$/i.test(low)) return true; // ex: 607 Q
+
+  return false;
+}
+
 function stripSocialHeaderPrefix(line) {
   let t = normSpaces(line);
 
@@ -105,6 +137,17 @@ function stripSocialHeaderPrefix(line) {
   // ✅ NEW: nettoyage emojis/pictos au bord
   t = stripEdgeEmojisAndPunct(t);
 
+  return normSpaces(t);
+}
+
+//ajouter le 30/03/26 pour extraire les ingredients d'une ligne texte
+function stripInlineSocialHandles(line) {
+  let t = normSpaces(line);
+  if(!t) return '';
+
+  //retirer les @mentions inline sans jeter le reste de la phrase
+  t = t.replace(/@[A-Za-z0-9._-]+/g, ' ');
+  t = t.replace(/\s+[.,;:!?]+/g, ' ');
   return normSpaces(t);
 }
 
@@ -265,14 +308,6 @@ function smartFilterWithTrashFromText(rawText) {
       continue;
     }
 
-    //if (isMostlyNoise(l)) {
-      //const simpleWord = normSpaces(l);const isOneWord= /^[A-Za-zÀ-ÖØ-öø-ÿ]{3,}\.?$/.test(simpleWord);const isUiWord = /^(suivre|explorer|recommandations?)\.?$/i.test(simpleWord);
-      //if (isOneWord && !isUiWord) {lines.push(simpleWord);continue;}
-
-     // trash.push(l);
-    //  continue;
-    //}
-
     if (looksLikeStatusBarNoise(l)) {
       trash.push(l);
       continue;
@@ -289,16 +324,38 @@ function smartFilterWithTrashFromText(rawText) {
     }
 
     if (looksLikeSocialNoise(l)) {
+      dlog('[SOCIAL BLOCK HIT', l);
+      const inlineClean = stripInlineSocialHandles(l);
+      dlog('[INLINE CLEAN]', {raw: l, clean: inlineClean});
+
+      // ✅ si après retrait des @handles il reste une phrase utile de recette, on la garde
+      const looksUsefulAfterHandleStrip =
+        !!inlineClean &&
+        (
+          !!parseOcrIngredient(inlineClean) ||
+          /\b\d+(?:[.,]\d+)?\s*(?:kg|g|mg|l|dl|cl|ml)\b/i.test(inlineClean) ||
+          /\b(?:un|une|\d+)\s+(?:sachet|sachets|gousse|gousses|tranche|tranches|verre|verres|tasse|tasses|pincée|pincées|pincee|pincees)\b/i.test(inlineClean) ||
+          looksLikeStepVerbLine(inlineClean) ||
+          looksLikeActionSentence(inlineClean)
+        );
+
+      if (looksUsefulAfterHandleStrip) {
+        dlog('[SOCIAL SALVAGED', inlineClean);
+        lines.push(inlineClean);
+        continue;
+      }
+
       if (/^publication\s+de\s+/i.test(l)) {
         const salvaged = stripSocialHeaderPrefix(l);
         const plausible = looksLikePlausibleTitleLine(salvaged, {
-         isIngredientLine: (s) => !!parseOcrIngredient(s),
+          isIngredientLine: (s) => !!parseOcrIngredient(s),
         });
         if (plausible) {
           lines.push(salvaged);
           continue;
         }
       }
+      dlog('[SOCIAL TRASHED', l, '=>', inlineClean);
       trash.push(l);
       continue;
     }
@@ -340,6 +397,14 @@ function smartFilterWithTrashFromText(rawText) {
 
   const lHit = lines.filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
   if (lHit.length) dlog('[DEBUG] lines hit:', lHit);
+
+  //ajout temporaire du 30/03/26 - a supprimer si plus utile - d'ici à
+  const watch = /vahine|paysanbreton|sucre vanill|beurre demi|250\s*g\s* de farine|150\s*g/i;
+  const watchedLines = lines.filter(x => watch.test(String(x)));
+  const watchedTrash = trash.filter(x => watch.test(String(x)));
+  if (watchedLines.length) dlog('[WATCH][lines]', watchedLines);
+  if (watchedTrash.length) dlog('[WATCH][trash]', watchedTrash);
+
   return {
     rawText: cleaned,
     lines: dedupeLines(lines),
@@ -611,6 +676,10 @@ function findExplicitTitleInFirstLines(lines, maxScan = 60) {
 
     // Ignore auteur : "de Wendy", "de Marine", etc.
     if (/^de\s+[a-zà-öø-ÿ'-]{2,}$/i.test(lowRaw)) continue;
+
+    //ajoute le 30/03/26 à 13h45
+    if (/^pour\s+r[ée]aliser\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(lowRaw)) continue;
+    if (/^pour\s+faire\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(lowRaw)) continue;
 
     // Stop "fort" : dès qu'on arrive aux vraies sections (étapes/ingrédients/préparation)
     // -> IMPORTANT : on met des "||"
@@ -1287,6 +1356,179 @@ function looksLikeSpoonMeasureIngredient(line) {
   return false;
 }
 
+//remplacer le 30/03/26
+function normalizeInlineIngredientFragment(fragment) {
+  let t = normSpaces(fragment);
+  if (!t) return '';
+
+  t = stripInlineSocialHandles(t);
+
+  // "un sachet" / "une gousse" -> quantité explicite pour le parser
+  t = t.replace(
+    /\b(?:un|une)\s+(sachet|sachets|gousse|gousses|tranche|tranches|verre|verres|tasse|tasses|pincée|pincées|pincee|pincees)\b/gi,
+    '1 $1'
+  );
+
+  // coupe les morceaux parasites après connecteur
+  // ex: "150 g de sucre et 1 sachet de ..." -> "150 g de sucre"
+  t = t.replace(
+    /\b(et|ou)\s+\d+(?:[.,]\d+)?\s+(sachet|sachets|gousse|gousses|tranche|tranches|verre|verres|tasse|tasses|pincée|pincées|pincee|pincees)\b.*$/i,
+    ''
+  );
+
+  // coupe les qualificatifs de phrase inutiles
+  // ex: "200 g de beurre demi-sel bien froid et" -> "200 g de beurre demi-sel"
+  t = t.replace(/\b(bien|très)\s+(froid|froide|froids|froides)\b.*$/i, '');
+
+  // enlève les fins mortes
+  t = t.replace(/\b(et|ou|de|du|des|au|aux)\b\s*$/i, '');
+  t = t.replace(/\s*[.,;:!?]+$/g, '');
+
+  return normSpaces(t);
+}
+
+function extractInlineIngredientFragmentsFromLines(lines) {
+  const out = [];
+
+   //remplacé le 30/03/26
+  const pushIfParsable = (frag) => {
+    const t = normalizeInlineIngredientFragment(frag);
+    if (!t) return;
+    if (looksLikeNonIngredientGarbage(t)) return;
+
+    const parsed = parseOcrIngredient(t);
+    if (!parsed) return;
+
+    const name = normSpaces(parsed.name || '');
+    const low = name.toLowerCase();
+
+    if (/^[a-z]$/i.test(name)) return;
+    if (/^\d+$/.test(name)) return;
+    if (/^[a-z]\d+$|^\d+[a-z]$/i.test(name)) return;
+    if (/^(q|de|et|ou)$/i.test(low)) return;
+
+    if (!low) return;
+    if (low.length < 3) return;
+
+    if (/^(de|et|ou|q)$/.test(low)) return;
+    if (/\b(et|ou|de|du|des|au|aux)\b$/.test(low)) return;
+    if (/\b(bien|très)\s+(froid|froide|froids|froides)\b/.test(low)) return;
+
+    if (looksLikeNonIngredientGarbage(name)) return;
+    if (/^(directions?|préparation|preparation|astuce)$/i.test(low)) return;
+    if (/^(préchauffez|prechauffez|versez|ajoutez|incorporez|mélangez|melangez|laissez|dégustez|degustez)\b/i.test(low)) return;
+
+    if(looksLikeNonIngredientGarbage(name)) return ;
+    if(looksLikeNonIngredientGarbage(t)) return ;
+
+
+
+    out.push(t);
+  };
+
+
+  const metricRe =
+    /\b\d+(?:[.,]\d+)?\s*(?:kg|g|mg|l|dl|cl|ml)\s*(?:de\s+|d['’]\s*)?[a-zà-öø-ÿœ'’-]+(?:\s+[a-zà-öø-ÿœ'’-]+){0,4}\b/gi;
+
+  const humanRe =
+    /\b(?:un|une|\d+)\s+(?:sachet|sachets|gousse|gousses|tranche|tranches|verre|verres|tasse|tasses|pincée|pincées|pincee|pincees)\s*(?:de\s+|d['’]\s*)?[a-zà-öø-ÿœ'’-]+(?:\s+[a-zà-öø-ÿœ'’-]+){0,4}\b/gi;
+
+  const eggRe =
+    /\b\d+\s+(?:jaunes?\s+d['’](?:œufs?|oeufs?)|blancs?\s+d['’](?:œufs?|oeufs?)|œufs?|oeufs?)\b/gi;
+
+  const source = (lines || []).map((x) => stripInlineSocialHandles(normSpaces(x))).filter(Boolean);  
+
+  for (let i = 0; i < source.length; i++) {
+    const cur = source[i];
+    const next = i + 1 < source.length ? source[i + 1] : '';
+
+    // 1) ligne seule
+    for (const re of [metricRe, humanRe, eggRe]) {
+      const matches = cur.match(re) || [];
+      for (const m of matches) pushIfParsable(m);
+    }
+
+    // 2) ligne + suivante (pour recoller "150 g" + "de sucre ...")
+    if (next) {
+      const merged = normSpaces(`${cur} ${next}`);
+
+      for (const re of [metricRe, humanRe, eggRe]) {
+        const matches = merged.match(re) || [];
+        for (const m of matches) pushIfParsable(m);
+      }
+
+      // cas spécial : première ligne finit par quantité+unité, la suivante commence par "de ..."
+      const bridge = merged.match(
+        /\b(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|dl|cl|ml)\s+(de\s+[a-zà-öø-ÿœ'’-]+(?:\s+[a-zà-öø-ÿœ'’-]+){0,4})\b/i
+      );
+      if (bridge) {
+        pushIfParsable(`${bridge[1]} ${bridge[2]} ${bridge[3]}`);
+      }
+    }
+  }
+
+  return dedupeLines(out);
+}
+
+//ajoute le 30/03/26 a 13h38 - d'ici à
+function isExplicitIngredientListHeader(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^pour\s+r[ée]aliser\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\s*:?\s*$/i.test(t) ||
+    /^pour\s+faire\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\s*:?\s*$/i.test(t) ||
+    /^il\s+te\s+faut\s*:?\s*$/i.test(t) ||
+    /^ingr[ée]dients?\s*:?\s*$/i.test(t)
+  );
+}
+
+function isExplicitIngredientListStop(line) {
+  const t = normSpaces(line);
+  const low = t.toLowerCase();
+  if (!t) return true;
+
+  if (looksLikeNonIngredientGarbage(t)) return true;
+  if (looksLikeSocialNoise(t)) return true;
+  if (looksLikeEditorialNoise(t)) return true;
+  if (looksLikeStatusBarNoise(t)) return true;
+  if (looksLikeDateNoise(t)) return true;
+  if (looksLikeCountersNoise(t)) return true;
+
+  if (
+    /\b(recette complète|lien dans ma bio|dans ma bio|bon app[ée]tit|livre de \d+ recettes)\b/i.test(low)
+  ) return true;
+
+  if (
+    /^(pr[ée]chauffez|versez|ajoutez|incorporez|m[ée]langez|laissez|faites|cuire|enfournez|servez|d[ée]gustez)\b/i.test(low)
+  ) return true;
+
+  return false;
+}
+
+function looksLikeBareIngredientLine(line) {
+  const t = normSpaces(line);
+  const low = t.toLowerCase();
+  if (!t) return false;
+
+  if (isExplicitIngredientListHeader(t)) return false;
+  if (isExplicitIngredientListStop(t)) return false;
+
+  if (looksLikeStepLine(t) || looksLikeActionSentence(t) || looksLikeStepVerbLine(t)) return false;
+
+  if (t.length < 2 || t.length > 90) return false;
+  if (/[.!?]/.test(t)) return false;
+
+  // évite les trucs type "302 10,5 K"
+  if (/\d{2,}/.test(t) && !/^\d+\s*(g|kg|ml|cl|dl|l|mg)\b/i.test(low)) return false;
+
+  // une ligne courte/naturelle d'ingrédient passe
+  return true;
+}
+// ici
+
+
+
 /* =========================
    SPLIT INGREDIENTS / STEPS / NOTES
 ========================= */
@@ -1301,9 +1543,17 @@ function isStrictIngredientLine(line) {
  return (qty != null && qty !== 0) || (typeof qtyRaw === 'string' && qtyRaw.trim() !== '');
 }
 
+//ajout du 30/03/26
+function debugWatchRecipeLines(label, arr) {
+  const watch = /250\s*g|sucre vanill|beurre demi/i;
+  const hit = (arr || []).filter(x => watch.test(String(x)));
+  if (hit.length) dlog(`[WATCH SPLIT][${label}]`, hit);
+}
+
+
 function splitIngredientsAndSteps(lines) {
   const L = lines.map(normSpaces).filter(Boolean);
-
+  debugWatchRecipeLines('L', L);
   let servings = null;
   for (const l of L.slice(0, 50)) {
     const s = extractServingsFromLine(l);
@@ -1375,6 +1625,7 @@ function splitIngredientsAndSteps(lines) {
         prev = l;
         continue;
       }
+
       if (looksLikeSpoonMeasureIngredient(l)) {
         ingredientLines.push(l);
         prev = l;
@@ -1427,6 +1678,7 @@ function splitIngredientsAndSteps(lines) {
     let afterServingsHeader = false;
     let inIngredientBullets = false;
     let inSteps = false;
+    let inExplicitIngredientList = false;//ajouter le 30/03/26 a 13h42
     let prev = '';
 
     for (const l0 of L) {
@@ -1452,6 +1704,35 @@ function splitIngredientsAndSteps(lines) {
         prev = l;
         continue;
       }
+
+      //ajoute le 30/03/26 a 13h44 - d'ici à
+
+       if (isExplicitIngredientListHeader(l)) {
+        inExplicitIngredientList = true;
+        prev = l;
+        continue;
+      }
+
+      if (inExplicitIngredientList) {
+        if (isExplicitIngredientListStop(l)) {
+          inExplicitIngredientList = false;
+          prev = l;
+          continue;
+        }
+
+        if (looksLikeBareIngredientLine(l)) {
+          const ex = extractParenNote(l);
+          if (ex) {
+            ingredientLines.push(ex.line);
+            notesLines.push(ex.note);
+          } else {
+            ingredientLines.push(l);
+          }
+          prev = l;
+          continue;
+        }
+      }
+      //ici
 
       if (!inSteps) {
         //const parsed = parseOcrIngredient(l);
@@ -1531,8 +1812,17 @@ function splitIngredientsAndSteps(lines) {
     }
   }
 
+  debugWatchRecipeLines('ingredientLines-before-filter', ingredientLines);
+  debugWatchRecipeLines('stepLines-before-filter', stepLines);
+  debugWatchRecipeLines('notesLines-before-filter', notesLines);
+
+
   ingredientLines = ingredientLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
   notesLines = notesLines.filter((l) => !isIngredientsHeader(l) && !extractServingsFromLine(l));
+
+  debugWatchRecipeLines('ingredientLines-after-filter', ingredientLines);
+  debugWatchRecipeLines('stepLines-after-filter', stepLines);
+  debugWatchRecipeLines('notesLines-after-filter', notesLines);
 
   // ✅ CAT-02: si on a un header "Ingrédients", on ne doit pas déplacer la fin des steps vers ingrédients.
   // Ce filet de sécurité sert surtout quand le document n'a pas de structure claire.
@@ -1543,7 +1833,16 @@ function splitIngredientsAndSteps(lines) {
   }
 
   const ingredientLinesBeforeJoin = [...ingredientLines];
-  ingredientLines = joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
+
+  const bareIngredientCount = ingredientLines.filter((l) => looksLikeBareIngredientLine(l)).length;
+  const strictIngredientCount = ingredientLines.filter((l) => isStrictIngredientLine(l)).length;
+
+  // si on a surtout une liste d'ingrédients nus, ne pas les fusionner entre eux
+  const shouldSkipIngredientJoin = bareIngredientCount >= 3 && strictIngredientCount <= 2;
+
+ingredientLines = shouldSkipIngredientJoin
+  ? ingredientLines.map(normSpaces).filter(Boolean)
+  : joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
 
   dlog('[debug ingredientLines before join]', ingredientLinesBeforeJoin);
   dlog('[debug ingredienLines after join]', ingredientLines);
@@ -1572,10 +1871,15 @@ function splitIngredientsAndSteps(lines) {
   ingredientLines = fixedSnips.ingredientLines;
   notesLines = fixedSnips.notesLines;
 
+
   const rebalanced = rebalanceMisplacedLines({ ingredientLines, stepLines, notesLines });
   ingredientLines = rebalanced.ingredientLines;
   stepLines = rebalanced.stepLines;
   notesLines = rebalanced.notesLines;
+
+  debugWatchRecipeLines('ingredientLines-after-rebalance', ingredientLines);
+  debugWatchRecipeLines('stepLines-after-rebalance', stepLines);
+  debugWatchRecipeLines('notesLines-after-rebalance', notesLines);
 
   // ✅ NEW: si "Variantes :" est dans les steps => on bascule le bloc dans notes
   const movedVar = moveVariantsBlockToNotes({ stepLines, notesLines });
@@ -1588,15 +1892,65 @@ function splitIngredientsAndSteps(lines) {
   }
   // a enlever jusqua console.log
   function debugWhere(arr, label) {
- const hit = (arr || []).filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
- if (hit.length) dlog(`[DEBUG] ${label}:`, hit);
+    const hit = (arr || []).filter(x => /passoire|pomme|pommes de terre/i.test(String(x)));
+    if (hit.length) dlog(`[DEBUG] ${label}:`, hit);
   }
 
   debugWhere(ingredientLines, 'ingredientLines');
   debugWhere(stepLines, 'stepLines'); 
   debugWhere(notesLines, 'notesLines');
   dlog(stepLines.slice(0,30))
+
   stepLines = joinWrappedLinesForSteps(stepLines);
+
+  dlog('[INLINE SOURCE][L]', L.slice(0, 80));
+  dlog('[INLINE SOURCE][notes]', notesLines.slice(0, 30));
+  dlog('[INLINE SOURCE][steps]', stepLines.slice(0, 30));
+
+  const inlineSource = dedupeLines([
+    ...L, //si je l'enleve une des recettes revient juste avec jaune d'oeuf - il faut donc le garder
+    ...notesLines,
+    ...stepLines,
+  ]);
+
+  const inlineExtracted = extractInlineIngredientFragmentsFromLines(inlineSource);
+
+  dlog('[INLINE EXTRACTED]', inlineExtracted);
+
+  ingredientLines = dedupeLines([...ingredientLines, ...inlineExtracted]);
+
+  ingredientLines = ingredientLines.filter((l) => {
+    const t = normSpaces(l);
+    if (!t) return false;
+    if (looksLikeNonIngredientGarbage(t)) return false;
+
+    // ajouter le 30/03/26 à 13h58
+    if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false; // ex: 10,5 K
+    if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false; // ex: 302 10,5 K
+
+    const parsed = parseOcrIngredient(t);
+
+    if (parsed) {
+      const name = normSpaces(parsed.name || '');
+      if (!name || name.length < 2) return false;
+
+      const low = name.toLowerCase();
+      if (/^(q|de|et|ou)$/i.test(low)) return false;
+      if (/^[a-z]$/i.test(name)) return false;
+      if (/^\d+$/.test(name)) return false;
+      if (/^[a-z]\d+$|^\d+[a-z]$/i.test(name)) return false;
+      if (looksLikeNonIngredientGarbage(name)) return false;
+
+      return true;
+    }
+
+    return looksLikeBareIngredientLine(t);
+  });
+
+
+  dlog('[INGREDIENT LINES AFTER INLINE]', ingredientLines);
+
+
 
   // ✅ NEW: découpe en phrases si une ligne est longue et contient plusieurs phrases
   stepLines = splitStepsBySentences(stepLines);

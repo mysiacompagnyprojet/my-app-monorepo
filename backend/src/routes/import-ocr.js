@@ -272,52 +272,6 @@ function computeIngredientCostEur(ing, priceRow) {
   // unit OCR
   const unitRaw = String(ing?.unit || '').trim();
 
-  {/*function spoonToMl(unit) { remplacer par convertUnitForPricing le 26/02
-  const u = String(unit || '').toLowerCase().trim();
-  if (u === 'càc' || u === 'cac' || u === 'cc') return 5;  // 1 càc ≈ 5 ml
-  if (u === 'càs' || u === 'cas' || u === 'cs') return 15; // 1 càs ≈ 15 ml
-  return null;
- }*/}
-
-  {/*// ✅ cuillères -> ml (uniquement si Airtable est en "ml")
-  const mlPerSpoon = spoonToMl(unitRaw);
-  if (mlPerSpoon) {
-    if (priceRow.unit !== 'ml') {
-      return {
-        price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-        costEur: null,
-        matched: true,
-      };
-    }
-    const totalMl = qty * mlPerSpoon;
-    const cost = totalMl * Number(priceRow.pricePerUnit || 0);
-    return {
-      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-      costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
-      matched: true,
-    };}
-  remplacer par convertUnitForPricing le 26/02
-
-  // ✅ unités standard -> base (g/ml/piece) ici à
-  //const ingUnitCanon = canonUnit(unitRaw); // 'g','kg','ml','l','piece',...
-  //const { qty: baseQty, unit: baseUnit } = toBaseQty(qty, ingUnitCanon); ici remplacer par convertUnitForPricing le 26/02
-
-  // On ne calcule que si la base correspond à l’unité du prix unitaire Airtable
-  if (baseUnit !== priceRow.unit) {
-    return {
-      price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-      costEur: null,
-      matched: true,
-    };
-  }
-
-  const cost = baseQty * Number(priceRow.pricePerUnit || 0);
-  return {
-    price: { eurPer: priceRow.pricePerUnit, perUnit: priceRow.unit },
-    costEur: Number.isFinite(cost) ? roundMoney(cost) : null,
-    matched: true,
-  };*/}
-
   const converted = convertUnitForPricing(ing.name, qty, unitRaw, priceRow);
 
   // si conversion impossible, on affiche le prix unitaire, mais pas le cout calculeé
