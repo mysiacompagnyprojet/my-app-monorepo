@@ -58,6 +58,8 @@ type EnrichIngredientOut = {
  costRecipe?: number
  unitPriceBuy?: number | null
  airtableId?: string | null
+ ingredientBaseId?: string | null
+ id?: string | null
  priceMatched?: boolean
  note?: string
  price?: { eurPer: number; perUnit: string } | null
@@ -789,7 +791,8 @@ function NewRecipeInner() {
           costEur: typeof cost === 'number' ? cost : null,
           unitPriceBuy: typeof e.unitPriceBuy === 'number' ? e.unitPriceBuy : null,
           priceMatched: typeof e.priceMatched === 'boolean' ? e.priceMatched : Boolean(e.id),
-          id: e.id ?? null,
+          id: e.id ?? old.id ?? null,
+          ingredientBaseId: e.ingredientBaseId ?? old.ingredientBaseId ?? e.id ?? old.id ?? null,
           price: e.price ?? (old as any)?.price ?? null,
 
           buyPriceEur: typeof e.buyPriceEur === 'number' ? e.buyPriceEur : null,
@@ -804,7 +807,7 @@ function NewRecipeInner() {
           mlPerPiece: typeof e.mlPerPiece === 'number' ? e.mlPerPiece : null,
 
           note: typeof e.note === 'string' ? e.note : undefined,
-          category: (old as any).category ?? null, 
+          category: typeof e.category === 'string' ? e.category : old.category ?? null, 
         } as any
       }
 

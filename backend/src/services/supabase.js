@@ -209,7 +209,7 @@ try {
  // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
  const { data: synRows, error: synErr } = await supabaseAdmin
    .from(TABLE)
-   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme, category')
    .ilike('synonyme', `%${head}%`)
    .limit(50);
   
@@ -246,6 +246,7 @@ try {
        name: row.nom ?? raw,
        unit,
        pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
+       category: row.category ?? null,
 
        buyPrice: buyInfo.buyPrice,
        buyPriceEur: buyInfo.buyPrice,
@@ -283,7 +284,7 @@ try {
 // 1) Exact match sur nom (case-insensitive)
 const { data: exact, error: errExact } = await supabaseAdmin
 .from(TABLE)
-.select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+.select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme, category')
 .ilike('nom', `%${raw}%`) // match exact si raw sans %
 .limit(5);
 
@@ -319,6 +320,7 @@ name: picked.nom ?? raw,
 unit,
 pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
 
+
 buyPrice: buyInfo.buyPrice,
 buyPriceEur: buyInfo.buyPrice,
 refQty: buyInfo.refQty,
@@ -329,6 +331,7 @@ buyRefUnit: buyInfo.refUnit,
 ...packInfo,
 gramsPerPiece: toNumberLoose(picked.gramme_par_piece) || null,
 density_g_per_ml: Number.isFinite(density) ? density : null,
+category: picked.category ?? null,
 
 priceStatus: reason ? 'missing_price' : 'ok',
 priceMessage: reason ? "Prix manquant pour cet ingrédient (PPU introuvable)" : undefined,
@@ -348,7 +351,7 @@ async function getIngredientPriceById(id) {
 
  const { data: row, error } = await supabaseAdmin
    .from(TABLE)
-   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme')
+   .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme, category')
    .eq('id', id)
    .maybeSingle();
 
@@ -365,6 +368,7 @@ async function getIngredientPriceById(id) {
    name: row.nom,
    unit,
    pricePerUnit: Number.isFinite(ppuRounded) ? ppuRounded : null,
+   category: row.category ?? null,
 
    buyPrice: buyInfo.buyPrice,
    buyPriceEur: buyInfo.buyPrice,

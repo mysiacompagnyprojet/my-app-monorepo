@@ -124,6 +124,44 @@ function looksLikeNonIngredientGarbage(line) {
   return false;
 }
 
+function looksLikeBareIngredientLine(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  const low = t.toLowerCase();
+
+  if (looksLikeNonIngredientGarbage(t)) return false;
+  if (looksLikeStatusBarNoise(t)) return false;
+  if (looksLikeDateNoise(t)) return false;
+  if (looksLikeCountersNoise(t)) return false;
+  if (looksLikeSocialNoise(t)) return false;
+
+  // pas de phrases d'action / étapes
+  if (looksLikeStepLine(t)) return false;
+  if (looksLikeStepVerbLine(t)) return false;
+  if (looksLikeActionSentence(t)) return false;
+
+  // pas de hooks / textes sociaux
+  if (/\b(vous pensez|tu auras besoin|bon app[ée]tit|lien dans ma bio|livre de|je l'ai s[ée]duite|amoureux de toi)\b/i.test(low)) {
+    return false;
+  }
+
+  // pas de lignes très longues -> souvent phrase, pas ingrédient
+  if (t.length > 70) return false;
+
+  // pas de ligne quasi vide / bruit
+  if (/^[^a-zà-öø-ÿœ]+$/i.test(t)) return false;
+  if (/^\d+(?:[.,]\d+)?\s*[kK]\s*$/.test(t)) return false;
+  if (/^\d+\s+\d+(?:[.,]\d+)?\s*[kK]\s*$/.test(t)) return false;
+
+  // accepte slashs et "ou" pour variantes d'ingrédients
+  // ex: "sel/poivre", "persil ou coriandre ou basilic"
+  if (/[a-zà-öø-ÿœ]/i.test(t)) return true;
+
+  return false;
+}
+
+
 function stripSocialHeaderPrefix(line) {
   let t = normSpaces(line);
 
@@ -1180,6 +1218,53 @@ function splitCompoundIngredientLine(line) {
   return [`${qty1} ${unit} de ${name1}`, `${qty2} ${unit} de ${name2}`];
 }
 
+//ajouter le 31/03/26
+function splitCompositeIngredientLine(line) {
+  const l = normSpaces(line);
+  if (!l) return [line];
+
+  // split "/" en priorité
+  if (l.includes('/')) {
+    const parts = l
+      .split('/')
+      .map(p => normSpaces(p))
+      .filter(Boolean);
+
+    if (parts.length >= 2 && parts.every(p => p.length < 40)) {
+      return parts;
+    }
+  }
+
+  // split "ou" seulement si liste simple
+  if ((l.match(/\bou\b/gi) || []).length >= 1) {
+
+    // ignore phrases explicatives
+    if (
+      /\b(si|sinon|facultatif|option|possible|selon|goût|gout)\b/i.test(l)
+    ) {
+      return [line];
+    }
+
+    const parts = l
+      .split(/\bou\b/i)
+      .map(p => normSpaces(p))
+      .filter(Boolean);
+
+    if (
+      parts.length >= 2 &&
+      parts.every(p =>
+        p.length < 30 &&
+        !/[.!?]/.test(p)
+      )
+    ) {
+      return parts;
+    }
+  }
+
+  return [line];
+}
+
+
 function expandCompoundIngredientLines(lines) {
   const out = [];
   for (const line of lines) {
@@ -1504,26 +1589,6 @@ function isExplicitIngredientListStop(line) {
   ) return true;
 
   return false;
-}
-
-function looksLikeBareIngredientLine(line) {
-  const t = normSpaces(line);
-  const low = t.toLowerCase();
-  if (!t) return false;
-
-  if (isExplicitIngredientListHeader(t)) return false;
-  if (isExplicitIngredientListStop(t)) return false;
-
-  if (looksLikeStepLine(t) || looksLikeActionSentence(t) || looksLikeStepVerbLine(t)) return false;
-
-  if (t.length < 2 || t.length > 90) return false;
-  if (/[.!?]/.test(t)) return false;
-
-  // évite les trucs type "302 10,5 K"
-  if (/\d{2,}/.test(t) && !/^\d+\s*(g|kg|ml|cl|dl|l|mg)\b/i.test(low)) return false;
-
-  // une ligne courte/naturelle d'ingrédient passe
-  return true;
 }
 // ici
 
@@ -1944,9 +2009,20 @@ ingredientLines = shouldSkipIngredientJoin
       return true;
     }
 
+    //ajoute le 31/03/26 - accepte les ingredients sans quantites
+    if (looksLikeBareIngredientLine(t)) {
+      return true
+    }
+
     return looksLikeBareIngredientLine(t);
   });
+  
+  // split ingrédients composites (sel/poivre etc)
+  ingredientLines = ingredientLines.flatMap(l =>
+    splitCompositeIngredientLine(l)
+  );
 
+  ingredientLines = dedupeLines(ingredientLines);
 
   dlog('[INGREDIENT LINES AFTER INLINE]', ingredientLines);
 
@@ -1972,5 +2048,7 @@ module.exports = {
   beautifyIngredients,
   guessTitleFromLines,
   miniReflow,
+  looksLikeBareIngredientLine,
+  looksLikeNonIngredientGarbage,
 };
 

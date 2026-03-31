@@ -25,7 +25,7 @@ const { isValidRecipeTitleCandidate } = require('../utils/heuristics');
 const { isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, looksLikeLooseActionStep, looksLikeIngredientOnlyTitle, looksLikeHookOrLongSentenceTitle, looksLikeMeasureLineTitle, looksTruncatedTitle, isBadTitleCandidate, visionLooksLikeSuffix, stripOcrTitleArtifacts, looksLikeIngredientFragmentTitleForTitle  } = require('../utils/titleUtils');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
-const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow } = require('../utils/ocrText');
+const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow, looksLikeBareIngredientLine, looksLikeNonIngredientGarbage } = require('../utils/ocrText');
 const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { convertUnitForPricing } = require('../utils/units');
@@ -180,6 +180,74 @@ function uniqLines(arr) {
   }
   return out;
 }
+
+//ajouter le 31/03/26
+function scoreSplitQuality(split) {
+  const lines = Array.isArray(split?.ingredientLines) ? split.ingredientLines : [];
+
+  let strictCount = 0;
+  let bareCount = 0;
+  let garbageCount = 0;
+  let phraseCount = 0;
+
+  for (const raw of lines) {
+    const l = normSpaces(raw);
+    if (!l) continue;
+
+    if (looksLikeNonIngredientGarbage(l)) {
+      garbageCount++;
+      continue;
+    }
+
+    if (
+      /[.!?]/.test(l) ||
+      /\b(frottez|mélangez|melangez|ajoutez|versez|beurrez|placez|laissez|badigeonnez|tracez|croisez)\b/i.test(l)
+    ) {
+      phraseCount++;
+      continue;
+    }
+
+    const parsed = parseOcrIngredient(l);
+
+    if (parsed) {
+      const name = normSpaces(parsed.name || '');
+      const qty = Number(parsed.quantity || 0);
+      const unit = String(parsed.unit || '').trim();
+
+      if (
+        !name ||
+        looksLikeNonIngredientGarbage(name) ||
+        /^[a-z]$/i.test(name) ||
+        /^\d+$/.test(name) ||
+        /^[a-z]\d+$|^\d+[a-z]$/i.test(name)
+      ) {
+        garbageCount++;
+        continue;
+      }
+
+      if (qty > 0 || unit) strictCount++;
+      else if (looksLikeBareIngredientLine(name)) bareCount++;
+      else garbageCount++;
+
+      continue;
+    }
+
+    if (looksLikeBareIngredientLine(l)) {
+      bareCount++;
+    } else {
+      garbageCount++;
+    }
+  }
+
+  return {
+    strictCount,
+    bareCount,
+    garbageCount,
+    phraseCount,
+    score: strictCount * 4 + bareCount - garbageCount * 5 - phraseCount * 6,
+  };
+}
+
 
 function rescueWrappedIngredientFragmentsOnly(split) {
   const ing = Array.isArray(split?.ingredientLines) ? [...split.ingredientLines] : [];
@@ -417,6 +485,16 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           pt = '';
         }
 
+        //ajouter le 31/03/26 - d'ici à
+        if (/^pour\s+r[ée]aliser\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(pt)) {
+          pt = '';
+        }
+
+        if (/^pour\s+faire\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(pt)) {
+          pt = '';
+        }
+        //ici
+
         // ✅ Push seulement si vraiment utile
         if (pt) pickedTitles.push(pt);
       }
@@ -443,14 +521,25 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     const bestVisionTitleRaw = mergedFromVision || pickBestTitle(cleanedPickedTitles);
 
     let bestVisionTitle =
-      bestVisionTitleRaw &&
-      isValidRecipeTitleCandidate(bestVisionTitleRaw) &&
-      !isBlacklistedUiTitle(bestVisionTitleRaw) &&
-      !looksLikeEmotionalHookTitle(bestVisionTitleRaw) &&
-      !looksLikeStepTitle(bestVisionTitleRaw) &&
-      !looksLikeIngredientFragmentTitleForTitle(bestVisionTitleRaw)
-        ? String(bestVisionTitleRaw).trim()
-        : null;
+    bestVisionTitleRaw &&
+    isValidRecipeTitleCandidate(bestVisionTitleRaw) &&
+    !isBlacklistedUiTitle(bestVisionTitleRaw) &&
+    !looksLikeEmotionalHookTitle(bestVisionTitleRaw) &&
+    !looksLikeStepTitle(bestVisionTitleRaw) &&
+    !looksLikeIngredientFragmentTitleForTitle(bestVisionTitleRaw)
+    ? String(bestVisionTitleRaw).trim()
+    : null;
+
+    //ajouter le 31/03/26 - d'ici à
+    if ( bestVisionTitle &&
+      (
+        /^pour\s+r[ée]aliser\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(bestVisionTitle) ||
+        /^pour\s+faire\s+cette\s+recette\s+tu\s+auras\s+besoin\s+de\b/i.test(bestVisionTitle)
+      )
+    ) {
+      bestVisionTitle = null;
+    }
+    //ici
 
     const rawText = texts.join('\n\n');
     const filtered = smartFilterWithTrashFromText(rawText);
@@ -507,13 +596,25 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       }
     }
 
+    //remplace le 31/03/26 - d'ici à 
     let lines = removeSocialHeaderLines(filtered.lines);
-    let split = splitIngredientsAndSteps(lines);
 
-    split = rescueWrappedIngredientFragmentsOnly(split);
+    let splitPass1 = splitIngredientsAndSteps(lines);
+    splitPass1 = rescueWrappedIngredientFragmentsOnly(splitPass1);
 
-    lines = miniReflow(split);
-    split = splitIngredientsAndSteps(lines);
+    const reflowedLines = miniReflow(splitPass1);
+    let splitPass2 = splitIngredientsAndSteps(reflowedLines);
+
+    const q1 = scoreSplitQuality(splitPass1);
+    const q2 = scoreSplitQuality(splitPass2);
+
+    dlog('[SPLIT QUALITY][PASS1]', q1, splitPass1.ingredientLines || []);
+    dlog('[SPLIT QUALITY][PASS2]', q2, splitPass2.ingredientLines || []);
+
+    // PASS2 seulement si elle est réellement meilleure, pas juste plus longue
+    let split = q2.score > q1.score ? splitPass2 : splitPass1;
+    // ici
+
 
     let servings = split.servings || 1;
     if (!Number.isFinite(servings) || servings < 1) servings = 1;
@@ -571,14 +672,44 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             return null;
           }
 
-          const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
-          if (!parsed) return { name: l, quantity: 0, unit: '' };
+           //a enlever c'est pour tester c.a.c poivre
+          if(/poivre/i.test(l)) {
+            dlog('[POIVRE RAW LINE]', l);
+          }
+
+          //modifie le 31/03/26 - d'ici à
+         const parsed = parseOcrIngredient(l) || (parseRawLine ? parseRawLine(l) : null);
+
+        //a enlever c'est pour tester c.a.c poivre
+         if (/poivre/i.test(l)) {
+          dlog('[POIVRE PARSED]', parsed);
+         }
+
+         if (!parsed) {
+            if (!looksLikeBareIngredientLine(l)) return null;
+            return { name: l, quantity: 0, unit: '' };
+          }
+
+          const parsedName = normSpaces(parsed.name || '');
+          const parsedQty = Number(parsed.quantity || 0);
+          const parsedUnit = String(parsed.unit || '').trim();
+
+          // si le parser "réussit" mais sort un faux ingrédient issu d'une phrase,
+          // on le jette au lieu de le garder
+          if (
+            looksLikeNonIngredientGarbage(parsedName) ||
+            (!parsedQty && !parsedUnit && !looksLikeBareIngredientLine(parsedName)) ||
+            (parsedQty > 0 && /^(piece|pièce)$/i.test(parsedUnit) && !looksLikeBareIngredientLine(parsedName))
+          ) {
+            return null;
+          }
 
           const row = {
-            name: parsed.name || l,
-            quantity: Number(parsed.quantity || 0),
-            unit: parsed.unit || '',
+            name: parsedName || l,
+            quantity: parsedQty,
+            unit: parsedUnit,
           };
+          //ici
 
           row.name = String(row.name || '').replace(/[↑■]+/g, '').trim();
 

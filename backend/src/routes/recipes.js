@@ -368,40 +368,41 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
          }
        }
 
-       const enriched = await enrichIngredientWithCost(base)
+        const enriched = await enrichIngredientWithCost(base)
+        const matchedId = enriched?.id ?? base.ingredientBaseId ?? null
 
-       return {
-         name: base.name,
-         quantity: base.quantity,
-         unit: base.unit,
-         ingredientBaseId: base.ingredientBaseId,
+        return {
+          name: base.name,
+          quantity: base.quantity,
+          unit: base.unit,
+          ingredientBaseId: matchedId,
 
-         id: enriched?.id ?? null,
-         priceMatched: Boolean(enriched?.id),
+          id: matchedId,
+          priceMatched: Boolean(matchedId),
 
-         // €/unité (souvent €/g ou €/ml)
-         unitPriceBuy: enriched?.unitPriceBuy ?? null,
+          // €/unité (souvent €/g ou €/ml)
+          unitPriceBuy: enriched?.unitPriceBuy ?? null,
 
-         // ✅ prix recette
-         costEur: Number(enriched?.costRecipe || 0),
+          // ✅ prix recette
+          costEur: Number(enriched?.costRecipe || 0),
 
-         // ✅ prix pack
-         buyPriceEur: enriched?.buyPriceEur ?? null,
-         buyLabel: enriched?.buyLabel ?? null,
-         buyRefQty: enriched?.buyRefQty ?? null,
-         buyRefUnit: enriched?.buyRefUnit ?? null,
+          // ✅ prix pack
+          buyPriceEur: enriched?.buyPriceEur ?? null,
+          buyLabel: enriched?.buyLabel ?? null,
+          buyRefQty: enriched?.buyRefQty ?? null,
+          buyRefUnit: enriched?.buyRefUnit ?? null,
 
-         gramsPerPiece: enriched?.gramsPerPiece ?? null,
-         density_g_per_ml: enriched?.density_g_per_ml ?? null,
-         mlPerPiece: enriched?.mlPerPiece ?? null,
-         category: enriched?.category ?? null,
+          gramsPerPiece: enriched?.gramsPerPiece ?? null,
+          density_g_per_ml: enriched?.density_g_per_ml ?? null,
+          mlPerPiece: enriched?.mlPerPiece ?? null,
+          category: enriched?.category ?? null,
 
-         // ✅ statut/message ligne
-         priceStatus: enriched?.priceStatus ?? null,
-         priceMessage: enriched?.priceMessage ?? null,
+          // ✅ statut/message ligne
+          priceStatus: enriched?.priceStatus ?? null,
+          priceMessage: enriched?.priceMessage ?? null,
 
-         ...(enriched?.note ? { note: enriched.note } : {}),
-       }
+          ...(enriched?.note ? { note: enriched.note } : {}),
+        }
      })
    )
 

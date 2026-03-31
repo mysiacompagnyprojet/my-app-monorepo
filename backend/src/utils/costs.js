@@ -182,6 +182,7 @@ async function enrichIngredientWithCost(i) {
         gramsPerPiece: null, 
         density_g_per_ml: null,
         mlPerPiece: null,
+        category: null,
     }
 
     if (!name) {
@@ -201,6 +202,7 @@ async function enrichIngredientWithCost(i) {
             priceStatus: 'invalid',
             priceMessage: 'Nom d’ingrédient vide',
             note: 'nom vide',
+            category,
         }
     }
 
@@ -208,6 +210,8 @@ async function enrichIngredientWithCost(i) {
     const pricing = i?.ingredientBaseId
     ? await getIngredientPriceById(i.ingredientBaseId)
     : await getIngredientPriceByName(name, unitRaw)
+
+    const category = typeof pricing?.category === 'string' ? pricing.category : null
     console.log('[PRICING DEBUG]', name, {
         unitRaw,
         priceUnit: pricing?.unit,
@@ -237,6 +241,7 @@ async function enrichIngredientWithCost(i) {
             priceMessage: "Ingrédient non trouvé dans la base",
         
             note: 'non trouvé dans la base',
+            category,
         }
     }
 
@@ -287,6 +292,7 @@ async function enrichIngredientWithCost(i) {
             gramsPerPiece: gramsPerPiece ?? null,
             density_g_per_ml: density ?? null,
             mlPerPiece: mlPerPiece ?? null,
+            category,
         }
     }
 
@@ -311,6 +317,7 @@ async function enrichIngredientWithCost(i) {
             priceStatus: 'conversion_failed',
             priceMessage: "Conversion d’unité impossible",
             note: 'conversion de base impossible',
+            category,
         }
     }
 
@@ -332,6 +339,7 @@ async function enrichIngredientWithCost(i) {
             mlPerPiece: mlPerPiece ?? null,
             priceMatched: Boolean(pricing.id),
             priceStatus: 'ok',
+            category,
         }
     }
 
@@ -366,6 +374,7 @@ async function enrichIngredientWithCost(i) {
             priceMatched: Boolean(pricing.id),
             priceStatus: 'ok',
             note: 'conversion piece→g (gramsPerPiece)',
+            category,
         }
     }
 
@@ -389,6 +398,7 @@ async function enrichIngredientWithCost(i) {
             priceMatched: Boolean(pricing.id),
             priceStatus: 'ok',
             note: 'conversion piece→ml (mlPerPiece)',
+            category,
         }
     }
 
@@ -416,6 +426,7 @@ async function enrichIngredientWithCost(i) {
                 priceMatched: Boolean(pricing.id),
                 priceStatus: 'ok',
                 note: 'conversion densité (ml→g)',
+                category,
             }
         }
 
@@ -438,6 +449,7 @@ async function enrichIngredientWithCost(i) {
             priceMatched: Boolean(pricing.id),
             priceStatus: 'ok',
             note: 'conversion densité (g→ml)',
+            category,
         }
     }
 }

@@ -28,16 +28,12 @@ function normalizeIngredientParseInput(line) {
   let t = normSpaces(line);
   if (!t) return '';
 
-  // normalise les variantes cuillère à café
-  t = t.replace(/\bc\s*\.\s*[àa]\s*caf[eé]\b/gi, 'càc');
-  t = t.replace(/\bc\s*\.\s*[àa]\s*c\.\b/gi, 'càc');
-  t = t.replace(/\bc\s*[àa]\s*c\b/gi, 'càc');
-  t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+caf[eé]\b/gi, 'càc');
+  // normalise les variantes cuillère à café - remplacé le 31/03/26
+  t = t.replace(/\bc\s*\.?\s*[àa]\s*\.?\s*c\s*\.?\b/gi, 'càc');
+  t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+caf(?:é|e)\b/gi, 'càc');
 
-  // normalise les variantes cuillère à soupe
-  t = t.replace(/\bc\s*\.\s*[àa]\s*soupe\b/gi, 'càs');
-  t = t.replace(/\bc\s*\.\s*[àa]\s*s\.\b/gi, 'càs');
-  t = t.replace(/\bc\s*[àa]\s*s\b/gi, 'càs');
+  // normalise les variantes cuillère à soupe - remplacé le 31/03/26
+  t = t.replace(/\bc\s*\.?\s*[àa]\s*\.?\s*s\s*\.?\b/gi, 'càs');
   t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+soupe\b/gi, 'càs');
 
   return normSpaces(t);
