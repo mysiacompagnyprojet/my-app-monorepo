@@ -1218,30 +1218,59 @@ function splitCompoundIngredientLine(line) {
   return [`${qty1} ${unit} de ${name1}`, `${qty2} ${unit} de ${name2}`];
 }
 
-//ajouter le 31/03/26
+//ajoute le 01/04/26
+function splitOnSlashOutsideFractions(text) {
+  const s = normSpaces(text);
+  if (!s) return [];
+
+  const parts = [];
+  let buffer = '';
+
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i];
+    const prev = i > 0 ? s[i - 1] : '';
+    const next = i + 1 < s.length ? s[i + 1] : '';
+
+    const isFractionSlash = /\d/.test(prev) && /\d/.test(next);
+
+    if (ch === '/' && !isFractionSlash) {
+      const piece = normSpaces(buffer);
+      if (piece) parts.push(piece);
+      buffer = '';
+      continue;
+    }
+
+    buffer += ch;
+  }
+
+  const tail = normSpaces(buffer);
+  if (tail) parts.push(tail);
+
+  return parts;
+}
+
+
+//ajouter le 31/03/26 - modifie le 01/04/26
 function splitCompositeIngredientLine(line) {
   const l = normSpaces(line);
   if (!l) return [line];
 
-  // split "/" en priorité
+  // split "/" seulement hors fractions
   if (l.includes('/')) {
-    const parts = l
-      .split('/')
-      .map(p => normSpaces(p))
-      .filter(Boolean);
+    const parts = splitOnSlashOutsideFractions(l);
 
-    if (parts.length >= 2 && parts.every(p => p.length < 40)) {
+    if (
+      parts.length >= 2 &&
+      parts.every(p => p.length < 40) &&
+      !parts.some(p => /^\d+$/.test(p))
+    ) {
       return parts;
     }
   }
 
   // split "ou" seulement si liste simple
   if ((l.match(/\bou\b/gi) || []).length >= 1) {
-
-    // ignore phrases explicatives
-    if (
-      /\b(si|sinon|facultatif|option|possible|selon|goût|gout)\b/i.test(l)
-    ) {
+    if (/\b(si|sinon|facultatif|option|possible|selon|goût|gout)\b/i.test(l)) {
       return [line];
     }
 
@@ -1252,10 +1281,7 @@ function splitCompositeIngredientLine(line) {
 
     if (
       parts.length >= 2 &&
-      parts.every(p =>
-        p.length < 30 &&
-        !/[.!?]/.test(p)
-      )
+      parts.every(p => p.length < 30 && !/[.!?]/.test(p))
     ) {
       return parts;
     }
@@ -1263,6 +1289,7 @@ function splitCompositeIngredientLine(line) {
 
   return [line];
 }
+
 
 
 function expandCompoundIngredientLines(lines) {
@@ -1472,6 +1499,17 @@ function normalizeInlineIngredientFragment(fragment) {
   return normSpaces(t);
 }
 
+//ajoute le 01/04/26
+function isMatchStartingInsideFraction(line, start) {
+  if (start <= 0) return false;
+
+  const prev = line[start - 1] || '';
+  if (prev === '/') return true;
+
+  const left = line.slice(Math.max(0, start - 4), start);
+  return /\d\s*\/\s*$/.test(left);
+}
+
 function extractInlineIngredientFragmentsFromLines(lines) {
   const out = [];
 
@@ -1479,6 +1517,7 @@ function extractInlineIngredientFragmentsFromLines(lines) {
   const pushIfParsable = (frag) => {
     const t = normalizeInlineIngredientFragment(frag);
     if (!t) return;
+
     if (looksLikeNonIngredientGarbage(t)) return;
 
     const parsed = parseOcrIngredient(t);
@@ -1506,7 +1545,10 @@ function extractInlineIngredientFragmentsFromLines(lines) {
     if(looksLikeNonIngredientGarbage(name)) return ;
     if(looksLikeNonIngredientGarbage(t)) return ;
 
-
+    //ajoute temporairement le 01/04/26 - a enlever une fois test reussi
+    if (/c\.?\s*à\s*caf|càc|cac|cc/i.test(t)) {
+      console.log('[INLINE PUSH CANDIDATE]', { frag, normalized: t });
+    }
 
     out.push(t);
   };
@@ -1527,20 +1569,36 @@ function extractInlineIngredientFragmentsFromLines(lines) {
     const cur = source[i];
     const next = i + 1 < source.length ? source[i + 1] : '';
 
-    // 1) ligne seule
+    // 1) ligne seule - remplacer le 01/04/26
     for (const re of [metricRe, humanRe, eggRe]) {
-      const matches = cur.match(re) || [];
-      for (const m of matches) pushIfParsable(m);
+      for (const match of cur.matchAll(re)) {
+        const frag = match[0];
+        const idx = match.index ?? -1;
+        if (idx < 0) continue;
+
+        if (isMatchStartingInsideFraction(cur, idx)) continue;
+
+        pushIfParsable(frag);
+      }
     }
 
     // 2) ligne + suivante (pour recoller "150 g" + "de sucre ...")
     if (next) {
       const merged = normSpaces(`${cur} ${next}`);
 
+      //remplacer le 01/04/26
       for (const re of [metricRe, humanRe, eggRe]) {
-        const matches = merged.match(re) || [];
-        for (const m of matches) pushIfParsable(m);
+        for (const match of merged.matchAll(re)) {
+          const frag = match[0];
+          const idx = match.index ?? -1;
+          if (idx < 0) continue;
+
+          if (isMatchStartingInsideFraction(merged, idx)) continue;
+
+          pushIfParsable(frag);
+        }
       }
+
 
       // cas spécial : première ligne finit par quantité+unité, la suivante commence par "de ..."
       const bridge = merged.match(
@@ -1616,6 +1674,50 @@ function debugWatchRecipeLines(label, arr) {
 }
 
 
+//ajouter le 01/04/26
+function looksLikeIngredientSubsectionLabel(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  return (
+    /^(ou)$/i.test(t) ||
+    /^(m[aá]vem)$/i.test(t) ||
+    /^(assaisonnement|assaisonement|marinade|sauce)\b.*:$/i.test(t)
+  );
+}
+
+function looksLikeStepSubsectionHeader(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  return /^(?:[-•*]\s*)?(cuisson|préparation|preparation|montage|finition)\b.*:$/i.test(t);
+}
+
+//ajoute le 01/04/26
+function looksLikeBulletIngredientLine(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+  if (!looksLikeListBullet(t)) return false;
+
+  const unbulleted = normSpaces(t.replace(/^[-•*]\s*/, ''));
+  if (!unbulleted) return false;
+
+  if (looksLikeIngredientSubsectionLabel(unbulleted)) return false;
+  if (looksLikeStepSubsectionHeader(unbulleted)) return false;
+  if (isStepsHeader(unbulleted)) return false;
+  if (looksLikeStepLine(unbulleted)) return false;
+  if (looksLikeStepVerbLine(unbulleted)) return false;
+  if (looksLikeActionSentence(unbulleted)) return false;
+
+  return (
+    !!parseOcrIngredient(unbulleted) ||
+    isStrictIngredientLine(unbulleted) ||
+    looksLikeSpoonMeasureIngredient(unbulleted) ||
+    looksLikeBareIngredientLine(unbulleted)
+  );
+}
+
+
 function splitIngredientsAndSteps(lines) {
   const L = lines.map(normSpaces).filter(Boolean);
   debugWatchRecipeLines('L', L);
@@ -1681,7 +1783,6 @@ function splitIngredientsAndSteps(lines) {
           prev = l;
           continue;
         }
-
       }
 
       if (isIngredientsHeader(l) || extractServingsFromLine(l)) {
@@ -1691,44 +1792,72 @@ function splitIngredientsAndSteps(lines) {
         continue;
       }
 
-      if (looksLikeSpoonMeasureIngredient(l)) {
+      // header de sous-section d'étapes -> bascule immédiate
+      if (!inSteps && (isStepsHeader(l) || looksLikeStepSubsectionHeader(l))) {
+        inSteps = true;
+        prev = l;
+        continue;
+      }
+
+      // labels internes du bloc ingrédients -> notes, pas ingrédients
+      if (!inSteps && looksLikeIngredientSubsectionLabel(l)) {
+        notesLines.push(l);
+        prev = l;
+        continue;
+      }
+
+      //ajout le 01/04/26
+      if (!inSteps && looksLikeBulletIngredientLine(l)) {
+        const ex = extractParenNote(l);
+        if (ex) {
+          ingredientLines.push(ex.line);
+          notesLines.push(ex.note);
+        } else {
+          ingredientLines.push(l);
+        }
+          prev = l;
+          continue;
+        }
+
+
+      if (!inSteps && looksLikeSpoonMeasureIngredient(l)) {
         ingredientLines.push(l);
         prev = l;
         continue;
       }
 
-      if (!inSteps && isStepsHeader(l)) {
-        inSteps = true;
-        prev = l;
-        continue;
-      }
-      // le 29/03/26, remplacé par : d'ici à
       const parsedCurrentIngredient = parseOcrIngredient(l);
-      const prevlooksStep =
-        looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
+      const prevLooksStep =
+      looksLikeStepLine(prev) || looksLikeStepVerbLine(prev) || looksLikeActionSentence(prev);
 
       const curLooksIngredient =
-        !!parsedCurrentIngredient ||
-        isStrictIngredientLine(l) ||
-        looksLikeSpoonMeasureIngredient(l) ||
-        looksLikeListBullet(l);
+      !!parsedCurrentIngredient ||
+      isStrictIngredientLine(l) ||
+      looksLikeSpoonMeasureIngredient(l) ||
+      looksLikeBulletIngredientLine(l);
+
+      const curLooksBulletOnly =
+      looksLikeListBullet(l) &&
+      !looksLikeBulletIngredientLine(l) &&
+      !curLooksIngredient;
 
       const curLooksNotIngredient = !curLooksIngredient;
 
       if (
         !inSteps &&
-        !curLooksIngredient &&
         (
           looksLikeStepLine(l) ||
+          looksLikeStepVerbLine(l) ||
           looksLikeStepContinuation(prev, l) ||
-          (prevlooksStep && curLooksNotIngredient)
+          (prevLooksStep && curLooksNotIngredient)
         )
       ) {
         inSteps = true;
       }
-      //ici
-      if (inSteps) stepLines.push(l);
-      else {
+
+      if (inSteps) {
+        stepLines.push(l);
+      } else {
         const ex = extractParenNote(l);
         if (ex) {
           ingredientLines.push(ex.line);
@@ -1737,9 +1866,11 @@ function splitIngredientsAndSteps(lines) {
           ingredientLines.push(l);
         }
       }
+
       prev = l;
     }
-  } else {
+
+    } else {
     let afterServingsHeader = false;
     let inIngredientBullets = false;
     let inSteps = false;

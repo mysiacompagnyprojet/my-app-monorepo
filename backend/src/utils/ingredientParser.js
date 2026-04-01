@@ -48,7 +48,21 @@ function parseOcrIngredient(line) {
   // ✅ bruit OCR fréquent : "Og" / "0g" isolé
   if (/^o[gq]$/i.test(raw0) || /^0\s*g$/i.test(raw0)) return null;
 
-  const raw = normalizeIngredientParseInput(fixCommonOcrQuantityUnitBugs(raw0));
+  //a remettre une fois le test fait, enlever const afterFix jusqu'à    afterNormalize: raw});} - const raw = normalizeIngredientParseInput(fixCommonOcrQuantityUnitBugs(raw0));
+  //a enlever d'ici à
+  const afterFix = fixCommonOcrQuantityUnitBugs(raw0);
+  const raw = normalizeIngredientParseInput(afterFix);
+
+  // TRACE FRACTIONS
+  if (/^\s*(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(raw0)) {
+    console.log('[FRACTION TRACE]', {
+      original: raw0,
+      afterFix,
+      afterNormalize: raw
+    });
+  }
+  //ici
+
 
   if (isIngredientsHeader(raw)) return null;
   if (isPreparationHeader(raw)) return null;
@@ -63,6 +77,46 @@ function parseOcrIngredient(line) {
   }
 
   const l = raw.replace(/^[-•*]\s+/, '');
+
+  // plage de quantité : "900 g à 1 kg de paleron de boeuf" - ajoute le 01/04/26
+  m = l.match(
+    new RegExp(
+      `^${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:à|a|-)\\s*${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:de\\s+|d['’]\\s*)?(.+)$`,
+      'i'
+    )
+  );
+
+  if (m) {
+    const qtyNum = parseQuantityToNumber(m[3]);
+    const qtyRaw = normalizeQuantityRawForDisplay(m[3]);
+    const unit = normalizeUnit(m[4]);
+    const name = postProcessIngredientName(m[5]);
+
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return {
+        name,
+        quantity: qtyNum ?? 0,
+        quantityRaw: qtyRaw || undefined,
+        unit
+      };
+    }
+  }
+
+
+  //ajoute le 01/04/26
+  if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(l)) {
+    console.log('[PARSE FRACTION]', l);
+  }
+
+  //ajoute le 01/04/26
+  if (/^(assaisonnement|assaisonement|cuisson|marinade|sauce)\b.*:$/i.test(l)) return null;
+  if (/^ingr[ée]dients?$/i.test(l)) return null;
+
 
   if (/^sel\s*&\s*poivre$/i.test(l)) {
     return { name: 'sel', quantity: 0, unit: '' };
@@ -130,8 +184,12 @@ function parseOcrIngredient(line) {
   // le 29/03/26, remplacé par :
   // unités “humaines”
   m = l.match(
-    /^(\d+(?:[.,]\d+)?)\s+(gousses?|tranches?|sachets?|verres?|tasses?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\s+(?:de\s+|d['’]\s*)?(.+)$/i
+    //remplacé le 01/04/26
+    new RegExp(
+      `^${QTY_USED}\\s+(gousses?|tranches?|sachets?|verres?|tasses?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\\s+(?:de\\s+|d['’]\\s*)?(.+)$`, 'i'
+    )
   );
+
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
@@ -168,21 +226,22 @@ function parseOcrIngredient(line) {
 
   // le 29/03/26, remplacé par :
   // fallback prudent
-  m = l.match(/^(\d+(?:[.,]\d+)?)\s+(.+)$/);
-  if (m) {
-    const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
-    const qtyNum = parseQuantityToNumber(m[1]);
-    const name = postProcessIngredientName(m[2]);
+  // supprimer d'ici à - le 01/04/26 car il fait doublon avec celui du dessus
+  //m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));//remplacé le 01/04/26
+  //if (m) {
+    //const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
+    //const qtyNum = parseQuantityToNumber(m[1]);
+    //const name = postProcessIngredientName(m[2]);
 
-    if (
-      name &&
-      !looksLikeActionSentence(name) &&
-      !looksLikeStepVerbLine(name) &&
-      !looksLikeStepLine(name)
-    ) {
-      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
-    }
-  }
+   // if (
+    //  name &&
+     // !looksLikeActionSentence(name) &&
+     // !looksLikeStepVerbLine(name) &&
+     // !looksLikeStepLine(name)
+   // ) {
+     // return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
+    //}
+  //} - ici
 
   return null;
 }

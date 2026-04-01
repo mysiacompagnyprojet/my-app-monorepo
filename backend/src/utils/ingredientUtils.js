@@ -80,6 +80,13 @@ function looksLikeSocialNoise(line) {
   if (/→\s*suivre\b/i.test(t)) return true;
   if (/^[a-z0-9._'’ -]{2,40}\s*→\s*suivre\b/i.test(t)) return true;
 
+  //ajout du 01/04/26
+  if (/^aim[ée]?\s+par\b/i.test(t)) return true;
+  if (/^ajouter?\s+un\s+commentaire\b/i.test(t)) return true;
+  if (/^j['’]aime\b/i.test(t)) return true;
+  if (/^[qo]$/i.test(t)) return true;
+  if (/^suivre$/i.test(t)) return true;
+
   const patterns = [
     'toutes les publications',
     'voir plus',
@@ -180,6 +187,14 @@ function postProcessIngredientName(name) {
   // nettoie les restes de début/fin
   n = n.replace(/^[\s"'“”‘’([{]+/g, '');
   n = n.replace(/[\s"'“”‘’)\]}]+$/g, '');
+
+  //ajoute le 01/04/26 - remplacer par celui du dessous le 01/04/26
+  //n = n.replace(/^(?:à|a)\s+\d+(?:[.,]\d+)?\s*(kg|g|mg|l|dl|cl|ml)\s+(?:de\s+|d['']\s*)?/i, '');
+
+  //remplace celui du dessus - le 01/04/26
+  n = n.replace(/\b(coup[ée]e?s?\s+en\s+d[ée]s|coup[ée]e?s?|[ée]minc[ée]e?s?|hach[ée]e?s?|r[âa]p[ée]e?s?)\b/gi, '');
+  n = n.replace(/\b(finement|grossi[èe]rement)\b/gi, '');
+  n = normSpaces(n);
 
   return normSpaces(n);
 }
@@ -361,6 +376,10 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
 
  for (let i = 0; i < src.length; i++) {
    const cur = src[i];
+   //ajoute le 01/04/26
+   if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(cur)) {
+      console.log('[JOIN INPUT]', cur);
+    }
    const next = i + 1 < src.length ? src[i + 1] : '';
 
    const bufferHasOpenParen = buffer.includes('(') && !buffer.includes(')');
@@ -379,6 +398,11 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
 
    // 1) "200" + "g"
    if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
+      //ajoute le 01/04/26
+      if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(buffer)) {
+        console.log('[JOIN BUFFER]', buffer);
+      }
+
      flush();
      buffer = `${cur} ${next}`;
      i++;

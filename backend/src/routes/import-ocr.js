@@ -26,7 +26,7 @@ const { isBlacklistedUiTitle, looksLikeEmotionalHookTitle, looksLikeStepTitle, l
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //ocrText
 const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLinesForSteps, beautifyIngredients, guessTitleFromLines, miniReflow, looksLikeBareIngredientLine, looksLikeNonIngredientGarbage } = require('../utils/ocrText');
-const { joinWrappedLinesForIngredients } = require('../utils/ingredientUtils');
+const { joinWrappedLinesForIngredients, looksLikeListBullet } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { convertUnitForPricing } = require('../utils/units');
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
@@ -181,12 +181,15 @@ function uniqLines(arr) {
   return out;
 }
 
-//ajouter le 31/03/26
+//ajouter le 31/03/26 - remplacer le 01/06/26
 function scoreSplitQuality(split) {
   const lines = Array.isArray(split?.ingredientLines) ? split.ingredientLines : [];
 
   let strictCount = 0;
   let bareCount = 0;
+  let bulletIngredientCount = 0;
+  let spoonCount = 0;
+  let fractionCount = 0;
   let garbageCount = 0;
   let phraseCount = 0;
 
@@ -194,20 +197,12 @@ function scoreSplitQuality(split) {
     const l = normSpaces(raw);
     if (!l) continue;
 
-    if (looksLikeNonIngredientGarbage(l)) {
-      garbageCount++;
-      continue;
-    }
-
-    if (
-      /[.!?]/.test(l) ||
-      /\b(frottez|mélangez|melangez|ajoutez|versez|beurrez|placez|laissez|badigeonnez|tracez|croisez)\b/i.test(l)
-    ) {
-      phraseCount++;
-      continue;
-    }
-
+    const unbulleted = stripBulletPrefix(l).trim();
     const parsed = parseOcrIngredient(l);
+
+    const isBullet = looksLikeListBullet(l);
+    const hasFraction = /\b\d+\s*\/\s*\d+\b/.test(l) || /[¼½¾⅓⅔⅛⅜⅝⅞]/.test(l);
+    const looksSpoon = /(?:c\s*\.?\s*à\s*caf(?:é)?|c\s*\.?\s*à\s*soupe|càc|càs|cac|cas)\b/i.test(l);
 
     if (parsed) {
       const name = normSpaces(parsed.name || '');
@@ -229,22 +224,50 @@ function scoreSplitQuality(split) {
       else if (looksLikeBareIngredientLine(name)) bareCount++;
       else garbageCount++;
 
+      if (isBullet) bulletIngredientCount++;
+      if (hasFraction) fractionCount++;
+      if (looksSpoon) spoonCount++;
+
       continue;
     }
 
-    if (looksLikeBareIngredientLine(l)) {
+    if (looksLikeBareIngredientLine(unbulleted)) {
       bareCount++;
-    } else {
-      garbageCount++;
+      if (isBullet) bulletIngredientCount++;
+      continue;
     }
+
+    if (
+      /[.!?]/.test(l) ||
+      /\b(frottez|mélangez|melangez|ajoutez|versez|beurrez|placez|laissez|badigeonnez|tracez|croisez)\b/i.test(l)
+    ) {
+      phraseCount++;
+      continue;
+    }
+
+    garbageCount++;
   }
+
+  const totalIngredientLike =
+    strictCount + bareCount + bulletIngredientCount + spoonCount + fractionCount;
 
   return {
     strictCount,
     bareCount,
+    bulletIngredientCount,
+    spoonCount,
+    fractionCount,
     garbageCount,
     phraseCount,
-    score: strictCount * 4 + bareCount - garbageCount * 5 - phraseCount * 6,
+    totalIngredientLike,
+    score:
+      strictCount * 8 +
+      bareCount * 3 +
+      bulletIngredientCount * 4 +
+      spoonCount * 4 +
+      fractionCount * 3 -
+      garbageCount * 4 -
+      phraseCount * 2,
   };
 }
 
@@ -611,8 +634,21 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     dlog('[SPLIT QUALITY][PASS1]', q1, splitPass1.ingredientLines || []);
     dlog('[SPLIT QUALITY][PASS2]', q2, splitPass2.ingredientLines || []);
 
-    // PASS2 seulement si elle est réellement meilleure, pas juste plus longue
-    let split = q2.score > q1.score ? splitPass2 : splitPass1;
+    // PASS2 seulement si elle est réellement meilleure, pas juste plus longue - remplacer le 01/04/26
+    const pass2LosesTooMuch =
+    q2.strictCount < q1.strictCount - 2 ||
+    q2.totalIngredientLike < q1.totalIngredientLike - 3;
+
+    const pass2ClearlyBetter =
+    q2.score > q1.score + 4 &&
+    q2.strictCount >= q1.strictCount &&
+    q2.totalIngredientLike >= q1.totalIngredientLike - 1;
+
+    let split = splitPass1;
+
+    if (!pass2LosesTooMuch && pass2ClearlyBetter) {
+      split = splitPass2;
+    }
     // ici
 
 
