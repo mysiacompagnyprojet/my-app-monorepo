@@ -231,7 +231,16 @@ function scoreSplitQuality(split) {
       continue;
     }
 
+    //remplacer le 02/04/26
     if (looksLikeBareIngredientLine(unbulleted)) {
+      if (
+        /[.!?]/.test(unbulleted) ||
+        /^(commencez|prenez|versez|ajoutez|mélangez|melangez|frottez|beurrez|battez|badigeonnez|placez|laissez|coupez|étalez|etalez|tracez|croisez|préchauffez|prechauffez)\b/i.test(unbulleted)
+      ) {
+        phraseCount++;
+        continue;
+      }
+
       bareCount++;
       if (isBullet) bulletIngredientCount++;
       continue;
@@ -384,6 +393,43 @@ function computeIngredientCostEur(ing, priceRow) {
   };
 }
 
+//ajout du 02/04/26 d'ici à
+function cleanParsedIngredientName(name) {
+  let s = normSpaces(name);
+  if (!s) return '';
+
+  s = s.replace(/\s*\*\s*cuisson\s+steak\s*:?\s*$/i, '');
+  s = s.replace(/\s+ajouter\s+un\s+commentaire\.?\s*$/i, '');
+  s = s.replace(/\s+si\s+vous\s+aimez.*$/i, '');
+  s = s.replace(/\s+à\s+convenance\s*$/i, '');
+
+  s = s.replace(/\s+ou\s+autre\s+[a-zà-öø-ÿœ' -]+$/i, '');
+  s = s.replace(/\s+ou\s+herbes\s*$/i, '');
+
+  s = s.replace(/\s*[:;,*]+$/g, '');
+  return normSpaces(s);
+}
+
+function shouldDropParsedIngredientRow(row) {
+  const name = normSpaces(row?.name || '');
+  if (!name) return true;
+
+  if (/^(m[aá]vem|ou m[aá]vem)$/i.test(name)) return true;
+  if (/^ou$/i.test(name)) return true;
+
+  // option d'assaisonnement alternatif => poubelle
+  if (/^assaisonn?ement steak:?$/i.test(name)) return true;
+  if (/^assaisonn?ement pour steak$/i.test(name)) return true;
+
+  if (/ajouter un commentaire/i.test(name)) return true;
+  if (/^quelques gousses d['’]ail\b.*orni/i.test(name)) return true;
+
+  if (/^(assaisonnement|assaisonement|cuisson|marinade|sauce)\b.*:$/i.test(name)) return true;
+
+  return false;
+}
+//ici
+
 async function priceIngredients(ingredients) {
   let totalCostEur = 0;
 
@@ -437,6 +483,37 @@ async function priceIngredients(ingredients) {
   return { ingredients: pricedIngredients, totalCostEur: roundMoney(totalCostEur) };
 }
 // jusqu'ici Airtable pricing (v1)
+
+//ajoute le 02/04/26 d'ici à - pour avoir un seul prix courses quand il y a deux ingredients identiques
+function buildIngredientAggregateKey(row) {
+  const name = normalizeLoose(row?.name || '');
+  return name || '';
+}
+
+function annotateDuplicateCourses(ingredients) {
+  const list = Array.isArray(ingredients) ? ingredients.map(x => ({ ...x })) : [];
+  const seen = new Map();
+
+  for (const row of list) {
+    const key = buildIngredientAggregateKey(row);
+    row.aggregateKey = key;
+
+    if (!key) {
+      row.isCoursesDuplicate = false;
+      continue;
+    }
+
+    if (!seen.has(key)) {
+      seen.set(key, true);
+      row.isCoursesDuplicate = false;
+    } else {
+      row.isCoursesDuplicate = true;
+    }
+  }
+
+  return list;
+}
+//ici
 
 // ---------------- Router ----------------
 
@@ -740,8 +817,9 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
             return null;
           }
 
+          //remplacer le 02/04/26 - pour const row
           const row = {
-            name: parsedName || l,
+            name: cleanParsedIngredientName(parsedName || l),
             quantity: parsedQty,
             unit: parsedUnit,
           };
@@ -770,9 +848,21 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           if (isUnitOnlyLine(row.name)) {
             return null
           }
+          //ajouter le 02/04/26
+          row.name = cleanParsedIngredientName(row.name);
+
+          if (shouldDropParsedIngredientRow(row)) {
+            return null;
+          }
+
+          if (/^sel\s+(et|&)\s+poivre(?:\s+à\s+convenance)?$/i.test(row.name)) {
+            extraNotes.push('sel et poivre à convenance');
+            return null;
+          }
+
           return row;
         })
-        .filter(Boolean)
+        .flat().filter(Boolean)
     );
 
     // ---------- STEPS ----------
@@ -957,10 +1047,11 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       totalCostEur: null,
     };
 
-    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer) 
-    const priced = await priceIngredients(draft.ingredients); 
-    draft.ingredients = priced.ingredients; 
-    draft.totalCostEur = priced.totalCostEur; 
+    // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer) - remplacer le 02/04/26
+    const priced = await priceIngredients(draft.ingredients);
+    draft.ingredients = annotateDuplicateCourses(priced.ingredients);
+    dlog('[debug][annotated ingredients]', draft.ingredients);
+    draft.totalCostEur = priced.totalCostEur;
 
  // ─────────────────────────────────────────────
    // ✅ Bêta: limite pricing (10 recettes) dès l’aperçu OCR

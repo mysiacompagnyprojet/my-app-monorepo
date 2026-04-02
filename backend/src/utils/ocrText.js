@@ -149,6 +149,22 @@ function looksLikeBareIngredientLine(line) {
   // pas de lignes très longues -> souvent phrase, pas ingrédient
   if (t.length > 70) return false;
 
+  //ajoute le 02/04/26
+  if (
+    /^(commencez|prenez|versez|ajoutez|mélangez|melangez|frottez|beurrez|battez|badigeonnez|placez|laissez|coupez|étalez|etalez|tracez|croisez|préchauffez|prechauffez|incorporez|faites|servez|dégustez|degustez)\b/i.test(low)
+  ) {
+    return false;
+  }
+
+  if (/[.!?]/.test(t)) return false;
+
+  if (
+    t.length > 40 &&
+    /\b(le|la|les|du|des|dans|avec|pour|sans|sur|au|aux)\b/i.test(low)
+  ) {
+    return false;
+  }
+
   // pas de ligne quasi vide / bruit
   if (/^[^a-zà-öø-ÿœ]+$/i.test(t)) return false;
   if (/^\d+(?:[.,]\d+)?\s*[kK]\s*$/.test(t)) return false;
@@ -1496,6 +1512,16 @@ function normalizeInlineIngredientFragment(fragment) {
   t = t.replace(/\b(et|ou|de|du|des|au|aux)\b\s*$/i, '');
   t = t.replace(/\s*[.,;:!?]+$/g, '');
 
+  //ajoute le 02/04/26
+  t = t.replace(/\bpour\s+la\s+cuisson\b.*$/i, '');
+  t = t.replace(/\bpour\s+la\s+cuisson\s+vapeur\b.*$/i, '');
+  t = t.replace(/\bfinement\s+coup[ée]s?\b.*$/i, '');
+  t = t.replace(/\bfinement\s+hach[ée]s?\b.*$/i, '');
+  t = t.replace(/\s+[.,;:!?]+$/g, '');
+  t = normSpaces(t);
+
+  if (/\bhach$/.test(t.toLowerCase())) return '';
+
   return normSpaces(t);
 }
 
@@ -1519,6 +1545,11 @@ function extractInlineIngredientFragmentsFromLines(lines) {
     if (!t) return;
 
     if (looksLikeNonIngredientGarbage(t)) return;
+
+    //ajoute le 02/04/26
+    if (/^pour\s+la\s+(cuisson|cuisson vapeur|dorure|sauce|pâte|pate)\b/i.test(t)) return;
+    if (/^pour\s+r[ée]aliser\b/i.test(t)) return;
+    if (/^pour\s+faire\b/i.test(t)) return;
 
     const parsed = parseOcrIngredient(t);
     if (!parsed) return;

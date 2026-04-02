@@ -10,6 +10,7 @@ export type RecipeIngredient = {
 
     ingredientBaseId?: string | null
     //airtableId?: string | null
+    isCoursesDuplicate?: boolean
 }
 
 export type IngredientLine = RecipeIngredient & {

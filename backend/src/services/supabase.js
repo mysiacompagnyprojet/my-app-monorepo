@@ -188,26 +188,26 @@ return { ppu: null, unit: baseU, reason: 'PPU_NOT_FOUND' };
 // Retour compatible avec l’ancien airtable.js
 async function getIngredientPriceByName(name, preferUnitRaw) {
   console.log('[getIngredientpriceName] suapabase called with', JSON.stringify(name), 'unit:', preferUnitRaw);
-const raw = String(name || '').trim();
-if (!raw) return null;
+  const raw = String(name || '').trim();
+  if (!raw) return null;
 
-const cacheKey = `n:${raw.toLowerCase()}:u:${canonUnit(preferUnitRaw || '') || ''}`;
-const fromCache = cacheGet(cacheKey);
-if (fromCache !== null) return fromCache;
+  const cacheKey = `n:${raw.toLowerCase()}:u:${canonUnit(preferUnitRaw || '') || ''}`;
+  const fromCache = cacheGet(cacheKey);
+  if (fromCache !== null) return fromCache;
 
-// ⚠️ Mets le nom EXACT de ta table ici.
-// Si tu as créé "Ingredients_base" avec une majuscule, évite : renomme-la en lowercase.
-const TABLE = 'ingredients_base'; // <-- à adapter si besoin
+  // ⚠️ Mets le nom EXACT de ta table ici.
+  // Si tu as créé "Ingredients_base" avec une majuscule, évite : renomme-la en lowercase.
+  const TABLE = 'ingredients_base'; // <-- à adapter si besoin
 
-// 0) Tentative "synonyme" (préfiltre SQL + match exact normalisé)
-try {
- const wanted = normalizeName(raw);
- if (!wanted || wanted.length < 3) {
-    return null;
- }
- const head = wanted.split(' ') [0];
- // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
- const { data: synRows, error: synErr } = await supabaseAdmin
+  // 0) Tentative "synonyme" (préfiltre SQL + match exact normalisé)
+  try {
+    const wanted = normalizeName(raw);
+    if (!wanted || wanted.length < 3) {
+      return null;
+    }
+    const head = wanted.split(' ') [0];
+    // préfiltre : uniquement les lignes dont la cellule synonyme contient quelque chose proche
+    const { data: synRows, error: synErr } = await supabaseAdmin
    .from(TABLE)
    .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme, category')
    .ilike('synonyme', `%${head}%`)
@@ -258,6 +258,7 @@ try {
        ...packInfo,
 
        gramsPerPiece: toNumberLoose(row.gramme_par_piece) || null,
+       density: Number.isFinite(density) ? density : null,
        density_g_per_ml: Number.isFinite(density) ? density : null,
 
        priceStatus: reason ? 'missing_price' : 'ok',
@@ -281,12 +282,14 @@ try {
  dlog('[SUPABASE] synonym lookup failed', e?.message || e);
 }
 
+//ajoute le 02/04/26
+const wanted = normalizeName(raw);
 // 1) Exact match sur nom (case-insensitive)
 const { data: exact, error: errExact } = await supabaseAdmin
 .from(TABLE)
 .select('id, nom, unite_g_ml_piece, type_unite, nombre, gramme_par_piece, densite_g_ml, quantite_de_reference, prix_d_achat, prix_kg_l_piece, synonyme, category')
-.ilike('nom', `%${raw}%`) // match exact si raw sans %
-.limit(5);
+.ilike('nom', raw) // match exact si raw sans % - remplacer `%${raw}%` par raw le 02/04/26
+.limit(10);//remplace 5 par 1à le 02/04/26
 
 if (errExact) {
 cacheSet(cacheKey, null);
@@ -295,7 +298,10 @@ return null;
 
 if (Array.isArray(exact) && exact.length) {
 // Si tu veux gérer preferUnitRaw: filtre par base unit
-let picked = exact[0];
+//modifié le 02/04/26
+let picked = 
+exact.find((r) => normalizeName(r.nom) === wanted) ||
+exact[0];
 if (preferUnitRaw) {
 const preferredBase = toBaseUnit(preferUnitRaw)?.unit;
 if (preferredBase) {
@@ -330,6 +336,7 @@ buyRefUnit: buyInfo.refUnit,
 
 ...packInfo,
 gramsPerPiece: toNumberLoose(picked.gramme_par_piece) || null,
+density: Number.isFinite(density) ? density : null,
 density_g_per_ml: Number.isFinite(density) ? density : null,
 category: picked.category ?? null,
 
@@ -379,6 +386,7 @@ async function getIngredientPriceById(id) {
 
    ...packInfo,
    gramsPerPiece: toNumberLoose(row.gramme_par_piece) || null,
+   density: Number.isFinite(density) ? density : null,
    density_g_per_ml: Number.isFinite(density) ? density : null,
 
    priceStatus: reason ? 'missing_price' : 'ok',

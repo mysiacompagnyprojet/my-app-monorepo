@@ -37,6 +37,7 @@ type Line = IngredientLine & {
  price?: { eurPer: number; perUnit: string } | null
  costEur?: number | null
  category?: string | null
+ isCoursesDuplicate?: boolean
 }
 
 type Draft = {
@@ -400,6 +401,7 @@ function NewRecipeInner() {
 
   const totalProducts = useMemo(() => {
     return ingredients.reduce((acc, ing) => {
+      if (ing.isCoursesDuplicate) return acc
       const v = computeCostCourses(ing)
       return acc + (typeof v === 'number' ? v : 0)
     }, 0)
@@ -424,7 +426,7 @@ function NewRecipeInner() {
   const topIngredients = useMemo(() => {
     return ingredients
       .map((ing) => {
-        const costCourses = computeCostCourses(ing)
+        const costCourses = ing.isCoursesDuplicate ? null : computeCostCourses(ing)
         return {
           name: ing.name,
           cost: typeof costCourses === 'number' ? costCourses : 0,
@@ -537,6 +539,7 @@ function NewRecipeInner() {
             name: String(row.name || '').trim(),
             quantity: Number(row.quantity || 0) || 0,
             unit: String(row.unit || ''),
+            isCoursesDuplicate: typeof row.isCoursesDuplicate === 'boolean' ? row.isCoursesDuplicate : false,
             quantityRaw:
               typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
@@ -566,6 +569,7 @@ function NewRecipeInner() {
 
             buyRecalced: typeof buyPriceEur === 'number',
             note: typeof row.note === 'string' ? row.note : row.note ?? undefined,
+            
           } as any
         })
         .filter((x: any): x is Line => x !== null)
@@ -629,6 +633,7 @@ function NewRecipeInner() {
             name: String(row.name || '').trim(),
             quantity: Number(row.quantity || 0) || 0,
             unit: String(row.unit || ''),
+            isCoursesDuplicate: typeof row.isCoursesDuplicate === 'boolean' ? row.isCoursesDuplicate : false,
             quantityRaw:
               typeof row.quantityRaw === 'string' ? String(row.quantityRaw).trim() : undefined,
 
@@ -703,6 +708,7 @@ function NewRecipeInner() {
         name: String(row.name || '').trim(),
         quantity: Number(row.quantity || 0) || 0,
         unit: String(row.unit || ''),
+        isCoursesDuplicate: typeof row.isCoursesDuplicate === 'boolean' ? row.isCoursesDuplicate : false,
         buyRecalced: false,
 
         costEur: typeof row.costRecipe === 'number' ? row.costRecipe : null,
@@ -808,6 +814,9 @@ function NewRecipeInner() {
 
           note: typeof e.note === 'string' ? e.note : undefined,
           category: typeof e.category === 'string' ? e.category : old.category ?? null, 
+          isCoursesDuplicate: typeof e.isCoursesDuplicate === 'boolean'
+            ? e.isCoursesDuplicate === 'boolean'
+            : old.isCoursesDuplicate ?? false,
         } as any
       }
 
@@ -1134,7 +1143,7 @@ return (
 
             <div className="recipe-editor-ingredients-shell">
               {ingredients.map((ing, idx) => {
-                const costCourses = computeCostCourses(ing)
+                const costCourses = ing.isCoursesDuplicate ? null : computeCostCourses(ing)
                 const costRecipe =
                   typeof (ing as any).costEur === 'number' ? (ing as any).costEur : null
 

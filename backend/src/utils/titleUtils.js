@@ -124,6 +124,26 @@ function isMetaInfoLineForTitle(line) {
   return false;
 }
 
+//ajoute le 02/04/26
+function isSectionOnlyTitle(line) {
+  const t = stripDiacritics(normSpaces(String(line || ''))).toLowerCase();
+  if (!t) return false;
+
+  return [
+    'pour la cuisson',
+    'cuisson',
+    'ingredients',
+    'ingredient',
+    'pour la dorure',
+    'dorure',
+    'pour la pate',
+    'pate',
+    'garniture',
+    'pour la sauce',
+    'sauce',
+  ].includes(t);
+}
+
 
 function isTitleNoiseLabel(line) {
   const t = normSpaces(String(line || ''));
@@ -213,6 +233,9 @@ function looksLikePlausibleTitleLine(line, opts = {}) {
   // doit contenir au moins une lettre
   if (!/[A-Za-zÀ-ÖØ-öø-ÿ]/.test(t)) return false;
 
+  //ajouté le 02/04/26
+  if (isSectionOnlyTitle(t)) return false;
+
   return true;
 }
 
@@ -300,6 +323,9 @@ function isBadTitleCandidate(s) {
 
   // mots exacts bloqués (sections, UI, etc.)
   if (BAD_TITLE_WORDS?.includes(t)) return true;
+
+  //ajouté le 02/04/26
+  if (isSectionOnlyTitle(t)) return true;
 
   return false;
 }
@@ -410,6 +436,9 @@ function looksLikeHookOrLongSentenceTitle(t) {
   if (!s) return false;
 
   const low = stripDiacritics(s).toLowerCase();
+
+  //ajoute le 02/04/26
+  if (isSectionOnlyTitle(s)) return true;
 
   // typique "phrase Instagram" / accroche
   if (s.includes('?')) return true;
@@ -568,5 +597,6 @@ module.exports = {
     visionLooksLikeSuffix,
     stripOcrTitleArtifacts,
     isAllCapsTitleCandidate,
-    isLikelyStandaloneTitleLine
+    isLikelyStandaloneTitleLine,
+    isSectionOnlyTitle
 }
