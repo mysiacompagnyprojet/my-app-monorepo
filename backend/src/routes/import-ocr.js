@@ -29,6 +29,8 @@ const { smartFilterWithTrashFromText, splitIngredientsAndSteps, joinWrappedLines
 const { joinWrappedLinesForIngredients, looksLikeListBullet } = require('../utils/ingredientUtils');
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { convertUnitForPricing } = require('../utils/units');
+const { detectOcrLayoutCase } = require('../utils/ocrLayoutCases');
+const { extractFragmentedIngredientLines, chooseBestIngredientLines } = require('../utils/ocrFragmentedIngredients');
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
@@ -704,6 +706,29 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const reflowedLines = miniReflow(splitPass1);
     let splitPass2 = splitIngredientsAndSteps(reflowedLines);
+
+    //ajout du 03/04/26
+    const layoutCase = detectOcrLayoutCase(lines);
+
+    if (layoutCase.caseName === 'ingredients_fragmented_measure_name' && layoutCase.confidence >= 0.55) {
+      const fragmentedIngredientLines = extractFragmentedIngredientLines(lines);
+
+      const best = chooseBestIngredientLines({
+        standardLines: splitPass1.ingredientLines || [],
+        fragmentedLines: fragmentedIngredientLines,
+      });
+
+      if (best.chosenSource === 'fragmented') {
+        splitPass1.ingredientLines = best.chosen;
+        dlog('[OCR LAYOUT CASE]', layoutCase);
+        dlog('[OCR FRAGMENTED OVERRIDE]', best);
+      } else {
+        dlog('[OCR LAYOUT CASE - STANDARD KEPT]', {
+          layoutCase,
+          comparison: best,
+        });
+      }
+    }
 
     const q1 = scoreSplitQuality(splitPass1);
     const q2 = scoreSplitQuality(splitPass2);
