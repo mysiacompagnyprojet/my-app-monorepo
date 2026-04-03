@@ -645,8 +645,10 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const rawText = texts.join('\n\n');
     const filtered = smartFilterWithTrashFromText(rawText);
+    
 
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
+    const lines = removeSocialHeaderLines(filtered.lines);
 
     if (bestVisionTitle) {
       // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
@@ -698,19 +700,21 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       }
     }
 
-    //remplace le 31/03/26 - d'ici à 
-    let lines = removeSocialHeaderLines(filtered.lines);
-
-    let splitPass1 = splitIngredientsAndSteps(lines);
-    splitPass1 = rescueWrappedIngredientFragmentsOnly(splitPass1);
-
-    const reflowedLines = miniReflow(splitPass1);
-    let splitPass2 = splitIngredientsAndSteps(reflowedLines);
-
     //ajout du 03/04/26
     const layoutCase = detectOcrLayoutCase(lines);
+    const useFragmentedStrategy = !!layoutCase.shouldUseSpecializedRecovery;
 
-    if (layoutCase.caseName === 'ingredients_fragmented_measure_name' && layoutCase.confidence >= 0.55) {
+    let splitPass1 = splitIngredientsAndSteps(lines, {
+      disableInlineExtraction: useFragmentedStrategy,
+    });
+
+    if (!useFragmentedStrategy) {
+      splitPass1 = rescueWrappedIngredientFragmentsOnly(splitPass1);
+    }
+
+    let split = splitPass1;
+
+    if (useFragmentedStrategy) {
       const fragmentedIngredientLines = extractFragmentedIngredientLines(lines);
 
       const best = chooseBestIngredientLines({
@@ -718,17 +722,16 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
         fragmentedLines: fragmentedIngredientLines,
       });
 
-      if (best.chosenSource === 'fragmented') {
-        splitPass1.ingredientLines = best.chosen;
-        dlog('[OCR LAYOUT CASE]', layoutCase);
-        dlog('[OCR FRAGMENTED OVERRIDE]', best);
-      } else {
-        dlog('[OCR LAYOUT CASE - STANDARD KEPT]', {
-          layoutCase,
-          comparison: best,
-        });
-      }
-    }
+      split = {
+        ...splitPass1,
+        ingredientLines: best.chosen || splitPass1.ingredientLines || [],
+      };
+
+      dlog('[OCR LAYOUT CASE]', layoutCase);
+      dlog('[OCR FRAGMENTED RESULT]', best);
+    } else {
+    const reflowedLines = miniReflow(splitPass1);
+    const splitPass2 = splitIngredientsAndSteps(reflowedLines);
 
     const q1 = scoreSplitQuality(splitPass1);
     const q2 = scoreSplitQuality(splitPass2);
@@ -736,7 +739,6 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     dlog('[SPLIT QUALITY][PASS1]', q1, splitPass1.ingredientLines || []);
     dlog('[SPLIT QUALITY][PASS2]', q2, splitPass2.ingredientLines || []);
 
-    // PASS2 seulement si elle est réellement meilleure, pas juste plus longue - remplacer le 01/04/26
     const pass2LosesTooMuch =
     q2.strictCount < q1.strictCount - 2 ||
     q2.totalIngredientLike < q1.totalIngredientLike - 3;
@@ -746,11 +748,10 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     q2.strictCount >= q1.strictCount &&
     q2.totalIngredientLike >= q1.totalIngredientLike - 1;
 
-    let split = splitPass1;
-
     if (!pass2LosesTooMuch && pass2ClearlyBetter) {
       split = splitPass2;
     }
+  }
     // ici
 
 

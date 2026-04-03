@@ -1749,7 +1749,9 @@ function looksLikeBulletIngredientLine(line) {
 }
 
 
-function splitIngredientsAndSteps(lines) {
+function splitIngredientsAndSteps(lines, opts = {}) {
+  opts = opts || {};
+  const disableInlineExtraction = !!opts.disableInlineExtraction;
   const L = lines.map(normSpaces).filter(Boolean);
   debugWatchRecipeLines('L', L);
   let servings = null;
@@ -2134,17 +2136,22 @@ ingredientLines = shouldSkipIngredientJoin
   dlog('[INLINE SOURCE][notes]', notesLines.slice(0, 30));
   dlog('[INLINE SOURCE][steps]', stepLines.slice(0, 30));
 
-  const inlineSource = dedupeLines([
-    ...L, //si je l'enleve une des recettes revient juste avec jaune d'oeuf - il faut donc le garder
-    ...notesLines,
-    ...stepLines,
-  ]);
+  //ajoute le 03/04/26
+  if (!disableInlineExtraction) {
+    const inlineSource = dedupeLines([
+      ...L, //si je l'enleve une des recettes revient juste avec jaune d'oeuf - il faut donc le garder
+      ...notesLines,
+      ...stepLines,
+    ]);
 
-  const inlineExtracted = extractInlineIngredientFragmentsFromLines(inlineSource);
+    const inlineExtracted = extractInlineIngredientFragmentsFromLines(inlineSource);
 
-  dlog('[INLINE EXTRACTED]', inlineExtracted);
+    dlog('[INLINE EXTRACTED]', inlineExtracted);
 
-  ingredientLines = dedupeLines([...ingredientLines, ...inlineExtracted]);
+    ingredientLines = dedupeLines([...ingredientLines, ...inlineExtracted]);
+  } else {
+    dlog('[INLINE EXTRACTED][SKIPPED]', { reason: 'fragmented_layout' });
+  }  
 
   ingredientLines = ingredientLines.filter((l) => {
     const t = normSpaces(l);
