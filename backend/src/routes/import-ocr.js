@@ -851,6 +851,16 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
           };
           //ici
 
+          //ajoute le 07/04/26 - d'ici à
+          const suspiciousIngredientName = normalizeLoose(row.name || '');
+
+          if (
+            /^(i pincee de|1 pincee de|pincee de|pincée de|a de|de|du|des|jus de)$/i.test(suspiciousIngredientName)
+          ) {
+            return null;
+          }
+          //ici
+
           row.name = String(row.name || '').replace(/[↑■]+/g, '').trim();
 
           const paren = row.name.match(/\(([^)]+)\s*$/);

@@ -36,6 +36,9 @@ function normalizeIngredientParseInput(line) {
   t = t.replace(/\bc\s*\.?\s*[àa]\s*\.?\s*s\s*\.?\b/gi, 'càs');
   t = t.replace(/\bcuill(?:e|è)re?s?\s+[àa]\s+soupe\b/gi, 'càs');
 
+  //ajoute le 07/04/26 - securite anti-collage àcr/normalisation 
+  t = t.replace(/\b(càc|càs)(?=de\b)/gi, '$1 ');
+
   return normSpaces(t);
 }
 

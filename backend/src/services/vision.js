@@ -179,12 +179,274 @@ return false;
 }
 
 function looksLikeStepAction(l) {
-const t = normSpaces(l).toLowerCase();
-if (!t) return false;
-return /\b(ajouter|mixer|égoutter|egoutter|cuire|pr[ée]chauffer|faire|mettre|verser|chauffer|m[ée]langer|melanger|couper|laver|assaisonner|assaisonnez|enfourner|étaler|etaler)\b/i.test(
-t
-);
+    const t = normSpaces(l).toLowerCase();
+    if (!t) return false;
+    return /\b(ajouter|mixer|égoutter|egoutter|cuire|pr[ée]chauffer|faire|mettre|verser|chauffer|m[ée]langer|melanger|couper|laver|assaisonner|assaisonnez|enfourner|étaler|etaler)\b/i.test(
+        t
+    );
 }
+
+//ajouter le 07/04/26 - d'ici à 
+function getWordText(word) {
+  const symbols = Array.isArray(word?.symbols) ? word.symbols : [];
+  return normSpaces(symbols.map((s) => s?.text || '').join(''));
+}
+
+function rectFromVertices(vertices) {
+  const pts = Array.isArray(vertices) ? vertices : [];
+  const xs = pts.map((p) => Number(p?.x || 0));
+  const ys = pts.map((p) => Number(p?.y || 0));
+
+  const left = Math.min(...xs, 0);
+  const right = Math.max(...xs, 0);
+  const top = Math.min(...ys, 0);
+  const bottom = Math.max(...ys, 0);
+
+  return {
+    left,
+    top,
+    right,
+    bottom,
+    width: Math.max(0, right - left),
+    height: Math.max(0, bottom - top),
+    centerX: left + Math.max(0, right - left) / 2,
+    centerY: top + Math.max(0, bottom - top) / 2,
+  };
+}
+
+function flattenVisionWords(result) {
+  const pages = result?.fullTextAnnotation?.pages || [];
+  const words = [];
+
+  for (const page of pages) {
+    for (const block of page.blocks || []) {
+      for (const paragraph of block.paragraphs || []) {
+        for (const word of paragraph.words || []) {
+          const text = getWordText(word);
+          if (!text) continue;
+
+          const box = rectFromVertices(word?.boundingBox?.vertices || []);
+          words.push({
+            text,
+            ...box,
+          });
+        }
+      }
+    }
+  }
+
+  return words;
+}
+
+function sameVisualLine(a, b, tolerance = 0.65) {
+  const h = Math.max(a.height || 0, b.height || 0, 1);
+  return Math.abs((a.centerY || 0) - (b.centerY || 0)) <= h * tolerance;
+}
+
+function mergeWordsIntoSpatialFragments(words) {
+  const sorted = [...(words || [])]
+    .filter((w) => w?.text)
+    .sort((a, b) => {
+      const dy = (a.top || 0) - (b.top || 0);
+      if (Math.abs(dy) > 8) return dy;
+      return (a.left || 0) - (b.left || 0);
+    });
+
+  const fragments = [];
+
+  for (const w of sorted) {
+    const prev = fragments[fragments.length - 1];
+
+    if (!prev) {
+      fragments.push({ ...w });
+      continue;
+    }
+
+    const gapX = (w.left || 0) - (prev.right || 0);
+    const closeHorizontally = gapX >= -4 && gapX <= Math.max(18, prev.height * 1.6);
+    const sameLine = sameVisualLine(prev, w);
+
+    if (sameLine && closeHorizontally) {
+      prev.text = normSpaces(`${prev.text} ${w.text}`);
+      prev.right = Math.max(prev.right, w.right);
+      prev.bottom = Math.max(prev.bottom, w.bottom);
+      prev.width = prev.right - prev.left;
+      prev.height = prev.bottom - prev.top;
+      prev.centerX = prev.left + prev.width / 2;
+      prev.centerY = prev.top + prev.height / 2;
+      continue;
+    }
+
+    fragments.push({ ...w });
+  }
+
+  return fragments;
+}
+
+function looksLikeMeasureFragment(text) {
+  const t = normSpaces(text).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^(?:\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞|\d+(?:[.,]\d+)?)\s*(?:g|kg|mg|ml|cl|dl|l|c\.?\s*a\.?\s*c|c\.?\s*a\.?\s*s|càc|càs|cac|cas)\s*(?:de)?$/i.test(t) ||
+    /^(?:\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞|\d+(?:[.,]\d+)?)\s+(?:pincée|pincee|gousse|gousses|sachet|sachets|tranche|tranches)$/i.test(t)
+  );
+}
+
+function looksLikeConnectorLedName(text) {
+  const t = normSpaces(text).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^(de|du|des|d['’])\s+[a-zà-öø-ÿœ' -]{2,40}$/i.test(t) ||
+    /^(jus|zeste|pulpe)\s+de\s+[a-zà-öø-ÿœ' -]{2,40}$/i.test(t)
+  );
+}
+
+function looksLikeStandaloneName(text) {
+  const t = normSpaces(text);
+  const low = t.toLowerCase();
+  if (!t) return false;
+
+  if (isUiNoise(t)) return false;
+  if (looksLikeStepAction(t)) return false;
+  if (/\d/.test(t)) return false;
+  if (t.length < 2 || t.length > 40) return false;
+
+  if (/^(de|du|des|d['’]|et|ou)$/i.test(low)) return false;
+  if (/^(sauce|préparation|preparation|ingr[ée]dients?|étapes?|etapes?)$/i.test(low)) return false;
+
+  return /[a-zà-öø-ÿœ]/i.test(t);
+}
+
+function spatialDistanceScore(anchor, candidate) {
+  const dx = Math.abs((anchor.centerX || 0) - (candidate.centerX || 0));
+  const dy = Math.abs((anchor.centerY || 0) - (candidate.centerY || 0));
+
+  let score = 0;
+
+  if (candidate.top >= anchor.top - 10) score += 2;
+  if (dy <= 60) score += 4;
+  else if (dy <= 110) score += 2;
+
+  if (dx <= 90) score += 4;
+  else if (dx <= 180) score += 2;
+
+  return score - Math.round(dx / 80) - Math.round(dy / 60);
+}
+
+function buildSpatialIngredientLine(measureFrag, nameFrag) {
+  const measure = normSpaces(measureFrag?.text || '');
+  const name = normSpaces(nameFrag?.text || '');
+  if (!measure || !name) return '';
+
+  if (/^(de|du|des|d['’]|jus|zeste|pulpe)\b/i.test(name)) {
+    return normSpaces(`${measure} ${name}`);
+  }
+
+  if (/\bde$/i.test(measure)) {
+    return normSpaces(`${measure} ${name}`);
+  }
+
+  return normSpaces(`${measure} de ${name}`);
+}
+
+function detectFragmentedPosterLayout(fragments) {
+  const F = (fragments || []).filter(Boolean);
+  if (!F.length) return false;
+
+  const shortCount = F.filter((f) => (f.text || '').length <= 18).length;
+  const measureCount = F.filter((f) => looksLikeMeasureFragment(f.text)).length;
+  const nameCount = F.filter((f) => looksLikeStandaloneName(f.text) || looksLikeConnectorLedName(f.text)).length;
+  const stepCount = F.filter((f) => looksLikeStepAction(f.text)).length;
+
+  return (
+    measureCount >= 2 &&
+    nameCount >= 2 &&
+    shortCount >= Math.min(8, F.length) &&
+    stepCount <= 1
+  );
+}
+
+function buildSpatialIngredientHintsFromVision(result) {
+  const words = flattenVisionWords(result);
+  if (!words.length) return [];
+
+  const fragments = mergeWordsIntoSpatialFragments(words)
+    .filter((f) => !isUiNoise(f.text))
+    .filter((f) => !/^sauce\s+(burger|cheddar)\b/i.test(normSpaces(f.text)))
+    .filter((f) => !/sandwichs?/i.test(normSpaces(f.text)));
+
+  if (!detectFragmentedPosterLayout(fragments)) return [];
+
+  const used = new Set();
+  const out = [];
+
+  for (let i = 0; i < fragments.length; i++) {
+    const frag = fragments[i];
+    if (!frag || used.has(i)) continue;
+
+    const text = normSpaces(frag.text);
+
+    // cas "jus de citron" sans mesure
+    if (/^(jus|zeste|pulpe)\s+de$/i.test(text)) {
+      let bestNameIdx = -1;
+      let bestScore = -999;
+
+      for (let j = 0; j < fragments.length; j++) {
+        if (i === j || used.has(j)) continue;
+        const cand = fragments[j];
+        if (!looksLikeStandaloneName(cand.text)) continue;
+
+        const score = spatialDistanceScore(frag, cand);
+        if (score > bestScore) {
+          bestScore = score;
+          bestNameIdx = j;
+        }
+      }
+
+      if (bestNameIdx >= 0 && bestScore >= 4) {
+        out.push(normSpaces(`${text} ${fragments[bestNameIdx].text}`));
+        used.add(i);
+        used.add(bestNameIdx);
+        continue;
+      }
+    }
+
+    if (!looksLikeMeasureFragment(text)) continue;
+
+    let bestIdx = -1;
+    let bestScore = -999;
+
+    for (let j = 0; j < fragments.length; j++) {
+      if (i === j || used.has(j)) continue;
+      const cand = fragments[j];
+      const candText = normSpaces(cand.text);
+
+      if (!looksLikeConnectorLedName(candText) && !looksLikeStandaloneName(candText)) continue;
+      if (looksLikeMeasureFragment(candText)) continue;
+
+      const score = spatialDistanceScore(frag, cand);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIdx = j;
+      }
+    }
+
+    if (bestIdx >= 0 && bestScore >= 4) {
+      const line = buildSpatialIngredientLine(frag, fragments[bestIdx]);
+      if (line) {
+        out.push(line);
+        used.add(i);
+        used.add(bestIdx);
+      }
+    }
+  }
+
+  return [...new Set(out.map((x) => normSpaces(x)).filter(Boolean))];
+}
+//ici
+
 
 function tryMergeTwoLineTitle(lines) {
 const L = (lines || [])
@@ -422,74 +684,108 @@ return await img
 .toBuffer();
 }
 
-async function visionDetectTextFromBuffer(buf, lang = 'fr') {
-const c = getClient();
-const langHints = lang && String(lang).toLowerCase() === 'en' ? ['en'] : ['fr'];
+//ajoute le 07/04/26 - d'ici à
+async function visionDetectDocumentFromBuffer(buf, lang = 'fr') {
+  const c = getClient();
+  const langHints = lang && String(lang).toLowerCase() === 'en' ? ['en'] : ['fr'];
 
-const request = {
-image: { content: buf },
-imageContext: { languageHints: langHints },
-};
+  const request = {
+        image: { content: buf },
+        imageContext: { languageHints: langHints },
+    };
 
-const [result] = await c.documentTextDetection(request);
-
-const text =
-result?.fullTextAnnotation?.text ||
-result?.textAnnotations?.[0]?.description ||
-'';
-
-return normSpaces(text);
+  const [result] = await c.documentTextDetection(request);
+  return result || null;
 }
+//ici
+
+//modifie le 07/04/26
+async function visionDetectTextFromBuffer(buf, lang = 'fr') {
+  const result = await visionDetectDocumentFromBuffer(buf, lang);
+
+  const text =
+    result?.fullTextAnnotation?.text ||
+    result?.textAnnotations?.[0]?.description ||
+    '';
+
+  return normSpaces(text);
+}
+
+
+
 
 async function ocrFromBuffer(buf, opts = {}) {
-const lang = (opts.lang || 'fr').toLowerCase();
-return await visionDetectTextFromBuffer(buf, lang);
+    const lang = (opts.lang || 'fr').toLowerCase();
+    return await visionDetectTextFromBuffer(buf, lang);
 }
 
+//modifie le 07/04/26
 async function ocrFromBufferWithDebug(buf, opts = {}) {
-const lang = (opts.lang || 'fr').toLowerCase();
+  const lang = (opts.lang || 'fr').toLowerCase();
 
-const fullText = await visionDetectTextFromBuffer(buf, lang);
+  const fullResult = await visionDetectDocumentFromBuffer(buf, lang);
+  const fullText =
+    normSpaces(
+      fullResult?.fullTextAnnotation?.text ||
+      fullResult?.textAnnotations?.[0]?.description ||
+      ''
+    );
 
-let topText = '';
-try {
-const topBuf = await cropTop(buf, 0.32);
-topText = await visionDetectTextFromBuffer(topBuf, lang);
-} catch {
-topText = '';
+  let spatialIngredientHints = [];
+  try {
+    spatialIngredientHints = buildSpatialIngredientHintsFromVision(fullResult);
+  } catch {
+    spatialIngredientHints = [];
+  }
+
+  let topText = '';
+  try {
+    const topBuf = await cropTop(buf, 0.32);
+    topText = await visionDetectTextFromBuffer(topBuf, lang);
+  } catch {
+    topText = '';
+  }
+
+  let bandText = '';
+  try {
+    const bandBuf = await cropBand(buf, 0.30, 0.45);
+    bandText = await visionDetectTextFromBuffer(bandBuf, lang);
+  } catch {
+    bandText = '';
+  }
+
+  const pickedTitleRaw = pickLikelyTitleFromText(`${topText}\n${bandText}`);
+  const safePicked = pickedTitleRaw ? cleanTitleCandidate(pickedTitleRaw) : null;
+  const finalPicked =
+    safePicked && isValidRecipeTitleCandidate(safePicked) ? safePicked : null;
+
+  let combined = fullText;
+
+  // ✅ Branche spécialisée : on injecte les ingrédients reconstruits
+  // seulement si on a un vrai lot de lignes plausibles.
+  if (Array.isArray(spatialIngredientHints) && spatialIngredientHints.length >= 2) {
+    combined = `${spatialIngredientHints.join('\n')}\n${combined}`.trim();
+  }
+
+  if (finalPicked) {
+    const already = combined
+      .toLowerCase()
+      .includes(String(finalPicked).toLowerCase());
+    if (!already) combined = `${finalPicked}\n${combined}`;
+  }
+
+  return {
+    text: combined,
+    debug: {
+      pickedTitle: finalPicked || null,
+      topTextSample: topText ? String(topText).slice(0, 500) : null,
+      bandTextSample: bandText ? String(bandText).slice(0, 500) : null,
+      fullTextSample: fullText ? String(fullText).slice(0, 300) : null,
+      spatialIngredientHints: spatialIngredientHints || [],
+    },
+  };
 }
 
-let bandText = '';
-try {
-const bandBuf = await cropBand(buf, 0.30, 0.45);
-bandText = await visionDetectTextFromBuffer(bandBuf, lang);
-} catch {
-bandText = '';
-}
-
-const pickedTitleRaw = pickLikelyTitleFromText(`${topText}\n${bandText}`);
-const safePicked = pickedTitleRaw ? cleanTitleCandidate(pickedTitleRaw) : null;
-const finalPicked =
-safePicked && isValidRecipeTitleCandidate(safePicked) ? safePicked : null;
-
-let combined = fullText;
-if (finalPicked) {
-const already = combined
-.toLowerCase()
-.includes(String(finalPicked).toLowerCase());
-if (!already) combined = `${finalPicked}\n${combined}`;
-}
-
-return {
-text: combined,
-debug: {
-pickedTitle: finalPicked || null,
-topTextSample: topText ? String(topText).slice(0, 500) : null,
-bandTextSample: bandText ? String(bandText).slice(0, 500) : null,
-fullTextSample: fullText ? String(fullText).slice(0, 300) : null,
-},
-};
-}
 
 module.exports = {
 ocrFromBuffer,
