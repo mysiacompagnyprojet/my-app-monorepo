@@ -648,7 +648,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     
 
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
-    const lines = removeSocialHeaderLines(filtered.lines);
+    const rawLines = removeSocialHeaderLines(filtered.lines);
+    const lines = [...rawLines];
 
     if (bestVisionTitle) {
       // ✅ on normalise AVANT tout (enlève +, ponctuation, espaces)
@@ -715,7 +716,8 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
     let split = splitPass1;
 
     if (useFragmentedStrategy) {
-      const fragmentedIngredientLines = extractFragmentedIngredientLines(lines);
+      dlog('[DEBUG][FRAGMENT_INPUT_LINES', lines);
+      const fragmentedIngredientLines = extractFragmentedIngredientLines(rawLines);
 
       const best = chooseBestIngredientLines({
         standardLines: splitPass1.ingredientLines || [],

@@ -323,14 +323,6 @@ function mergeWordsIntoSpatialFragments(words) {
   return fragments;
 }
 
-
-function cloneFragmentWithText(base, text) {
-  return {
-    ...base,
-    text: normSpaces(text),
-  };
-}
-
 function buildBoxFromWords(words) {
   const safe = (words || []).filter(Boolean);
   if (!safe.length) {
@@ -498,6 +490,27 @@ function splitCompositeVisionFragment(fragment) {
   return [fragment];
 }
 
+function splitCompositeVisionFragments(fragments) {
+  const out = [];
+
+  for (const fragment of fragments || []) {
+    const parts = splitCompositeVisionFragment(fragment);
+
+    if (Array.isArray(parts) && parts.length) {
+      out.push(...parts.filter((x) => x && normSpaces(x.text)));
+    } else if (fragment && normSpaces(fragment.text)) {
+      out.push(fragment);
+    }
+  }
+
+  dlog('[VISION][FRAGMENTS_AFTER_SPLIT]', {
+    count: out.length,
+    sample: out.slice(0, 40),
+  });
+
+  return out;
+}
+
 
 function looksLikeMeasureFragment(text) {
   const t = normSpaces(text).toLowerCase();
@@ -625,7 +638,15 @@ function buildSpatialIngredientHintsFromVision(result) {
   }
 
   const mergedFragments = mergeWordsIntoSpatialFragments(words);
-  const splitFragments = splitCompositeVisionFragment(mergedFragments);
+  const splitFragments = splitCompositeVisionFragments(mergedFragments);
+  dlog('[VISION][FRAGMENTS_AFTER_SPLIT_DEBUG]', {
+    count: splitFragments.length,
+    sample: splitFragments.slice(0, 20).map((f) => ({
+      text: f?.text,
+      hasWords: Array.isArray(f?.words),
+      wordsCount: Array.isArray(f?.words) ? f.words.length : 0,
+    })),
+  });
 
   const fragments = splitFragments
     .filter((f) => !isUiNoise(f.text))
@@ -646,92 +667,14 @@ function buildSpatialIngredientHintsFromVision(result) {
   const out = [];
 
   for (let i = 0; i < fragments.length; i++) {
-    const frag = fragments[i];
-    if (!frag || used.has(i)) continue;
+  const frag = fragments[i];
+  if (!frag || used.has(i)) continue;
 
-    const text = normSpaces(frag.text);
+  const text = normSpaces(frag.text);
 
-    // cas "jus de" sans mesure
-    if (/^(jus|zeste|pulpe)\s+de$/i.test(text)) {
-  let bestNameIdx = -1;
-  let bestScore = -999;
-
-  for (let j = 0; j < fragments.length; j++) {
-    if (i === j || used.has(j)) continue;
-
-    const cand = fragments[j];
-    const candText = normSpaces(cand.text);
-
-    if (!looksLikeStandaloneName(candText)) continue;
-
-    const score = spatialDistanceScore(frag, cand);
-    const lengthBonus = Math.min((candText.length || 0) / 10, 3);
-    const finalScore = score + lengthBonus;
-
-    dlog('[VISION][CONNECTOR_CANDIDATE]', {
-      anchor: text,
-      candidate: candText,
-      score,
-      finalScore,
-      anchorBox: frag,
-      candidateBox: cand,
-    });
-
-    if (finalScore > bestScore) {
-      bestScore = finalScore;
-      bestNameIdx = j;
-    }
-  }
-
-  if (bestNameIdx >= 0 && bestScore >= 4) {
-    const built = normSpaces(`${text} ${fragments[bestNameIdx].text}`);
-    out.push(built);
-    used.add(i);
-    used.add(bestNameIdx);
-
-    dlog('[VISION][CONNECTOR_ACCEPT]', {
-      line: built,
-      score: bestScore,
-      anchor: text,
-      matched: fragments[bestNameIdx].text,
-    });
-
-    continue;
-  }
-
-  dlog('[VISION][CONNECTOR_REJECT]', {
-    anchor: text,
-    bestNameIdx,
-    bestScore,
-  });
-
-
-      if (bestNameIdx >= 0 && bestScore >= 4) {
-        const built = normSpaces(`${text} ${fragments[bestNameIdx].text}`);
-        out.push(built);
-        used.add(i);
-        used.add(bestNameIdx);
-
-        dlog('[VISION][CONNECTOR_ACCEPT]', {
-          line: built,
-          score: bestScore,
-          anchor: text,
-          matched: fragments[bestNameIdx].text,
-        });
-
-        continue;
-      }
-
-      dlog('[VISION][CONNECTOR_REJECT]', {
-        anchor: text,
-        bestNameIdx,
-        bestScore,
-      });
-    }
-
-    if (!looksLikeMeasureFragment(text)) continue;
-
-    let bestIdx = -1;
+  // cas "jus de" sans mesure
+  if (/^(jus|zeste|pulpe)\s+de$/i.test(text)) {
+    let bestNameIdx = -1;
     let bestScore = -999;
 
     for (let j = 0; j < fragments.length; j++) {
@@ -740,65 +683,119 @@ function buildSpatialIngredientHintsFromVision(result) {
       const cand = fragments[j];
       const candText = normSpaces(cand.text);
 
-      if (!looksLikeConnectorLedName(candText) && !looksLikeStandaloneName(candText)) continue;
-      if (looksLikeMeasureFragment(candText)) continue;
+      if (!looksLikeStandaloneName(candText)) continue;
 
       const score = spatialDistanceScore(frag, cand);
+      const lengthBonus = Math.min((candText.length || 0) / 10, 3);
+      const finalScore = score + lengthBonus;
 
-      dlog('[VISION][MEASURE_CANDIDATE]', {
-        measure: text,
+      dlog('[VISION][CONNECTOR_CANDIDATE]', {
+        anchor: text,
         candidate: candText,
         score,
-        measureBox: frag,
+        finalScore,
+        anchorBox: frag,
         candidateBox: cand,
       });
 
-      if (score > bestScore) {
-        bestScore = score;
-        bestIdx = j;
+      if (finalScore > bestScore) {
+        bestScore = finalScore;
+        bestNameIdx = j;
       }
     }
 
-    if (bestIdx >= 0 && bestScore >= 4) {
-      const line = buildSpatialIngredientLine(frag, fragments[bestIdx]);
-      if (line) {
-        out.push(line);
-        used.add(i);
-        used.add(bestIdx);
+    if (bestNameIdx >= 0 && bestScore >= 4) {
+      const built = normSpaces(`${text} ${fragments[bestNameIdx].text}`);
+      out.push(built);
+      used.add(i);
+      used.add(bestNameIdx);
 
-        dlog('[VISION][MEASURE_ACCEPT]', {
-          line,
-          score: bestScore,
-          measure: text,
-          matched: fragments[bestIdx].text,
-        });
-      }
+      dlog('[VISION][CONNECTOR_ACCEPT]', {
+        line: built,
+        score: bestScore,
+        anchor: text,
+        matched: fragments[bestNameIdx].text,
+      });
+
       continue;
     }
 
-    dlog('[VISION][MEASURE_REJECT]', {
-      measure: text,
-      bestIdx,
+    dlog('[VISION][CONNECTOR_REJECT]', {
+      anchor: text,
+      bestNameIdx,
       bestScore,
     });
   }
 
-for (let i = 0; i < fragments.length; i++) {
-  if (used.has(i)) continue;
+  if (!looksLikeMeasureFragment(text)) continue;
 
-  const t = normSpaces(fragments[i].text);
+  let bestIdx = -1;
+  let bestScore = -999;
 
-  if (/^(jus|zeste|pulpe)\s+de\s+[a-zà-öø-ÿœ' -]+$/i.test(t)) {
-    out.push(t);
-    used.add(i);
+  for (let j = 0; j < fragments.length; j++) {
+    if (i === j || used.has(j)) continue;
+
+    const cand = fragments[j];
+    const candText = normSpaces(cand.text);
+
+    if (!looksLikeConnectorLedName(candText) && !looksLikeStandaloneName(candText)) continue;
+    if (looksLikeMeasureFragment(candText)) continue;
+
+    const score = spatialDistanceScore(frag, cand);
+
+    dlog('[VISION][MEASURE_CANDIDATE]', {
+      measure: text,
+      candidate: candText,
+      score,
+      measureBox: frag,
+      candidateBox: cand,
+    });
+
+    if (score > bestScore) {
+      bestScore = score;
+      bestIdx = j;
+    }
   }
+
+  if (bestIdx >= 0 && bestScore >= 4) {
+    const line = buildSpatialIngredientLine(frag, fragments[bestIdx]);
+    if (line) {
+      out.push(line);
+      used.add(i);
+      used.add(bestIdx);
+
+      dlog('[VISION][MEASURE_ACCEPT]', {
+        line,
+        score: bestScore,
+        measure: text,
+        matched: fragments[bestIdx].text,
+      });
+    }
+    continue;
+  }
+
+  dlog('[VISION][MEASURE_REJECT]', {
+    measure: text,
+    bestIdx,
+    bestScore,
+  });
 }
+  for (let i = 0; i < fragments.length; i++) {
+    if (used.has(i)) continue;
 
-const finalOut = [...new Set(out.map((x) => normSpaces(x)).filter(Boolean))];
+    const t = normSpaces(fragments[i].text);
 
-dlog('[VISION][SPATIAL_HINTS_FINAL]', finalOut);
+    if (/^(jus|zeste|pulpe)\s+de\s+[a-zà-öø-ÿœ' -]+$/i.test(t)) {
+      out.push(t);
+      used.add(i);
+    }
+  }
 
-return finalOut;
+  const finalOut = [...new Set(out.map((x) => normSpaces(x)).filter(Boolean))];
+
+  dlog('[VISION][SPATIAL_HINTS_FINAL]', finalOut);
+
+  return finalOut;
 }
 
 function tryMergeTwoLineTitle(lines) {
@@ -1102,11 +1099,13 @@ async function ocrFromBufferWithDebug(buf, opts = {}) {
   const finalPicked =
     safePicked && isValidRecipeTitleCandidate(safePicked) ? safePicked : null;
 
-  let combined = fullText;
+  //remplacer per ce qui suit le 08/04/26
+  //let combined = fullText;
+  //if (Array.isArray(spatialIngredientHints) && spatialIngredientHints.length >= 2) {
+   // combined = `${spatialIngredientHints.join('\n')}\n${combined}`.trim();
+  //}
 
-  if (Array.isArray(spatialIngredientHints) && spatialIngredientHints.length >= 2) {
-    combined = `${spatialIngredientHints.join('\n')}\n${combined}`.trim();
-  }
+  let combined = fullText;
 
   if (finalPicked) {
     const already = combined

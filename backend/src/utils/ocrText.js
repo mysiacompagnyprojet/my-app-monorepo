@@ -279,18 +279,45 @@ function extractParenNote(line) {
    DEDUP (cross-captures)
 ========================= */
 
+function looksLikeCriticalOcrFragment(line) {
+  const s = normSpaces(String(line || '')).toLowerCase();
+  if (!s) return false;
+
+  return (
+    /^(?:i|1|\d+\/\d+|\d+(?:[.,]\d+)?)\s*c\.?\s*a\.?\s*c\.?\s*de$/i.test(s) ||
+    /^(?:i|1|\d+\/\d+|\d+(?:[.,]\d+)?)\s*c\.?\s*a\.?\s*s\.?\s*de$/i.test(s) ||
+    /^(?:i|1|\d+\/\d+|\d+(?:[.,]\d+)?)\s*(?:càc|càs)\s*de$/i.test(s) ||
+    /^(?:i|1|\d+\/\d+|\d+(?:[.,]\d+)?)\s*(?:g|kg|mg|ml|cl|dl|l)\s*(?:de)?$/i.test(s) ||
+    /^(?:de|du|des|d['’])\s+[a-zà-öø-ÿœ' -]{2,40}$/i.test(s) ||
+    /^(jus|zeste|pulpe)\s+de$/i.test(s)
+  );
+}
+
 function dedupeLines(lines) {
   const seen = new Set();
   const out = [];
 
   for (const l of lines) {
-    const key = normalizeForDedup(l);
-    if (!key || seen.has(key)) continue;
+    const clean = normSpaces(String(l || ''));
+    const key = normalizeForDedup(clean);
+    if (!key) continue;
+
+    // IMPORTANT :
+    // on garde les doublons des fragments critiques,
+    // sinon on casse les layouts fragmentés
+    if (looksLikeCriticalOcrFragment(clean)) {
+      out.push(clean);
+      continue;
+    }
+
+    if (seen.has(key)) continue;
     seen.add(key);
-    out.push(l);
+    out.push(clean);
   }
+
   return out;
 }
+
 
 /**
  * PATCH OCR (livres papier)

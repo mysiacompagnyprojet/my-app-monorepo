@@ -286,6 +286,16 @@ function looksLikeConnectorFragmentLocal(line) {
   );
 }
 
+function looksLikeUsefulNameTail(line) {
+  const t = normalizeOcrConfusions(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^poudre d['’][a-zà-öø-ÿœ' -]+$/i.test(t) ||
+    /^et\s+poudre d['’][a-zà-öø-ÿœ' -]+$/i.test(t)
+  );
+}
+
 function looksLikeIngredientNameOnlyLocal(line) {
   const t = normalizeOcrConfusions(line);
   const low = t.toLowerCase();
@@ -311,6 +321,8 @@ function looksLikeIngredientNameOnlyLocal(line) {
   if (/^(sel|poivre|beurre|farine|cheddar|moutarde|sucre|paprika)$/i.test(low)) {
     return true;
   }
+
+  if (looksLikeUsefulNameTail(t)) return true;
 
   return /[A-Za-zÀ-ÖØ-öø-ÿœ]/.test(t);
 }
@@ -430,6 +442,27 @@ function splitPollutedLine(line) {
     .filter((x) => !/^(sauce burger|sauce cheddar)$/i.test(x));
 }
 
+function connectorIngredientCompatibilityScore(connector, name) {
+  const c = normalizeOcrConfusions(connector).toLowerCase();
+  const n = normalizeOcrConfusions(name).toLowerCase();
+
+  if (!c || !n) return 0;
+
+  if (/^(jus|zeste|pulpe)\s+de$/i.test(c)) {
+    if (/\b(citron|citron vert|lime|orange|pamplemousse|mandarine|cl[ée]mentine)\b/i.test(n)) {
+      return 10;
+    }
+
+    if (/\b(moutarde|sucre|paprika|cornichons?|mayonnaise|ketchup|oignon|ail)\b/i.test(n)) {
+      return -12;
+    }
+
+    return -4;
+  }
+
+  return 0;
+}
+
 function resolveStandaloneConnectorIngredient(lines, startIndex, usedIndexes = new Set()) {
   const cur = normalizeOcrConfusions(lines[startIndex] || '');
   if (!cur) return null;
@@ -437,25 +470,25 @@ function resolveStandaloneConnectorIngredient(lines, startIndex, usedIndexes = n
 
   if (!/^(jus|zeste|pulpe)\s+de$/i.test(cur)) return null;
 
-  // Si une mesure arrive immédiatement après, on ne traite PAS ce connecteur
-  // comme un ingrédient autonome.
-  // Exemple: "Jus de" puis "1 càc de" puis "moutarde" => ne pas fabriquer "Jus de moutarde".
-  if (findNextMeasureIndex(lines, startIndex + 1, 2) >= 0) return null;
-
   let best = null;
 
-  for (let j = startIndex + 1; j < Math.min(lines.length, startIndex + 4); j++) {
+  for (let j = startIndex + 1; j < Math.min(lines.length, startIndex + 6); j++) {
     if (usedIndexes.has(j)) continue;
 
     const next = normalizeOcrConfusions(lines[j] || '');
     if (!next) continue;
+
     if (!looksLikeIngredientNameOnlyLocal(next)) continue;
 
     const candidate = normSpaces(`${cur} ${next}`);
-    const score =
-      20 +
-      (j === startIndex + 1 ? 4 : 0) +
-      (next.split(/\s+/).length <= 2 ? 2 : 0);
+
+    let score = 18;
+    score += connectorIngredientCompatibilityScore(cur, next);
+
+    if (j === startIndex + 1) score += 4;
+    if (next.split(/\s+/).length <= 2) score += 2;
+
+    score -= Math.max(0, j - startIndex - 1);
 
     flog('[FRAG][STANDALONE][CANDIDATE]', {
       startIndex,
@@ -479,7 +512,100 @@ function resolveStandaloneConnectorIngredient(lines, startIndex, usedIndexes = n
     best,
   });
 
-  return best;
+  if (best && best.score >= 20) return best;
+  return null;
+}
+
+function collectNameOptionsInRange(lines, start, end, excludeIndex = -1) {
+  const out = [];
+
+  for (let j = start; j <= end && j < lines.length; j++) {
+    if (j < 0 || j === excludeIndex) continue;
+
+    const cur = normalizeOcrConfusions(lines[j] || '');
+    if (!cur) continue;
+    if (looksLikeUiNoise(cur)) continue;
+    if (looksLikeTitleOrBrandNoise(cur)) continue;
+
+    if (/^(de|du|des|d['’])$/i.test(cur)) {
+      const next = normalizeOcrConfusions(lines[j + 1] || '');
+      if (next && j + 1 <= end && j + 1 !== excludeIndex && looksLikeIngredientNameOnlyLocal(next)) {
+        out.push({
+          text: `${cur} ${next}`,
+          start: j,
+          end: j + 1,
+        });
+      }
+      continue;
+    }
+
+    if (/^(de|du|des|d['’])\s+.+$/i.test(cur) || looksLikeIngredientNameOnlyLocal(cur)) {
+      out.push({
+        text: cur,
+        start: j,
+        end: j,
+      });
+    }
+  }
+
+  const uniq = [];
+  const seen = new Set();
+
+  for (const opt of out) {
+    const key = normalizeOcrConfusions(opt.text).toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    uniq.push(opt);
+  }
+
+  return uniq;
+}
+
+function hasBlockingContentBetweenMeasures(lines, start, end) {
+  for (let i = start; i <= end && i < lines.length; i++) {
+    const cur = normalizeOcrConfusions(lines[i] || '');
+    if (!cur) continue;
+
+    if (looksLikeUiNoise(cur)) continue;
+    if (looksLikeTitleOrBrandNoise(cur)) continue;
+
+    if (looksLikeStrongParsedIngredient(cur)) return true;
+    if (/^(jus|zeste|pulpe)\s+de$/i.test(cur)) return true;
+  }
+
+  return false;
+}
+
+function previousMeaningfulIndex(lines, startIndex, maxLookBack = 3) {
+  const min = Math.max(0, startIndex - maxLookBack);
+
+  for (let i = startIndex; i >= min; i--) {
+    const t = normalizeOcrConfusions(lines[i] || '');
+    if (!t) continue;
+    if (looksLikeUiNoise(t)) continue;
+    if (looksLikeTitleOrBrandNoise(t)) continue;
+    return i;
+  }
+
+  return -1;
+}
+
+function looksLikeCitrusName(line) {
+  const t = normalizeOcrConfusions(line).toLowerCase();
+  if (!t) return false;
+  return /\b(citron|citron vert|lime|orange|pamplemousse)\b/.test(t);
+}
+
+function countMeasuresBetween(lines, start, end) {
+  let count = 0;
+
+  for (let i = start; i <= end && i < lines.length; i++) {
+    const t = normalizeOcrConfusions(lines[i] || '');
+    if (!t) continue;
+    if (looksLikeMeasureOnlyFragment(t)) count++;
+  }
+
+  return count;
 }
 
 function resolveDualMeasureWindow(lines, startIndex) {
@@ -492,58 +618,52 @@ function resolveDualMeasureWindow(lines, startIndex) {
   const m2 = normalizeOcrConfusions(lines[i2] || '');
   if (!looksLikeMeasureOnlyFragment(m2)) return null;
 
-  const nameOptions = [];
-  const endScan = Math.min(lines.length, i2 + 4);
-
-  for (let j = startIndex + 1; j < endScan; j++) {
-    if (j === i2) continue;
-
-    const cur = normalizeOcrConfusions(lines[j] || '');
-    if (!cur) continue;
-    if (looksLikeUiNoise(cur)) continue;
-    if (looksLikeTitleOrBrandNoise(cur)) continue;
-
-    if (/^(de|du|des|d['’])$/i.test(cur)) {
-      const next = normalizeOcrConfusions(lines[j + 1] || '');
-      if (next && j + 1 !== i2 && looksLikeIngredientNameOnlyLocal(next)) {
-        nameOptions.push({
-          text: `${cur} ${next}`,
-          start: j,
-          end: j + 1,
-        });
-      }
-      continue;
-    }
-
-    if (/^(de|du|des|d['’])\s+.+$/i.test(cur) || looksLikeIngredientNameOnlyLocal(cur)) {
-      nameOptions.push({
-        text: cur,
-        start: j,
-        end: j,
-      });
-    }
+  if (hasBlockingContentBetweenMeasures(lines, startIndex + 1, i2 - 1)) {
+    flog('[FRAG][DUAL][BEST]', {
+      startIndex,
+      m1,
+      m2,
+      best: null,
+      reason: 'blocking_content_between_measures',
+    });
+    return null;
   }
 
-  const uniq = [];
-  const seen = new Set();
+  const leftOptions = collectNameOptionsInRange(lines, startIndex + 1, i2 - 1, i2);
+  const rightOptions = collectNameOptionsInRange(lines, i2 + 1, Math.min(lines.length - 1, i2 + 4), -1);
 
-  for (const opt of nameOptions) {
-    const key = normalizeOcrConfusions(opt.text).toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    uniq.push(opt);
+  if (!leftOptions.length || !rightOptions.length) {
+    flog('[FRAG][DUAL][BEST]', {
+      startIndex,
+      m1,
+      m2,
+      best: null,
+      reason: 'missing_left_or_right_options',
+      leftOptions,
+      rightOptions,
+    });
+    return null;
   }
-
-  if (uniq.length < 2) return null;
 
   let best = null;
 
-  for (let a = 0; a < uniq.length; a++) {
-    for (let b = 0; b < uniq.length; b++) {
-      if (a === b) continue;
+  for (const left of leftOptions) {
+    for (const right of rightOptions) {
 
-      const left = uniq[a];
-      const right = uniq[b];
+      const beforeWindowIdx = previousMeaningfulIndex(lines, startIndex - 1, 4);
+      const beforeWindowText =
+      beforeWindowIdx >= 0 ? normalizeOcrConfusions(lines[beforeWindowIdx] || '') : '';
+
+      if (/^(jus|zeste|pulpe)\s+de$/i.test(beforeWindowText) && looksLikeCitrusName(right.text)) {
+        flog('[FRAG][DUAL][SKIP_RIGHT_CITRUS_AFTER_CONNECTOR]', {
+          startIndex,
+          measure1: m1,
+          measure2: m2,
+          beforeWindowText,
+          right: right.text,
+        });
+        continue;
+      }
 
       const t1 = buildIngredientTextFromMeasureAndName(m1, left.text);
       const t2 = buildIngredientTextFromMeasureAndName(m2, right.text);
@@ -556,10 +676,13 @@ function resolveDualMeasureWindow(lines, startIndex) {
 
       if (!p1 || !p2 || !p1.name || !p2.name) continue;
 
-      const score =
+      let score =
         measureNameCompatibilityScore(m1, left.text) +
         measureNameCompatibilityScore(m2, right.text) +
-        10;
+        12;
+
+      if (left.start === startIndex + 1) score += 3;
+      if (right.start === i2 + 1) score += 3;
 
       flog('[FRAG][DUAL][PAIR]', {
         startIndex,
@@ -602,6 +725,9 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
   const next = i1 >= 0 ? normalizeOcrConfusions(lines[i1] || '') : '';
   const next2 = i2 >= 0 ? normalizeOcrConfusions(lines[i2] || '') : '';
 
+  const nextIsMeasure = next && looksLikeMeasureOnlyFragment(next);
+  const next2IsMeasure = next2 && looksLikeMeasureOnlyFragment(next2);
+
   const candidates = [];
 
   // 1) mesure + "de sucre"
@@ -610,7 +736,7 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
     if (text) {
       candidates.push({
         text,
-        consume: i1 - startIndex + 1,
+        indexes: [startIndex, i1],
         score: 14 + measureNameCompatibilityScore(cur, next),
       });
     }
@@ -628,18 +754,23 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
     if (text) {
       candidates.push({
         text,
-        consume: i2 - startIndex + 1,
+        indexes: [startIndex, i1, i2],
         score: 16 + measureNameCompatibilityScore(cur, next2),
       });
     }
   }
 
   // 3) mesure + nom simple
-  if (next && looksLikeIngredientNameOnlyLocal(next)) {
+  if (next && looksLikeIngredientNameOnlyLocal(next) && !nextIsMeasure) {
     let score = 12 + measureNameCompatibilityScore(cur, next);
 
-    // Si derrière ce nom il y a un fragment "de lait", "de paprika", etc.,
-    // on baisse la confiance: souvent le vrai nom est ce fragment suivant.
+    const prevIdx = previousMeaningfulIndex(lines, startIndex - 1, 3);
+    const prev = prevIdx >= 0 ? normalizeOcrConfusions(lines[prevIdx] || '') : '';
+
+    if (/^(jus|zeste|pulpe)\s+de$/i.test(prev) && looksLikeCitrusName(next)) {
+      score -= 20;
+    }
+
     if (next2 && /^(de|du|des|d['’])\s+.+$/i.test(next2)) {
       score -= 4;
     }
@@ -648,15 +779,13 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
     if (text) {
       candidates.push({
         text,
-        consume: i1 - startIndex + 1,
+        indexes: [startIndex, i1],
         score,
       });
     }
   }
 
   // 4) mesure + fragment connector-led suivant nettoyé
-  // ex: "250 ml" + "cheddar" + "de lait" => préférer "250 ml de lait"
-  // ex: "1 pincée de" + "cornichons" + "de paprika" => préférer "1 pincée de paprika"
   if (next2 && /^(de|du|des|d['’])\s+.+$/i.test(next2)) {
     const cleanedNext2 = cleanConnectorLedName(next2);
 
@@ -665,8 +794,34 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
       if (text) {
         candidates.push({
           text,
-          consume: i2 - startIndex + 1,
+          indexes: [startIndex, i2],
           score: 13 + measureNameCompatibilityScore(cur, cleanedNext2),
+        });
+      }
+    }
+  }
+
+  // 5) chercher un nom simple un peu plus loin si les premiers éléments sont du bruit structurel
+  if (!nextIsMeasure && !next2IsMeasure) {
+    for (let j = startIndex + 1; j < Math.min(lines.length, startIndex + 5); j++) {
+      const cand = normalizeOcrConfusions(lines[j] || '');
+      if (!cand) continue;
+
+      if (!looksLikeIngredientNameOnlyLocal(cand)) continue;
+      if (looksLikeCitrusName(cand)) continue;
+
+      let score = 9 + measureNameCompatibilityScore(cur, cand);
+      score -= (j - (startIndex + 1)) * 2;
+
+      const measuresBetween = countMeasuresBetween(lines, startIndex + 1, j - 1);
+      score -= measuresBetween * 8;
+
+      const text = buildIngredientTextFromMeasureAndName(cur, cand);
+      if (text) {
+        candidates.push({
+          text,
+          indexes: [startIndex, j],
+          score,
         });
       }
     }
@@ -759,7 +914,7 @@ function preprocessFragmentedLines(lines) {
     }
   }
 
-   flog('[FRAG][PREPROCESS][IN]', normalizeLines(lines));
+  flog('[FRAG][PREPROCESS][IN]', normalizeLines(lines));
   flog('[FRAG][PREPROCESS][OUT]', out);
 
   return dedupeLinesPreservingCriticalFragments(out);
@@ -770,9 +925,7 @@ function joinMeasureAndNameFragments(lines) {
   const L = preprocessFragmentedLines(lines);
   const used = new Set();
 
-  // -------------------------------------------------
   // PASS 1 : fenêtres à double mesure
-  // -------------------------------------------------
   for (let i = 0; i < L.length; i++) {
     if (used.has(i)) continue;
 
@@ -804,9 +957,7 @@ function joinMeasureAndNameFragments(lines) {
     }
   }
 
-  // -------------------------------------------------
   // PASS 2 : reconstruction locale simple
-  // -------------------------------------------------
   for (let i = 0; i < L.length; i++) {
     if (used.has(i)) continue;
 
@@ -819,7 +970,7 @@ function joinMeasureAndNameFragments(lines) {
     if (built) {
       flog('[FRAG][JOIN][PASS2_LOCAL_ACCEPT]', {
         text: built.text,
-        consume: built.consume,
+        consume: built.indexes,
         startIndex: i,
       });
 
@@ -827,8 +978,8 @@ function joinMeasureAndNameFragments(lines) {
         out.push(built.text);
       }
 
-      for (let k = i; k < i + built.consume; k++) {
-        used.add(k);
+      for (const idx of built.indexes || []) {
+        used.add(idx);
       }
       continue;
     }
@@ -839,9 +990,7 @@ function joinMeasureAndNameFragments(lines) {
     }
   }
 
-  // -------------------------------------------------
   // PASS 3 : ingrédients autonomes sans quantité
-  // -------------------------------------------------
   for (let i = 0; i < L.length; i++) {
     if (used.has(i)) continue;
 
@@ -860,6 +1009,31 @@ function joinMeasureAndNameFragments(lines) {
 
     const cur = normalizeOcrConfusions(L[i] || '');
     if (!cur) continue;
+
+    if (looksLikeIngredientNameOnlyLocal(cur)) {
+      out.push(cur);
+      used.add(i);
+
+      flog('[FRAG][JOIN][PASS3_NAME_SALVAGE]', {
+        index: i,
+        text: cur,
+      });
+
+      continue;
+    }
+
+    if (/^et\s+(poudre d['’]ail)$/i.test(cur)) {
+      const fixed = cur.replace(/^et\s+/i, '');
+      out.push(fixed);
+      used.add(i);
+
+      flog('[FRAG][JOIN][PASS3_TAIL_SALVAGE]', {
+        index: i,
+        text: fixed,
+      });
+
+      continue;
+    }
 
     flog('[FRAG][JOIN][SKIP]', {
       index: i,
@@ -952,7 +1126,6 @@ function scoreIngredientExtraction(lines) {
 
     if (looksLikeIngredientNameOnlyLocal(line)) {
       looseNames++;
-      suspicious += 2;
       continue;
     }
 
@@ -966,7 +1139,7 @@ function scoreIngredientExtraction(lines) {
     suspicious * 10 -
     fragments * 10 -
     polluted * 12 -
-    looseNames * 10;
+    looseNames * 3;
 
   return {
     total: L.length,
