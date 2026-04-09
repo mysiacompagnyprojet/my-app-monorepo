@@ -15,7 +15,21 @@ export default function Price({ value, blur = false }: PriceProps) {
 
  if (!Number.isFinite(n)) return <span>—</span>
 
- const formatted = n.toFixed(2).replace('.', ',')
+ if (!Number.isFinite(n)) return <span>—</span>
+
+  if (n > 0 && n < 0.01) {
+    if (blur) {
+      return (
+        <span style={{ filter: 'blur(5px)', userSelect: 'none' }}>
+          {'< 0,01 €'}
+        </span>
+      )
+    }
+
+    return <span>{'< 0,01 €'}</span>
+  }
+
+  const formatted = n.toFixed(2).replace('.', ',')
 
  if (blur) {
    return (

@@ -474,5 +474,5 @@ note: 'unité incompatible (conversion manquante)',
 }
 }
 
-module.exports = { enrichIngredientWithCost, cleanNameForPricing }
+module.exports = { enrichIngredientWithCost, cleanNameForPricing, convertRecipeToPricingUnit }
 

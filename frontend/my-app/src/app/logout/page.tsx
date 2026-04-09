@@ -1,3 +1,5 @@
+//frontend/my-app/src/app/logout/page.tsx
+
 'use client';
 
 import { supabase } from '../../lib/supabase';

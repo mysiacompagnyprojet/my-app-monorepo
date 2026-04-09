@@ -3,9 +3,9 @@
     "target": "ES2022",
 
     // >>> IMPORTANT pour les imports avec @/
-    "baseUrl": ".",
+    //"baseUrl": ".",
     "paths": {
-      "@/*": ["src/*"]
+      "@/*": ["./src/*"]
     },
 
     "lib": ["dom", "dom.iterable", "esnext"],

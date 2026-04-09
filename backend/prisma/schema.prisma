@@ -24,36 +24,60 @@ model User {
 }
 
 model Recipe {
-  id          String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  userId      String             @db.Uuid
-  title       String
-  servings    Int                @default(1)
-  steps       Json               @default("[]")
-  imageUrl    String?
-  notes       String?            @default("")
-  createdAt   DateTime           @default(now()) @map("createdat") @db.Timestamptz(6)
-  updatedAt   DateTime           @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
-  ingredients Ingredient[]
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  categories  RecipeOnCategory[]
+  id               String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId           String             @db.Uuid
+  title            String
+  servings         Int                @default(1)
+  steps            Json               @default("[]")
+  imageUrl         String?
+  notes            String?            @default("")
+  totalCostEur     Float?             @default(0)
+  totalCoursesEur  Float?             @default(0)
+  pricingUpdatedAt DateTime?          @db.Timestamptz(6)
+  createdAt        DateTime           @default(now()) @map("createdat") @db.Timestamptz(6)
+  updatedAt        DateTime           @default(now()) @updatedAt @map("updatedat") @db.Timestamptz(6)
+  ingredients      Ingredient[]
+  user             User               @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  categories       RecipeOnCategory[]
 
   @@index([userId], map: "idx_recipe_user")
 }
 
 model Ingredient {
-  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  recipeId     String   @db.Uuid
-  name         String
-  quantity     Float    @default(0)
-  unit         String
-  airtableId   String?
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  recipeId String @db.Uuid
+  name     String
+  quantity Float  @default(0)
+  unit     String
+
+  ingredientBaseId String? @db.Uuid
+  airtableId       String?
+
   unitPriceBuy Float?
   costRecipe   Float?
-  createdAt    DateTime @default(now()) @db.Timestamptz(6)
-  updatedAt    DateTime @default(now()) @db.Timestamptz(6)
-  recipe       Recipe   @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  buyPriceEur Float?
+  buyRefQty   Float?
+  buyRefUnit  String?
+  buyLabel    String?
+
+  gramsPerPiece    Float?
+  density_g_per_ml Float?
+  mlPerPiece       Float?
+
+  category     IngredientCategory?
+  priceStatus  String?
+  priceMessage String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @db.Timestamptz(6)
+
+  recipe             Recipe            @relation(fields: [recipeId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  ingredientBase     ingredients_base? @relation(fields: [ingredientBaseId], references: [id], onDelete: SetNull, onUpdate: NoAction)
+  isCoursesDuplicate Boolean?          @default(false)
 
   @@index([recipeId], map: "idx_ri_recipe")
+  @@index([ingredientBaseId], map: "idx_ingredient_base_id")
   @@map("Ingredients")
 }
 
@@ -117,8 +141,9 @@ model ingredients_base {
   prix_kg_l_piece                            Decimal?                 @default(dbgenerated("round(((prix_d_achat / NULLIF(unite_g_ml_piece, (0)::numeric)) * (quantite_de_reference)::numeric), 2)")) @db.Decimal
   substitutionsFrom                          IngredientSubstitution[] @relation("SubSource")
   substitutionsTo                            IngredientSubstitution[] @relation("SubTarget")
-  category                                   IngredientCategory? 
+  category                                   IngredientCategory?
 
+  Ingredient Ingredient[]
 }
 
 model RecipeCategory {
@@ -167,22 +192,22 @@ model IngredientSubstitution {
 }
 
 enum IngredientCategory {
- vegetable
- fruit
- meat
- fish
- seafood
- dairy
- egg
- starch
- legume
- bakery
- spice
- condiment
- fat
- sweet
- drink
- frozen
- processed
- other
+  vegetable
+  fruit
+  meat
+  fish
+  seafood
+  dairy
+  egg
+  starch
+  legume
+  bakery
+  spice
+  condiment
+  fat
+  sweet
+  drink
+  frozen
+  processed
+  other
 }

@@ -3,8 +3,8 @@
 
 import { Suspense, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { apiFetch } from 'src/lib/api'
-import type { OcrDraft } from 'src/types/recipe'
+import { apiFetch } from '@/lib/api'
+import type { OcrDraft } from '@/types/recipe'
 import Price from '@/components/Price'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 

@@ -5,22 +5,19 @@
 // importé uniquement par src-index
 const express = require('express');
 const router = express.Router();
-const { PrismaClient } = require('@prisma/client');
-
-const prisma = new PrismaClient()
-
+console.log("RECIPES ROUTE LOAPED");
+const { prisma } = require('../lib/prisma');
+const { buildPersistedPricing } = require('../services/recipePricing')
 const { supabaseAuth } = require('../middleware/supabaseAuth');
-const needAuth = supabaseAuth;
-
-const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients');
-
+const { getPricingPolicy } = require('../services/importLimits');
 // ✅ Source de vérité prix + conversions (densité + gramsPerPiece)
 const { enrichIngredientWithCost } = require('../utils/costs');
-const { canonUnit, toBaseQty } = require('../utils/units');
+const needAuth = supabaseAuth;
 
-const { getPricingPolicy } = require('../services/importLimits');
+//const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients');
+
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+//const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 /**
 * ✅ PATCH: enrichissement "à la volée" pour l'affichage (SANS migration DB)
@@ -33,64 +30,66 @@ const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 * Comme tu l’as vu, ces champs existent déjà dans POST /recipes/enrich-ingredients,
 * mais ils n’étaient pas renvoyés par les GET (d’où 0,00€ / — côté fiche recette).
 */
-async function enrichIngredientsForResponse(ingredients) {
-const list = Array.isArray(ingredients) ? ingredients : []
+/**async function enrichIngredientsForResponse(ingredients) {
+  const list = Array.isArray(ingredients) ? ingredients : []
 
-return Promise.all(
-list.map(async (ing) => {
-const base = {
-name: String(ing?.name || '').trim(),
-quantity: Number(ing?.quantity || 0) || 0,
-unit: String(ing?.unit || '').trim(),
-}
+  return Promise.all(
+    list.map(async (ing) => {
+      const base = {
+        name: String(ing?.name || '').trim(),
+        quantity: Number(ing?.quantity || 0) || 0,
+        unit: String(ing?.unit || '').trim(),
+      }
 
-if (!base.name) {
-return {
-...ing,
-buyPriceEur: null,
-buyLabel: null,
-buyRefQty: null,
-buyRefUnit: null,
-priceStatus: 'invalid',
-priceMessage: 'Nom d’ingrédient vide',
-}}
+      if (!base.name) {
+        return {
+          ...ing,
+          buyPriceEur: null,
+          buyLabel: null,
+          buyRefQty: null,
+          buyRefUnit: null,
+          priceStatus: 'invalid',
+          priceMessage: 'Nom d’ingrédient vide',
+        }
+      }
 
-// On réutilise la même source de vérité que l'import (costs.js / Airtable)
-const enriched = await enrichIngredientWithCost(base)
+      // On réutilise la même source de vérité que l'import (costs.js / Airtable)
+      const enriched = await enrichIngredientWithCost(base)
 
-return {
-...ing,
-// On garde les champs existants si déjà présents en DB, sinon on prend l'enrichissement
-id: enriched?.id ?? ing?.id ?? null,
-unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
-costRecipe: enriched?.costRecipe ?? ing?.costRecipe ?? null,
-category: enriched?.category ?? null,
+      return {
+        ...ing,
+        // On garde les champs existants si déjà présents en DB, sinon on prend l'enrichissement
+        id: enriched?.id ?? ing?.id ?? null,
+        unitPriceBuy: enriched?.unitPriceBuy ?? ing?.unitPriceBuy ?? null,
+        costRecipe: enriched?.costRecipe ?? ing?.costRecipe ?? null,
+        category: enriched?.category ?? null,
 
-// ✅ Champs "produit/pack" (ce que tu veux afficher sur la fiche recette)
-buyPriceEur: enriched?.buyPriceEur ?? null,
-buyLabel: enriched?.buyLabel ?? null,
-buyRefQty: enriched?.buyRefQty ?? null,
-buyRefUnit: enriched?.buyRefUnit ?? null,
+        // ✅ Champs "produit/pack" (ce que tu veux afficher sur la fiche recette)
+        buyPriceEur: enriched?.buyPriceEur ?? null, 
+        buyLabel: enriched?.buyLabel ?? null,
+        buyRefQty: enriched?.buyRefQty ?? null,
+        buyRefUnit: enriched?.buyRefUnit ?? null,
 
-gramsPerPiece: enriched?.gramsPerPiece ?? ing?.gramsPerPiece ?? null,
-density_g_per_ml: enriched?.density_g_per_ml ?? ing?.density_g_per_ml ?? null,
-mlPerPiece: enriched?.mlPerPiece ?? ing?.mlPerPiece ?? null,
+        gramsPerPiece: enriched?.gramsPerPiece ?? ing?.gramsPerPiece ?? null,
+        density_g_per_ml: enriched?.density_g_per_ml ?? ing?.density_g_per_ml ?? null,
+        mlPerPiece: enriched?.mlPerPiece ?? ing?.mlPerPiece ?? null,
 
 
-// ✅ Pour affichage UX si besoin
-priceStatus: enriched?.priceStatus ?? null,
-priceMessage: enriched?.priceMessage ?? null,
+        // ✅ Pour affichage UX si besoin
+        priceStatus: enriched?.priceStatus ?? null,
+        priceMessage: enriched?.priceMessage ?? null,
 
-...(enriched?.note ? { note: enriched.note } : {}),
-}
-})
-)}
+        ...(enriched?.note ? { note: enriched.note } : {}),
+      }
+    })
+  )
+}*/
 
 /**
 * ✅ totalCostEur "à la volée" (SANS migration DB)
 * On additionne costRecipe (le coût de la quantité utilisée dans la recette).
 */
-function computeTotalCostEur(ingredients) {
+/**function computeTotalCostEur(ingredients) {
 const list = Array.isArray(ingredients) ? ingredients : []
 const total = list.reduce((acc, ing) => {
 const v = ing?.costRecipe
@@ -98,9 +97,9 @@ const n = typeof v === 'number' ? v : typeof v === 'string' ? Number(String(v).r
 return acc + (Number.isFinite(n) ? n : 0)
 }, 0)
 return Number.isFinite(total) ? total : 0
-}
+}*/
 
-function computeIngredientCostCourses(ing) {
+/**function computeIngredientCostCourses(ing) {
  const buyPrice = typeof ing?.buyPriceEur === 'number' ? ing.buyPriceEur : null
  const refQty = typeof ing?.buyRefQty === 'number' ? ing.buyRefQty : null
  const refUnit = typeof ing?.buyRefUnit === 'string' ? ing.buyRefUnit : null
@@ -145,13 +144,13 @@ function computeIngredientCostCourses(ing) {
    }
  }
  return 0
-}
+}*/
 
-function computeTotalCoursesEur(ingredients) {
+/**function computeTotalCoursesEur(ingredients) {
  const list = Array.isArray(ingredients) ? ingredients : []
  const total = list.reduce((acc, ing) => acc + computeIngredientCostCourses(ing), 0)
  return Number.isFinite(total) ? total : 0
-}
+}*/
 
 async function buildEconomySuggestion(ingredients, totalCostEur) {
  const list = Array.isArray(ingredients) ? ingredients : []
@@ -254,79 +253,58 @@ async function buildEconomySuggestion(ingredients, totalCostEur) {
 }
 
 // ─────────────────────────────────────────────
-// GET /recipes → liste des recettes
+// GET /recipes → liste des recettes - remplacer le 09/04/26
 // ─────────────────────────────────────────────
 router.get('/', needAuth, async (req, res) => {
-try {
-const { userId } = req.user
-const u = await prisma.user.findUnique({
- where: { id: userId },
- select: { subscriptionStatus: true },
-});
-const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+  try {
+    const { userId } = req.user;
+    const { cat } = req.query;
 
-const policy = await getPricingPolicy({ userId, plan });
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { subscriptionStatus: true },
+    });
 
-const limits = {
- blurPrices: policy.blurPrices, // flou à partir de la 11e
- used: policy.used,
- limit: policy.limit,
- remaining: Math.max(0, policy.limit - policy.used),
-};
-const { cat } = req.query
+    const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+    const policy = await getPricingPolicy({ userId, plan });
 
-const recipesRaw = await prisma.recipe.findMany({
-where: { userId,
-  ...(cat && {
-    categories: {
-      some: {
-        categoryId: String(cat),
+    const limits = {
+      blurPrices: policy.blurPrices,
+      used: policy.used,
+      limit: policy.limit,
+      remaining: Math.max(0, policy.limit - policy.used),
+    };
+
+    const recipes = await prisma.recipe.findMany({
+      where: {
+        userId,
+        ...(cat && {
+          categories: {
+            some: {
+              categoryId: String(cat),
+            },
+          },
+        }),
       },
-    },
-  })
-},
-orderBy: { createdAt: 'desc' },
-    select: {
+      orderBy: { createdAt: 'desc' },
+      select: {
         id: true,
         title: true,
         servings: true,
         imageUrl: true,
         createdAt: true,
-ingredients: {
-    select: {
-        name: true,
-        quantity: true,
-        unit: true,
-        costRecipe: true,
+        totalCostEur: true,
+        totalCoursesEur: true,
+      },
+    });
 
-// ✅ (facultatif mais utile) si présent en DB
-id: true,
-unitPriceBuy: true,
-airtableId: true,
-},
-},
-},
-})
+    return res.json({ ok: true, recipes, limits });
+  } catch (e) {
+    console.error('GET /recipes error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error' });
+  }
+});
 
-// ✅ PATCH: enrichit ingrédients + calcule totalCostEur à la volée
-const recipes = await Promise.all(
-recipesRaw.map(async (r) => {
-const enrichedIngredients = await enrichIngredientsForResponse(r.ingredients)
-return {
-...r,
-ingredients: enrichedIngredients,
-totalCostEur: computeTotalCostEur(enrichedIngredients),
-totalCoursesEur: computeTotalCoursesEur(enrichedIngredients),
-}
-})
-)
-
-return res.json({ ok: true, recipes, limits })
-} catch (e) {
-console.error('GET /recipes error:', e)
-return res.status(500).json({ ok: false, error: 'internal error' })
-}
-})
 
 // ─────────────────────────────────────────────
 // POST /recipes/enrich-ingredients
@@ -341,75 +319,42 @@ router.post('/enrich-ingredients', needAuth, async (req, res) => {
  }
 
  try {
-   const out = await Promise.all(
-     list.map(async (i) => {
-        console.log('[ENRICH IN]', { name: i?.name, unit: i?.unit, ingredientBaseId: i?.ingredientBaseId})
-       const base = {
-         name: String(i?.name || '').trim(),
-         quantity: Number(i?.quantity || 0) || 0,
-         unit: String(i?.unit || '').trim(),
-         // ✅ pour ne pas rester “bloqué” sur le mauvais article quand plusieurs ont le même nom
-         ingredientBaseId: i?.ingredientBaseId ?? null,
-       }
+   const pricing = await buildPersistedPricing(list)
 
-       if (!base.name) {
-         return {
-           ...base,
-           id: null,
-           unitPriceBuy: null,
-           buyPriceEur: null,
-           buyRefQty: null,
-           buyRefUnit: null,
-           buyLabel: null,
-           costEur: 0,
-           priceMatched: false,
-           priceStatus: 'invalid',
-           priceMessage: "Nom d’ingrédient vide",
-         }
-       }
+  const out = pricing.ingredientsForDb.map((ing) => ({
+    name: ing.name,
+    quantity: ing.quantity,
+    unit: ing.unit,
 
-        const enriched = await enrichIngredientWithCost(base)
-        const matchedId = enriched?.id ?? base.ingredientBaseId ?? null
+    ingredientBaseId: ing.ingredientBaseId,
+    id: ing.ingredientBaseId,
 
-        return {
-          name: base.name,
-          quantity: base.quantity,
-          unit: base.unit,
-          ingredientBaseId: matchedId,
+    priceMatched: Boolean(ing.ingredientBaseId),
 
-          id: matchedId,
-          priceMatched: Boolean(matchedId),
+    unitPriceBuy: ing.unitPriceBuy,
 
-          // €/unité (souvent €/g ou €/ml)
-          unitPriceBuy: enriched?.unitPriceBuy ?? null,
+    costEur: ing.costRecipe,
 
-          // ✅ prix recette
-          costEur: Number(enriched?.costRecipe || 0),
+    buyPriceEur: ing.buyPriceEur,
+    buyLabel: ing.buyLabel,
+    buyRefQty: ing.buyRefQty,
+    buyRefUnit: ing.buyRefUnit,
 
-          // ✅ prix pack
-          buyPriceEur: enriched?.buyPriceEur ?? null,
-          buyLabel: enriched?.buyLabel ?? null,
-          buyRefQty: enriched?.buyRefQty ?? null,
-          buyRefUnit: enriched?.buyRefUnit ?? null,
+    gramsPerPiece: ing.gramsPerPiece,
+    density_g_per_ml: ing.density_g_per_ml,
+    mlPerPiece: ing.mlPerPiece,
+    category: ing.category,
 
-          gramsPerPiece: enriched?.gramsPerPiece ?? null,
-          density_g_per_ml: enriched?.density_g_per_ml ?? null,
-          mlPerPiece: enriched?.mlPerPiece ?? null,
-          category: enriched?.category ?? null,
+    priceStatus: ing.priceStatus,
+    priceMessage: ing.priceMessage,
 
-          // ✅ statut/message ligne
-          priceStatus: enriched?.priceStatus ?? null,
-          priceMessage: enriched?.priceMessage ?? null,
-
-          ...(enriched?.note ? { note: enriched.note } : {}),
-        }
-     })
-   )
+    isCoursesDuplicate: ing.isCoursesDuplicate ?? false
+  }))
 
    console.log('[ENRICH RESULT sample]', out?.[0])
    console.log('[ENRICH RESULT keys]', Object.keys(out?.[0] || {}))
 
-   return res.status(200).json({ ok: true, ingredients: out })
+   return res.status(200).json({ ok: true, ingredients: out, totalCoursesEur: pricing.totalCoursesEur })
  } catch (e) {
    console.error('POST /recipes/enrich-ingredients unexpected error:', e)
 
@@ -467,274 +412,182 @@ router.post('/economy-suggestion', needAuth, async (req, res) => {
 // POST /recipes/from-draft/:draftId → import OCR
 // ─────────────────────────────────────────────
 router.post('/from-draft/:draftId', needAuth, async (req, res) => {
-try {
-const { draftId } = req.params
+  console.log('[from_draft]', req.params.draftId);
+  try {
+    const { draftId } = req.params;
 
-const draft = await prisma.recipeDraft.findUnique({
-where: { id: draftId },
-})
+    const draft = await prisma.recipeDraft.findUnique({
+      where: { id: draftId },
+    });
 
-if (!draft) {
-return res.status(404).json({ ok: false, error: 'DRAFT_NOT_FOUND' })
-}
+    if (!draft) {
+      return res.status(404).json({ ok: false, error: 'DRAFT_NOT_FOUND' });
+    }
 
-if (!draft.parsed) {
-return res.status(400).json({
-ok: false,
-error: 'DRAFT_NOT_PARSED',
-message: 'Remplis draft.parsed avant import.',
-})
-}
+    if (!draft.parsed) {
+      return res.status(400).json({
+        ok: false,
+        error: 'DRAFT_NOT_PARSED',
+        message: 'Remplis draft.parsed avant import.',
+      });
+    }
 
-const data = draft.parsed || {}
-const title = String(data.title || '').trim()
-if (!title) {
-return res.status(400).json({ ok: false, error: 'parsed.title manquant' })
-}
+    const data = draft.parsed || {};
+    const title = String(data.title || '').trim();
 
-const servings = Number(data.servings || 1)
-const steps = Array.isArray(data.steps) ? data.steps : []
-const imageUrl = data.imageUrl || null
-const notes = typeof data.notes === 'string' ? data.notes : ''
-const rawIngredients = Array.isArray(data.ingredients) ? data.ingredients : []
+    if (!title) {
+      return res.status(400).json({ ok: false, error: 'parsed.title manquant' });
+    }
 
-// 1) Normalisation forte
-const normalized = cleanAndNormalizeIngredients(rawIngredients)
+    const servings = Number(data.servings || 1);
+    const steps = Array.isArray(data.steps) ? data.steps : [];
+    const imageUrl = data.imageUrl || null;
+    const notes = typeof data.notes === 'string' ? data.notes : '';
+    const rawIngredients = Array.isArray(data.ingredients) ? data.ingredients : [];
 
-// 2) Enrichissement coûts via la source de vérité
-const ingData = await Promise.all(
-normalized.map(async (i) => {
-const base = {
-name: i.nameCanon,
-quantity: i.quantityNum ?? 0,
-unit: i.unit || 'piece',
-}
+    const pricing = await buildPersistedPricing(rawIngredients);
+    console.log('[FROM_DRAFT][PARSED]', JSON.stringify(data, null, 2));
+    console.log('[FROM_DRAFT][IMAGE_URL_FROM_PARSED]', data.imageUrl);
+    console.log('[FROM_DRAFT][IMAGE_URL_VARIABLE]', imageUrl);
 
-const enriched = await enrichIngredientWithCost(base)
+    const recipe = await prisma.recipe.create({
+      data: {
+        userId: req.user.userId,
+        title,
+        servings: Number.isFinite(servings) && servings > 0 ? servings : 1,
+        steps,
+        imageUrl,
+        notes,
+        totalCostEur: pricing.totalCostEur,
+        totalCoursesEur: pricing.totalCoursesEur,
+        pricingUpdatedAt: pricing.pricingUpdatedAt,
+        ingredients: pricing.ingredientsForDb.length
+          ? { createMany: { data: pricing.ingredientsForDb } }
+          : undefined,
+      },
+      include: { ingredients: true },
+    });
 
-return {
-...base,
-id: enriched?.id ?? null,
-unitPriceBuy: enriched?.unitPriceBuy ?? null,
-costRecipe: enriched?.costRecipe ?? null,
-}
-})
-)
+    await prisma.recipeDraft.update({
+      where: { id: draftId },
+      data: { status: 'imported', updatedAt: new Date() },
+    });
 
-// 3) Garde-fou final
-const ingDataFinal = ingData.map((i) => ({
-//...i,
-name: tidyName(i.name),
-quantity: Number(i.quantity || 0),
-unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
-
-airtableId: i.id ?? null,
-unitPriceBuy: i.unitPriceBuy ?? null,
-costRecipe: i.costRecipe ?? null,
-}))
-// console log a supprimer
-dlog("req.userId =", req.userId);
-dlog("req.user=", req.user);
-const recipe = await prisma.recipe.create({
-data: {
-userId: req.user.userId,
-title,
-servings: Number.isFinite(servings) && servings > 0 ? servings : 1,
-steps,
-imageUrl,
-notes,
-ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
-},
-include: { ingredients: true },
-})
-
-await prisma.recipeDraft.update({
-where: { id: draftId },
-data: { status: 'imported', updatedAt: new Date() },
-})
-
-return res.json({ ok: true, recipe })
-} catch (e) {
-console.error('POST /recipes/from-draft error:', e)
-return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
-}
-})
+    return res.json({ ok: true, recipe });
+  } catch (e) {
+    console.error('POST /recipes/from-draft error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
 
 // ─────────────────────────────────────────────
 // POST /recipes → création manuelle
 // ─────────────────────────────────────────────
 router.post('/', needAuth, async (req, res) => {
-try {
-const body = req.body ?? {}
-let { title, servings, steps, imageUrl, notes, ingredients } = body
+  console.log('[RECIPES][POST_CREATE][HIT]');
+  console.log('[RECIPES][POST_CREATE][BODY_IMAGE]', req.body?.imageUrl);
+  try {
+    const body = req.body ?? {};
+    let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
-if (typeof steps === 'string') {
-try {
-steps = JSON.parse(steps)
-} catch {
-steps = []
-}
-}
+    if (typeof steps === 'string') {
+      try {
+        steps = JSON.parse(steps);
+      } catch {
+        steps = [];
+      }
+    }
 
-if (!title || typeof title !== 'string' || !title.trim()) {
-return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" })
-}
+    if (!title || typeof title !== 'string' || !title.trim()) {
+      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
+    }
 
-servings = Number(servings ?? 1)
-if (!Number.isFinite(servings) || servings < 1) {
-return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
-}
+    servings = Number(servings ?? 1);
+    if (!Number.isFinite(servings) || servings < 1) {
+      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" });
+    }
 
-steps = Array.isArray(steps) ? steps : []
-if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
-imageUrl = imageUrl.url
-}
+    steps = Array.isArray(steps) ? steps : [];
+    if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
+      imageUrl = imageUrl.url;
+    }
 
-notes = typeof notes === 'string' ? notes : ''
-ingredients = Array.isArray(ingredients) ? ingredients : []
+    notes = typeof notes === 'string' ? notes : '';
+    ingredients = Array.isArray(ingredients) ? ingredients : [];
 
-// 1) Normalisation forte
-const normalized = cleanAndNormalizeIngredients(
-ingredients.map((i) => ({
-name: i?.name,
-quantity: i?.quantity,
-unit: i?.unit,
-}))
-)
+    const pricing = await buildPersistedPricing(ingredients);
 
-// 2) Enrichissement coûts via source de vérité
-const ingData = await Promise.all(
-normalized.map(async (i) => {
-const base = {
-name: i.nameCanon,
-quantity: i.quantityNum ?? 0,
-unit: i.unit || 'piece',
-}
+    const recipe = await prisma.recipe.create({
+      data: {
+        userId: req.user.userId,
+        title: title.trim(),
+        servings,
+        steps,
+        imageUrl: imageUrl || null,
+        notes,
+        totalCostEur: pricing.totalCostEur,
+        totalCoursesEur: pricing.totalCoursesEur,
+        pricingUpdatedAt: pricing.pricingUpdatedAt,
+        ingredients: pricing.ingredientsForDb.length
+          ? { createMany: { data: pricing.ingredientsForDb } }
+          : undefined,
+      },
+      include: { ingredients: true },
+    });
 
-const enriched = await enrichIngredientWithCost(base)
-
-return {
-...base,
-id: enriched?.id ?? null,
-unitPriceBuy: enriched?.unitPriceBuy ?? null,
-costRecipe: enriched?.costRecipe ?? null,
-}
-})
-)
-
-// 3) Garde-fou final
-const ingDataFinal = ingData.map((i) => ({
-//...i,
-name: tidyName(i.name),
-quantity: Number(i.quantity || 0),
-unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
-
-airtableId: i.id ?? null,
-unitPriceBuy: i.unitPriceBuy ?? null,
-costRecipe: i.costRecipe ?? null,
-}))
-
-const recipe = await prisma.recipe.create({
-data: {
-userId: req.user.userId,
-title,
-servings,
-steps,
-imageUrl: imageUrl || null,
-notes,
-ingredients: ingDataFinal.length ? { createMany: { data: ingDataFinal } } : undefined,
-},
-include: { ingredients: true },
-})
-
-return res.status(201).json({ ok: true, recipe })
-} catch (e) {
-console.error('POST /recipes error:', e)
-return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
-}
-})
+    return res.status(201).json({ ok: true, recipe });
+  } catch (e) {
+    console.error('POST /recipes error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
+  }
+});
 
 // ─────────────────────────────────────────────
 // PUT /recipes/:id → modification d’une recette
 // ─────────────────────────────────────────────
 router.put('/:id', needAuth, async (req, res) => {
   try {
-    const { id } = req.params
-    const { userId } = req.user
+    const { id } = req.params;
+    const { userId } = req.user;
 
-    const body = req.body ?? {}
-    let { title, servings, steps, imageUrl, notes, ingredients } = body
+    const body = req.body ?? {};
+    let { title, servings, steps, imageUrl, notes, ingredients } = body;
 
     if (typeof steps === 'string') {
       try {
-        steps = JSON.parse(steps)
+        steps = JSON.parse(steps);
       } catch {
-        steps = []
+        steps = [];
       }
     }
 
     if (!title || typeof title !== 'string' || !title.trim()) {
-      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" })
+      return res.status(400).json({ ok: false, error: "Champ 'title' manquant ou invalide" });
     }
 
-    servings = Number(servings ?? 1)
+    servings = Number(servings ?? 1);
     if (!Number.isFinite(servings) || servings < 1) {
-      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" })
+      return res.status(400).json({ ok: false, error: "Champ 'servings' doit être un nombre >= 1" });
     }
 
-    steps = Array.isArray(steps) ? steps : []
-    notes = typeof notes === 'string' ? notes : ''
-    ingredients = Array.isArray(ingredients) ? ingredients : []
+    steps = Array.isArray(steps) ? steps : [];
+    if (imageUrl && typeof imageUrl === 'object' && imageUrl.url) {
+      imageUrl = imageUrl.url;
+    }
+    notes = typeof notes === 'string' ? notes : '';
+    ingredients = Array.isArray(ingredients) ? ingredients : [];
 
     const existingRecipe = await prisma.recipe.findFirst({
       where: { id, userId },
       select: { id: true },
-    })
+    });
 
     if (!existingRecipe) {
-      return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
+      return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' });
     }
 
-    // 1) normalisation
-    const normalized = cleanAndNormalizeIngredients(
-      ingredients.map((i) => ({
-        name: i?.name,
-        quantity: i?.quantity,
-        unit: i?.unit,
-      }))
-    )
+    const pricing = await buildPersistedPricing(ingredients);
 
-    // 2) enrichissement prix
-    const ingData = await Promise.all(
-      normalized.map(async (i) => {
-        const base = {
-          name: i.nameCanon,
-          quantity: i.quantityNum ?? 0,
-          unit: i.unit || 'piece',
-        }
-
-        const enriched = await enrichIngredientWithCost(base)
-
-        return {
-          ...base,
-          id: enriched?.id ?? null,
-          unitPriceBuy: enriched?.unitPriceBuy ?? null,
-          costRecipe: enriched?.costRecipe ?? null,
-        }
-      })
-    )
-
-    // 3) garde-fou final
-    const ingDataFinal = ingData.map((i) => ({
-      name: tidyName(i.name),
-      quantity: Number(i.quantity || 0),
-      unit: canonUnit(i.unit) || normalizeUnit(i.unit) || 'piece',
-      airtableId: i.id ?? null,
-      unitPriceBuy: i.unitPriceBuy ?? null,
-      costRecipe: i.costRecipe ?? null,
-    }))
-
-    // 4) update recette + reset ingrédients
     const recipe = await prisma.recipe.update({
       where: { id },
       data: {
@@ -743,20 +596,26 @@ router.put('/:id', needAuth, async (req, res) => {
         steps,
         imageUrl: imageUrl || null,
         notes,
+        totalCostEur: pricing.totalCostEur,
+        totalCoursesEur: pricing.totalCoursesEur,
+        pricingUpdatedAt: pricing.pricingUpdatedAt,
         ingredients: {
           deleteMany: {},
-          ...(ingDataFinal.length ? { createMany: { data: ingDataFinal } } : {}),
+          ...(pricing.ingredientsForDb.length
+            ? { createMany: { data: pricing.ingredientsForDb } }
+            : {}),
         },
       },
       include: { ingredients: true },
-    })
+    });
 
-    return res.json({ ok: true, recipe })
+    return res.json({ ok: true, recipe });
   } catch (e) {
-    console.error('PUT /recipes/:id error:', e)
-    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message })
+    console.error('PUT /recipes/:id error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error', message: e?.message });
   }
-})
+});
+
 
 
 // ─────────────────────────────────────────────
@@ -764,68 +623,74 @@ router.put('/:id', needAuth, async (req, res) => {
 // ⚠️ DOIT ÊTRE EN DERNIER (sinon il capture /enrich-ingredients etc.)
 // ─────────────────────────────────────────────
 router.get('/:id', needAuth, async (req, res) => {
-try {
-const { id } = req.params
-const { userId } = req.user
-const u = await prisma.user.findUnique({
- where: { id: userId },
- select: { subscriptionStatus: true },
+  try {
+    const { id } = req.params;
+    const { userId } = req.user;
+
+    const u = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { subscriptionStatus: true },
+    });
+
+    const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
+    const policy = await getPricingPolicy({ userId, plan });
+
+    const limits = {
+      blurPrices: policy.blurPrices,
+      used: policy.used,
+      limit: policy.limit,
+      remaining: Math.max(0, policy.limit - policy.used),
+    };
+
+    const recipe = await prisma.recipe.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        title: true,
+        servings: true,
+        imageUrl: true,
+        createdAt: true,
+        notes: true,
+        steps: true,
+        totalCostEur: true,
+        totalCoursesEur: true,
+        pricingUpdatedAt: true,
+        ingredients: {
+          select: {
+            id: true,
+            name: true,
+            quantity: true,
+            unit: true,
+            ingredientBaseId: true,
+            airtableId: true,
+            unitPriceBuy: true,
+            costRecipe: true,
+            buyPriceEur: true,
+            buyRefQty: true,
+            buyRefUnit: true,
+            buyLabel: true,
+            gramsPerPiece: true,
+            density_g_per_ml: true,
+            mlPerPiece: true,
+            category: true,
+            isCoursesDuplicate: true,
+            priceStatus: true,
+            priceMessage: true,
+          },
+        },
+      },
+    });
+
+    if (!recipe) {
+      return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' });
+    }
+
+    return res.json({ ok: true, recipe, limits });
+  } catch (e) {
+    console.error('GET /recipes/:id error:', e);
+    return res.status(500).json({ ok: false, error: 'internal error' });
+  }
 });
-const plan = u?.subscriptionStatus === 'active' ? 'premium' : 'free';
-
-const policy = await getPricingPolicy({ userId, plan });
-
-const limits = {
- blurPrices: policy.blurPrices, // flou à partir de la 11e
- used: policy.used,
- limit: policy.limit,
- remaining: Math.max(0, policy.limit - policy.used),
-};
-
-const recipeRaw = await prisma.recipe.findFirst({
-where: { id, userId },
-select: {
-id: true,
-title: true,
-servings: true,
-imageUrl: true,
-createdAt: true,
-notes: true,
-steps: true,
-ingredients: {
-select: {
-name: true,
-quantity: true,
-unit: true,
-costRecipe: true,
-
-// ✅ (facultatif mais utile) si présent en DB
-id: true,
-unitPriceBuy: true,
-},
-},
-},
-})
-
-if (!recipeRaw) {
-return res.status(404).json({ ok: false, error: 'RECIPE_NOT_FOUND' })
-}
-
-// ✅ PATCH: enrichit aussi buyPriceEur / buyRefQty / buyRefUnit + calcule totalCostEur
-const enrichedIngredients = await enrichIngredientsForResponse(recipeRaw.ingredients)
-const recipe = {
-...recipeRaw,
-ingredients: enrichedIngredients,
-totalCostEur: computeTotalCostEur(enrichedIngredients),
-totalCoursesEur: computeTotalCoursesEur(enrichedIngredients),
-}
-
-return res.json({ ok: true, recipe, limits })
-} catch (e) {
-console.error('GET /recipes/:id error:', e)
-return res.status(500).json({ ok: false, error: 'internal error' })
-}
-})
 
 // ─────────────────────────────────────────────
 // POST /recipes/:id/categories

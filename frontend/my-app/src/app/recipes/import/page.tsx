@@ -3,7 +3,7 @@
 'use client'
 
 import { useState , useEffect} from 'react';
-import { apiFetch } from 'src/lib/api';
+import { apiFetch } from '@/lib/api';
 import { useRouter } from 'next/navigation';
 
 

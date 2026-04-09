@@ -8,6 +8,8 @@
 
 const express = require('express');
 const multer = require('multer');
+const path = require('path');
+const crypto = require('crypto');
 const { prisma } = require('../lib/prisma');
 const { getPricingPolicy, incrementUsage, LIMIT_KEYS } = require('../services/importLimits');
 //stringUtils
@@ -30,7 +32,12 @@ const { joinWrappedLinesForIngredients, looksLikeListBullet } = require('../util
 const { supabaseAdmin } = require('../services/supabaseAdmin');
 const { convertUnitForPricing } = require('../utils/units');
 const { detectOcrLayoutCase } = require('../utils/ocrLayoutCases');
-const { extractFragmentedIngredientLines, chooseBestIngredientLines } = require('../utils/ocrFragmentedIngredients');
+const {
+  extractFragmentedIngredientLines,
+  chooseBestIngredientLines,
+  mergeSpatialHints,
+  removeWeakerDuplicates
+} = require('../utils/ocrFragmentedIngredients');
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
@@ -532,7 +539,17 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
       return res.status(400).json({ ok: false, error: 'NO_FILES', message: 'Ajoute au moins 1 image.' });
     }
     const imageFile = req.files[0];
-    const imagePath = `ocr/${Date.now()}-${imageFile.originalname}`;
+    const extFromName = path.extname(imageFile.originalname || '').toLowerCase();
+    const extFromMime =
+      imageFile.mimetype === 'image/png' ? '.png' :
+      imageFile.mimetype === 'image/webp' ? '.webp' :
+      imageFile.mimetype === 'image/heic' ? '.heic' :
+      imageFile.mimetype === 'image/heif' ? '.heif' :
+      '.jpg';
+
+    const ext = extFromName || extFromMime;
+    const safeName = `${Date.now()}-${crypto.randomUUID()}${ext}`;
+    const imagePath = `ocr/${safeName}`;
     const { error: uploadError } = await supabaseAdmin
       .storage
       .from('recipe-images')
@@ -555,13 +572,18 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const pickedTitles = [];
     const visionDebugByImage = [];
+    const allSpatialIngredientHints = [];
 
     for (let i = 0; i < req.files.length; i++) {
       const f = req.files[i];
 
       const out = await ocrFromBufferWithDebug(f.buffer, { lang: 'fr' });
+      
 
       if (out?.text) texts.push(out.text);
+      if(Array.isArray(out?.debug?.spatialIngredientHints)) {
+        allSpatialIngredientHints.push(...out.debug.spatialIngredientHints);
+      }
 
       let pt = out?.debug?.pickedTitle ? String(out.debug.pickedTitle).trim() : ''; // pt = picked title (titre choisi)
 
@@ -645,6 +667,11 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     const rawText = texts.join('\n\n');
     const filtered = smartFilterWithTrashFromText(rawText);
+    const spatialIngredientHints = [...new Set(
+      allSpatialIngredientHints
+      .map((x) => normSpaces(String(x || '')))
+      .filter(Boolean)
+    )]
     
 
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
@@ -717,12 +744,29 @@ router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
 
     if (useFragmentedStrategy) {
       dlog('[DEBUG][FRAGMENT_INPUT_LINES', lines);
-      const fragmentedIngredientLines = extractFragmentedIngredientLines(rawLines);
+      const fragmentedIngredientLines =
+  extractFragmentedIngredientLines(rawLines);
 
-      const best = chooseBestIngredientLines({
-        standardLines: splitPass1.ingredientLines || [],
-        fragmentedLines: fragmentedIngredientLines,
-      });
+let enrichedFragmented = fragmentedIngredientLines;
+
+if (
+  layoutCase.shouldUseSpecializedRecovery &&
+  Array.isArray(spatialIngredientHints) &&
+  spatialIngredientHints.length >= 2
+) {
+  enrichedFragmented =
+    removeWeakerDuplicates(
+      mergeSpatialHints(
+        fragmentedIngredientLines,
+        spatialIngredientHints
+      )
+    );
+}
+
+const best = chooseBestIngredientLines({
+  standardLines: splitPass1.ingredientLines || [],
+  fragmentedLines: enrichedFragmented,
+});
 
       split = {
         ...splitPass1,
@@ -1198,5 +1242,6 @@ return res.json({
     return res.status(500).json({ ok: false, error: 'OCR_FAILED', message: e?.message || 'Erreur OCR' });
   }
 });
+
 
 module.exports = router;

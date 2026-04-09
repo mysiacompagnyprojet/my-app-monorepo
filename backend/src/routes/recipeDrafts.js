@@ -74,7 +74,13 @@ router.patch('/:id/parsed', needAuth, async (req, res) => {
 
     const draft = await prisma.recipeDraft.update({
       where: { id },
-      data: { parsed, status: 'parsed', updatedAt: new Date() },
+      data: { 
+        parsed,
+        imageUrl: parsed.imageUrl || null,
+        title: parsed.title || null,
+        status: 'parsed', 
+        updatedAt: new Date() 
+      },
     });
 
     res.json({ ok: true, draft });
@@ -94,7 +100,11 @@ router.post('/:id/parsed', needAuth, async (req, res) => {
     }
     const draft = await prisma.recipeDraft.update({
       where: { id },
-      data: { parsed, status: 'parsed', updatedAt: new Date() },
+      data: {  parsed,
+        imageUrl: parsed.imageUrl || null,
+        title: parsed.title || null,
+        status: 'parsed', 
+        updatedAt: new Date()  },
     });
     res.json({ ok: true, draft, via: 'POST fallback' });
   } catch (e) {

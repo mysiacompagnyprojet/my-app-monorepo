@@ -4,8 +4,8 @@
 import type React from 'react'
 import { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { apiFetch } from 'src/lib/api'
-import type { OcrDraft, IngredientLine } from 'src/types/recipe'
+import { apiFetch } from '@/lib/api'
+import type { OcrDraft, IngredientLine } from '@/types/recipe'
 import { IngredientPicker } from '@/components/IngredientPicker'
 import Cropper from 'react-easy-crop'
 import Price from '@/components/Price'
@@ -815,7 +815,7 @@ function NewRecipeInner() {
           note: typeof e.note === 'string' ? e.note : undefined,
           category: typeof e.category === 'string' ? e.category : old.category ?? null, 
           isCoursesDuplicate: typeof e.isCoursesDuplicate === 'boolean'
-            ? e.isCoursesDuplicate === 'boolean'
+            ? e.isCoursesDuplicate
             : old.isCoursesDuplicate ?? false,
         } as any
       }
@@ -895,8 +895,15 @@ function NewRecipeInner() {
 
   useEffect(() => {
     if (!ingredients.length) return
-    const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
-    if (!hasRealIngredient) return
+
+    //remplacer par needsPricing le 09/04/26
+    //const hasRealIngredient = ingredients.some((i) => String(i.name || '').trim())
+    //if (!hasRealIngredient) return
+
+    const needsPricing = ingredients.some(
+      i => String(i.name || '').trim() && i.buyPriceEur == null
+    )
+    if (!needsPricing) return
 
     if (ingredientsSig === lastSigRef.current) return
     lastSigRef.current = ingredientsSig

@@ -237,7 +237,6 @@ function nextMeaningfulIndex(lines, startIndex, maxLookAhead = 3) {
 
     if (looksLikeUiNoise(t)) continue;
     if (looksLikeTitleOrBrandNoise(t)) continue;
-
     if (looksLikeGarbageFragment(t) && !looksLikeConnectorFragmentLocal(t)) continue;
 
     return i;
@@ -263,6 +262,28 @@ function looksLikeLooseQualifier(line) {
   if (!t) return false;
 
   return /^(hach[ée]s?|finement|doux|douce|fum[ée]e?|sal[ée]e?|enti[eè]re?s?|moulu[e]s?|et)$/i.test(t);
+}
+
+function looksLikeQualifierTail(line) {
+  const t = normalizeOcrConfusions(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^(doux|douce|fumé|fumee|fumée|fumee|fort|forte|moulu|moulue|moulus|moulues|séché|seche|séchée|sechee|frais|fraîche|fraiches|fraîches)$/i.test(t) ||
+    /^(haché|hache|hachés|haches|hachée|hachee|hachées|hachees)(?:\s+finement)?$/i.test(t) ||
+    /^finement\s+(haché|hache|hachés|haches|hachée|hachee|hachées|hachees)$/i.test(t) ||
+    /^en\s+poudre$/i.test(t)
+  );
+}
+
+function looksLikeCoordinatedTail(line) {
+  const t = normalizeOcrConfusions(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^et\s+poudre\s+d['’][a-zà-öø-ÿœ' -]+$/i.test(t) ||
+    /^et\s+[a-zà-öø-ÿœ' -]{2,30}$/i.test(t)
+  );
 }
 
 function looksLikeMeasureOnlyFragment(line) {
@@ -296,6 +317,90 @@ function looksLikeUsefulNameTail(line) {
   );
 }
 
+function looksLikeStrongStandaloneIngredient(line) {
+  const t = normalizeFragmentedIngredientLine(line);
+  if (!t) return false;
+
+  if (looksLikeUiNoise(t)) return false;
+  if (looksLikeTitleOrBrandNoise(t)) return false;
+  if (looksLikeGarbageFragment(t)) return false;
+  if (looksLikeMeasureOnlyFragment(t)) return false;
+  if (looksLikeConnectorFragmentLocal(t)) return false;
+  if (looksLikeLooseQualifier(t)) return false;
+  if (looksLikeQualifierTail(t)) return false;
+  if (looksLikeCoordinatedTail(t)) return false;
+
+  const parsed = parseOcrIngredient(t);
+  if (!parsed || !parsed.name) return false;
+
+  const name = normSpaces(parsed.name || '');
+  if (!name) return false;
+
+  if (looksLikeTitleOrBrandNoise(name)) return false;
+  if (looksLikeGarbageFragment(name)) return false;
+  if (/^(de|du|des|d['’]|jus de)$/i.test(name)) return false;
+
+  const hasQty = parsed.quantity != null && parsed.quantity !== 0;
+  const hasUnit = !!String(parsed.unit || '').trim();
+
+  return hasQty && hasUnit;
+}
+
+function appendTailToIngredientText(baseText, tail) {
+  const base = normalizeFragmentedIngredientLine(baseText);
+  const extra = normalizeOcrConfusions(tail);
+  if (!base || !extra) return base;
+
+  if (looksLikeQualifierTail(extra)) {
+    return normalizeFragmentedIngredientLine(`${base} ${extra}`);
+  }
+
+  if (looksLikeCoordinatedTail(extra)) {
+    return normalizeFragmentedIngredientLine(`${base} ${extra}`);
+  }
+
+  return base;
+}
+
+function enrichIngredientWithFollowingTails(lines, indexes, text) {
+  let out = normalizeFragmentedIngredientLine(text);
+  let consumed = [...indexes];
+
+  if (!out) return { text: '', indexes: consumed, bonus: 0 };
+
+  let last = Math.max(...indexes);
+  let bonus = 0;
+
+  for (let j = last + 1; j < Math.min(lines.length, last + 3); j++) {
+    const cur = normalizeOcrConfusions(lines[j] || '');
+    if (!cur) continue;
+
+    if (looksLikeQualifierTail(cur)) {
+      out = appendTailToIngredientText(out, cur);
+      consumed.push(j);
+      bonus += 4;
+      last = j;
+      continue;
+    }
+
+    if (looksLikeCoordinatedTail(cur)) {
+      out = appendTailToIngredientText(out, cur);
+      consumed.push(j);
+      bonus += 5;
+      last = j;
+      continue;
+    }
+
+    break;
+  }
+
+  return {
+    text: normalizeFragmentedIngredientLine(out),
+    indexes: consumed,
+    bonus,
+  };
+}
+
 function looksLikeIngredientNameOnlyLocal(line) {
   const t = normalizeOcrConfusions(line);
   const low = t.toLowerCase();
@@ -305,7 +410,7 @@ function looksLikeIngredientNameOnlyLocal(line) {
   if (parseOcrIngredient(t)) return false;
   if (looksLikeMeasureOnlyFragment(t)) return false;
   if (looksLikeConnectorFragmentLocal(t)) return false;
-  if (looksLikeLooseQualifier(t)) return false;
+  if (looksLikeLooseQualifier(t) && !looksLikeQualifierTail(t)) return false;
   if (looksLikeGarbageFragment(t)) return false;
 
   if (/\d/.test(t)) return false;
@@ -323,6 +428,8 @@ function looksLikeIngredientNameOnlyLocal(line) {
   }
 
   if (looksLikeUsefulNameTail(t)) return true;
+  if (looksLikeQualifierTail(t)) return false;
+  if (looksLikeCoordinatedTail(t)) return false;
 
   return /[A-Za-zÀ-ÖØ-öø-ÿœ]/.test(t);
 }
@@ -477,7 +584,6 @@ function resolveStandaloneConnectorIngredient(lines, startIndex, usedIndexes = n
 
     const next = normalizeOcrConfusions(lines[j] || '');
     if (!next) continue;
-
     if (!looksLikeIngredientNameOnlyLocal(next)) continue;
 
     const candidate = normSpaces(`${cur} ${next}`);
@@ -649,10 +755,9 @@ function resolveDualMeasureWindow(lines, startIndex) {
 
   for (const left of leftOptions) {
     for (const right of rightOptions) {
-
       const beforeWindowIdx = previousMeaningfulIndex(lines, startIndex - 1, 4);
       const beforeWindowText =
-      beforeWindowIdx >= 0 ? normalizeOcrConfusions(lines[beforeWindowIdx] || '') : '';
+        beforeWindowIdx >= 0 ? normalizeOcrConfusions(lines[beforeWindowIdx] || '') : '';
 
       if (/^(jus|zeste|pulpe)\s+de$/i.test(beforeWindowText) && looksLikeCitrusName(right.text)) {
         flog('[FRAG][DUAL][SKIP_RIGHT_CITRUS_AFTER_CONNECTOR]', {
@@ -734,10 +839,11 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
   if (next && /^(de|du|des|d['’])\s+.+$/i.test(next)) {
     const text = buildIngredientTextFromMeasureAndName(cur, next);
     if (text) {
+      const enriched = enrichIngredientWithFollowingTails(lines, [startIndex, i1], text);
       candidates.push({
-        text,
-        indexes: [startIndex, i1],
-        score: 14 + measureNameCompatibilityScore(cur, next),
+        text: enriched.text,
+        indexes: enriched.indexes,
+        score: 14 + measureNameCompatibilityScore(cur, next) + enriched.bonus,
       });
     }
   }
@@ -752,10 +858,11 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
     const mergedName = `${next} ${next2}`;
     const text = buildIngredientTextFromMeasureAndName(cur, mergedName);
     if (text) {
+      const enriched = enrichIngredientWithFollowingTails(lines, [startIndex, i1, i2], text);
       candidates.push({
-        text,
-        indexes: [startIndex, i1, i2],
-        score: 16 + measureNameCompatibilityScore(cur, next2),
+        text: enriched.text,
+        indexes: enriched.indexes,
+        score: 16 + measureNameCompatibilityScore(cur, next2) + enriched.bonus,
       });
     }
   }
@@ -777,10 +884,11 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
 
     const text = buildIngredientTextFromMeasureAndName(cur, next);
     if (text) {
+      const enriched = enrichIngredientWithFollowingTails(lines, [startIndex, i1], text);
       candidates.push({
-        text,
-        indexes: [startIndex, i1],
-        score,
+        text: enriched.text,
+        indexes: enriched.indexes,
+        score: score + enriched.bonus,
       });
     }
   }
@@ -792,10 +900,11 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
     if (cleanedNext2 && looksLikeIngredientNameOnlyLocal(cleanedNext2)) {
       const text = buildIngredientTextFromMeasureAndName(cur, cleanedNext2);
       if (text) {
+        const enriched = enrichIngredientWithFollowingTails(lines, [startIndex, i2], text);
         candidates.push({
-          text,
-          indexes: [startIndex, i2],
-          score: 13 + measureNameCompatibilityScore(cur, cleanedNext2),
+          text: enriched.text,
+          indexes: enriched.indexes,
+          score: 13 + measureNameCompatibilityScore(cur, cleanedNext2) + enriched.bonus,
         });
       }
     }
@@ -818,10 +927,11 @@ function buildBestLocalIngredientCandidate(lines, startIndex) {
 
       const text = buildIngredientTextFromMeasureAndName(cur, cand);
       if (text) {
+        const enriched = enrichIngredientWithFollowingTails(lines, [startIndex, j], text);
         candidates.push({
-          text,
-          indexes: [startIndex, j],
-          score,
+          text: enriched.text,
+          indexes: enriched.indexes,
+          score: score + enriched.bonus,
         });
       }
     }
@@ -917,13 +1027,38 @@ function preprocessFragmentedLines(lines) {
   flog('[FRAG][PREPROCESS][IN]', normalizeLines(lines));
   flog('[FRAG][PREPROCESS][OUT]', out);
 
-  return dedupeLinesPreservingCriticalFragments(out);
+  const cleaned = dedupeLinesPreservingCriticalFragments(out);
+  flog('[FRAG][PREPROCESS][STRONG_STANDALONE]', cleaned.filter(looksLikeStrongStandaloneIngredient));
+
+  return cleaned;
 }
 
 function joinMeasureAndNameFragments(lines) {
   const out = [];
   const L = preprocessFragmentedLines(lines);
   const used = new Set();
+
+  // PASS 0 : on protège uniquement les ingrédients déjà complets, parseables, et non bruités
+  for (let i = 0; i < L.length; i++) {
+    const cur = normalizeOcrConfusions(L[i] || '');
+    if (!cur) continue;
+
+    if (looksLikeUiNoise(cur)) continue;
+    if (looksLikeTitleOrBrandNoise(cur)) continue;
+    if (looksLikeGarbageFragment(cur)) continue;
+    if (looksLikeMeasureOnlyFragment(cur)) continue;
+    if (looksLikeConnectorFragmentLocal(cur)) continue;
+
+    if (looksLikeStrongStandaloneIngredient(cur)) {
+      out.push(normalizeFragmentedIngredientLine(cur));
+      used.add(i);
+
+      flog('[FRAG][JOIN][PASS0_STRONG_ACCEPT]', {
+        index: i,
+        text: cur,
+      });
+    }
+  }
 
   // PASS 1 : fenêtres à double mesure
   for (let i = 0; i < L.length; i++) {
@@ -1011,13 +1146,31 @@ function joinMeasureAndNameFragments(lines) {
     if (!cur) continue;
 
     if (looksLikeIngredientNameOnlyLocal(cur)) {
-      out.push(cur);
-      used.add(i);
+      const next = normalizeOcrConfusions(L[i + 1] || '');
+      const prev = normalizeOcrConfusions(L[i - 1] || '');
 
-      flog('[FRAG][JOIN][PASS3_NAME_SALVAGE]', {
-        index: i,
-        text: cur,
-      });
+      const shouldDelaySalvage =
+        looksLikeQualifierTail(next) ||
+        looksLikeCoordinatedTail(next) ||
+        looksLikeMeasureOnlyFragment(prev) ||
+        /^(de|du|des|d['’])$/i.test(prev);
+
+      if (!shouldDelaySalvage) {
+        out.push(cur);
+        used.add(i);
+
+        flog('[FRAG][JOIN][PASS3_NAME_SALVAGE]', {
+          index: i,
+          text: cur,
+        });
+      } else {
+        flog('[FRAG][JOIN][PASS3_NAME_DELAYED]', {
+          index: i,
+          text: cur,
+          next,
+          prev,
+        });
+      }
 
       continue;
     }
@@ -1042,9 +1195,20 @@ function joinMeasureAndNameFragments(lines) {
     });
   }
 
-  flog('[FRAG][JOIN][FINAL_OUT]', out);
+  const cleanedOut = dedupeLines(
+    out.filter((x) => {
+      const t = normalizeFragmentedIngredientLine(x);
+      if (!t) return false;
+      if (looksLikeMeasureOnlyFragment(t)) return false;
+      if (looksLikeConnectorFragmentLocal(t)) return false;
+      if (looksLikeBadParsedIngredient(t)) return false;
+      return true;
+    })
+  );
 
-  return dedupeLines(out);
+  flog('[FRAG][JOIN][FINAL_OUT]', cleanedOut);
+
+  return cleanedOut;
 }
 
 function normalizeFragmentedIngredientLine(line) {
@@ -1161,6 +1325,16 @@ function chooseBestIngredientLines({ standardLines, fragmentedLines }) {
   const standardScore = scoreIngredientExtraction(standard);
   const fragmentedScore = scoreIngredientExtraction(fragmented);
 
+  // garde-fou : ne jamais préférer un résultat vide s'il existe un standard non vide
+  if (!fragmented.length && standard.length) {
+    return {
+      chosen: standard,
+      chosenSource: 'standard',
+      standardScore,
+      fragmentedScore,
+    };
+  }
+
   const fragmentedClearlyRecoversMore =
     fragmentedScore.strongParsed >= standardScore.strongParsed + 2 ||
     fragmentedScore.parsedWithQty >= standardScore.parsedWithQty + 2;
@@ -1171,12 +1345,16 @@ function chooseBestIngredientLines({ standardLines, fragmentedLines }) {
     fragmentedScore.suspicious < standardScore.suspicious;
 
   const fragmentedMuchBetterByScore =
+    fragmented.length > 0 &&
     fragmentedScore.score >= standardScore.score + 8;
 
   const chooseFragmented =
-    fragmentedClearlyRecoversMore ||
-    fragmentedCleanerAtEquivalentLevel ||
-    fragmentedMuchBetterByScore;
+    fragmented.length > 0 &&
+    (
+      fragmentedClearlyRecoversMore ||
+      fragmentedCleanerAtEquivalentLevel ||
+      fragmentedMuchBetterByScore
+    );
 
   return {
     chosen: chooseFragmented ? fragmented : standard,
@@ -1185,10 +1363,170 @@ function chooseBestIngredientLines({ standardLines, fragmentedLines }) {
     fragmentedScore,
   };
 }
+function normalizeSpatialHintText(hint) {
+  if (!hint) return '';
+
+  let t = normSpaces(hint);
+
+  t = t.replace(/\bc\.?\s*a\.?\s*c\.?\b/gi,'càc');
+  t = t.replace(/\bc\.?\s*a\.?\s*s\.?\b/gi,'càs');
+  t = t.replace(/\bpincee\b/gi,'pincée');
+
+  return normSpaces(t);
+}
+
+function isStrongSpatialIngredient(line) {
+
+  if (!line) return false;
+
+  const parsed = parseOcrIngredient(line);
+
+  if (!parsed || !parsed.name)
+    return false;
+
+  const hasQty =
+    parsed.quantity !== null &&
+    parsed.quantity !== undefined &&
+    parsed.quantity !== 0;
+
+  const hasUnit =
+    !!String(parsed.unit || '').trim();
+
+  return hasQty && hasUnit;
+}
+
+function mergeSpatialHints(fragmented, spatialHints) {
+
+  const base =
+    Array.isArray(fragmented)
+      ? [...fragmented]
+      : [];
+
+  const spatial =
+    Array.isArray(spatialHints)
+      ? spatialHints
+      : [];
+
+  const normalizedSpatial =
+    spatial
+      .map(normalizeSpatialHintText)
+      .filter(Boolean);
+
+  for (const hint of normalizedSpatial) {
+
+    if (!isStrongSpatialIngredient(hint))
+      continue;
+
+    const alreadyPresent =
+      base.some(l =>
+        normSpaces(l).toLowerCase() ===
+        normSpaces(hint).toLowerCase()
+      );
+
+    if (!alreadyPresent) {
+      base.push(hint);
+    }
+  }
+
+  return base;
+}
+
+function normalizedIngredientName(line){
+
+  const parsed =
+    parseOcrIngredient(line);
+
+  if (!parsed || !parsed.name)
+    return '';
+
+  return normSpaces(parsed.name)
+    .toLowerCase();
+}
+
+function hasStrongQtyUnit(line){
+
+  const parsed =
+    parseOcrIngredient(line);
+
+  if (!parsed) return false;
+
+  const hasQty =
+    parsed.quantity !== null &&
+    parsed.quantity !== undefined &&
+    parsed.quantity !== 0;
+
+  const hasUnit =
+    !!String(parsed.unit || '').trim();
+
+  return hasQty && hasUnit;
+}
+
+function removeWeakerDuplicates(lines){
+
+  const source =
+    Array.isArray(lines)
+      ? lines
+      : [];
+
+  const out = [];
+
+  for (const line of source){
+
+    const parsed =
+      parseOcrIngredient(line);
+
+    if (!parsed || !parsed.name){
+      out.push(line);
+      continue;
+    }
+
+    const currentName =
+      normalizedIngredientName(line);
+
+    if (!currentName){
+      out.push(line);
+      continue;
+    }
+
+    const sameName =
+      source.filter(l =>
+        normalizedIngredientName(l)
+          === currentName
+      );
+
+    if (sameName.length <= 1){
+      out.push(line);
+      continue;
+    }
+
+    const stronger =
+      sameName.find(l =>
+        hasStrongQtyUnit(l)
+      );
+
+    if (
+      stronger &&
+      normSpaces(stronger).toLowerCase() !==
+      normSpaces(line).toLowerCase()
+    ){
+      continue;
+    }
+
+    out.push(line);
+  }
+
+  return Array.from(
+    new Set(
+      out.map(x =>
+        normSpaces(x)
+      )
+    )
+  );
+}
 
 module.exports = {
   extractFragmentedIngredientLines,
-  scoreIngredientExtraction,
   chooseBestIngredientLines,
-  looksLikeBadParsedIngredient,
+  mergeSpatialHints,
+  removeWeakerDuplicates
 };

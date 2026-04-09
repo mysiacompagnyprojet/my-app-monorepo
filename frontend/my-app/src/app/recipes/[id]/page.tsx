@@ -3,7 +3,7 @@
 
 import { useEffect, useState, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
-import { apiFetch } from 'src/lib/api'
+import { apiFetch } from '@/lib/api'
 import { Inter, Playfair_Display } from 'next/font/google'
 import { RecipeImagePreview } from '@/components/RecipeImagePreview'
 import Price from '@/components/Price'

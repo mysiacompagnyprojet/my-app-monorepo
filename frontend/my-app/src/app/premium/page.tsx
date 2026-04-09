@@ -3,7 +3,7 @@
 'use client'
 
 import { useState } from 'react'
-import { apiFetch } from 'src/lib/api'
+import { apiFetch } from '@/lib/api'
 
 type CheckoutResponse = {
   ok: boolean

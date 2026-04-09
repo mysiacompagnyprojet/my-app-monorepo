@@ -1,7 +1,9 @@
+//frontend/my-app/src/app/_auth-bridge.tsx
+
 'use client'
 import { useEffect } from 'react'
 // Si tes imports absolus fonctionnent déjà, garde cette ligne :
-import { supabase } from 'src/lib/supabase'
+import { supabase } from '../lib/supabase'
 // Sinon, remplace par: import { supabase } from '../../lib/supabaseClient'
 
 export default function AuthTokenBridge() {
