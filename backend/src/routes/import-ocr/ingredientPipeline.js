@@ -7,8 +7,9 @@
 'use strict';
 
 const { parseOcrIngredient } = require('../../utils/ingredientParser');
-const { beautifyIngredients, looksLikeBareIngredientLine, looksLikeNonIngredientGarbage } = require('../../utils/ocrText');
+const { looksLikeBareIngredientLine, looksLikeNonIngredientGarbage } = require('../../utils/ocrText');
 const { normSpaces, stripBulletPrefix, normalizeLoose } = require('../../utils/stringUtils');
+const { beautifyIngredients } = require('../../utils/ocrIngredients');
 
 const { isOcrZeroGramNoise, isUnitOnlyLine } = require('./helpers');
 
