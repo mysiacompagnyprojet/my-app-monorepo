@@ -1,4 +1,4 @@
-// backend/src/utils/ingredients.js
+// backend/src/utils/ingredients.js - sert à gérer des ingredients déjà extraits ou utilisables.
 // LEVEL: UTIL
 // import autorisés : stringUtils-units-ingredientParser- constantes neutres
 // import interdits : routes-services-middlewares-parsers-utils ocr-supabase-prisma

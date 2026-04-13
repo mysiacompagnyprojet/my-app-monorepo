@@ -10,7 +10,7 @@ const { inferTitleFromContent, fabricateTitleFromIngredientsRows } = require('./
 
 const { isValidRecipeTitleCandidate } = require('../../utils/heuristics');
 const { parseOcrIngredient } = require('../../utils/ingredientParser');
-const { pickBestTitle, tryMergeSplitTitle } = require('../../utils/ocrTitle');
+const { pickBestTitle, tryMergeSplitTitle, guessTitleFromLines } = require('../../utils/ocrTitle');
 const {
   normSpaces,
   stripDiacritics,
@@ -293,7 +293,6 @@ function buildFinalOcrTitle({
 }
 
 function guessTitleCandidateFromLines(safeLinesForTitle) {
-  const { guessTitleFromLines } = require('../../utils/ocrText');
   return guessTitleFromLines(safeLinesForTitle);
 }
 

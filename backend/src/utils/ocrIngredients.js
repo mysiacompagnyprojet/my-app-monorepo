@@ -8,50 +8,11 @@
 
 const { normSpaces } = require('./stringUtils');
 const { parseOcrIngredient } = require('./ingredientParser');
-const  {
-  looksLikeBookRefNoise,
-  stripTrailingPageNumber,
-  looksLikeStatusBarNoise,
-  looksLikeEditorialNoise,
-  looksLikeNonIngredientGarbage,
-  looksLikeBareIngredientLine,
-  stripSocialHeaderPrefix,
-  stripInlineSocialHandles,
-  looksLikePageNumberOnly,
-  isMostlyNoise,
-  looksLikeCreditsLine,
-  extractParenNote,
-  looksLikeCriticalOcrFragment,
-  dedupeLines,
-  mergeHyphenWrappedLines,
-  smartFilterWithTrashFromText,
-} = require('./ocrNoise');
-const {
-    fixCommonOcrQuantityUnitBugs,
-    looksLikeDateNoise,
-    looksLikeCountersNoise,
-    looksLikeSocialNoise,
-    postProcessIngredientName,
-    normalizeQuantityRawForDisplay,
-    parseQuantityToNumber,
-    normalizeUnit,
-    isUnitToken,
-    isIngredientFragmentLine,
-    joinWrappedLinesForIngredients,
-    looksLikeListBullet,
-} = require('./ingredientUtils');
-const {
-    isIngredientsHeader,
-    isPreparationHeader,
-    isStepsHeader
-}  = require('./sectionHeaders'); 
+const  { looksLikeStatusBarNoise, looksLikeEditorialNoise, looksLikeNonIngredientGarbage, looksLikeBareIngredientLine } = require('./ocrNoise');
+const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, looksLikeListBullet } = require('./ingredientUtils');
+const { isIngredientsHeader, isPreparationHeader, isStepsHeader }  = require('./sectionHeaders'); 
 const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/heuristics');
-const {
-    splitOnSlashOutsideFractions,
-    isMatchStartingInsideFraction,
-    normalizeInlineIngredientFragment,
-    extractInlineIngredientFragmentsFromLines,
-}  = require('./ocrInline'); 
+const { splitOnSlashOutsideFractions }  = require('./ocrInline'); 
 
 
 /**
