@@ -11,42 +11,41 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? ''
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
 
 export default function Home() {
- const router = useRouter()
- const [checking, setChecking] = useState(true)
+  const router = useRouter()
+  const [checking, setChecking] = useState(true)
 
- const supabase = useMemo(() => {
-   if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
-   return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
- }, [])
+  const supabase = useMemo(() => {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) return null
+    return createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
+  }, [])
 
- useEffect(() => {
-   let mounted = true
+  useEffect(() => {
+    let mounted = true
 
-   async function run() {
-     if (!supabase) {
-       if (mounted) setChecking(false)
-       return
-     }
+    async function run() {
+      if (!supabase) {
+        if (mounted) setChecking(false)
+        return
+      }
 
-     const { data } = await supabase.auth.getSession()
+      const { data } = await supabase.auth.getSession()
 
-     // si déjà connectée, on peut envoyer vers les recettes
-     if (data.session) {
-       router.replace('/recipes')
-       return
-     }
+      if (data.session) {
+        router.replace('/recipes')
+        return
+      }
 
-     if (mounted) setChecking(false)
-   }
+      if (mounted) setChecking(false)
+    }
 
-   run()
+    run()
 
-   return () => {
-     mounted = false
-   }
- }, [supabase, router])
+    return () => {
+      mounted = false
+    }
+  }, [supabase, router])
 
- if (checking) return null
+  if (checking) return null
 
   return (
     <main className="app-container landing-page">
@@ -143,11 +142,15 @@ export default function Home() {
         </h2>
 
         <p>
-          Transformez dès maintenant une recette en calculant son coût en 10 secondes.
+          Testez MySia avec une capture d’écran, sans créer de compte.
         </p>
 
         <div className="landing-cta__actions">
-          <Link href="/create-account" className="app-btn landing-btn-primary">
+          <Link href="/try" className="app-btn landing-btn-primary">
+            Tester avec une capture
+          </Link>
+
+          <Link href="/create-account" className="app-btn landing-btn-secondary">
             Créer mon compte
           </Link>
         </div>
@@ -177,8 +180,12 @@ export default function Home() {
           </article>
         </div>
 
-        <div className="landing-mobile-extra__bottom">
-          <Link href="/create-account" className="app-btn landing-btn-primary">
+        <div className="landing-mobile-extra__bottom" style={{ display: 'grid', gap: 10 }}>
+          <Link href="/try" className="app-btn landing-btn-primary">
+            Tester avec une capture
+          </Link>
+
+          <Link href="/create-account" className="app-btn landing-btn-secondary">
             Créer mon compte
           </Link>
         </div>

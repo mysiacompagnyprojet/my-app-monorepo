@@ -1,15 +1,34 @@
 import type { NextConfig } from "next";
 
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+
+let supabaseHostname: string | null = null;
+
+try {
+  supabaseHostname = supabaseUrl ? new URL(supabaseUrl).hostname : null;
+} catch {
+  supabaseHostname = null;
+}
+
 const nextConfig: NextConfig = {
-  // Force la racine du projet Next sur ce dossier (frontend/my-app)
   turbopack: {
     root: __dirname,
   },
 
-  // ⬇️ On ajoute ce bloc
   eslint: {
-    // Vercel n’arrête plus le build à cause d’ESLint
     ignoreDuringBuilds: true,
+  },
+
+  images: {
+    remotePatterns: supabaseHostname
+      ? [
+          {
+            protocol: "https",
+            hostname: supabaseHostname,
+            pathname: "/storage/v1/object/public/**",
+          },
+        ]
+      : [],
   },
 };
 

@@ -9,12 +9,15 @@ const cors = require('cors')
 
 const app = express()
 
+app.set('trust proxy', 1)
+
 // 2) Middlewares maison / routes
 const { supabaseAuth } = require('./middleware/supabaseAuth') // <- chemin singulier (dossier existant)
 const { billing, billingWebhookHandler } = require('./routes/billing')
 // const devAirtable = require('./routes/dev-airtable'); // base sur supabase
 const importUrlRouter = require('./routes/import-url')
 const importOcrRouter = require('./routes/import-ocr')
+const demoImportOcrRouter = require('./routes/demo-import-ocr')
 const recipesRouter = require('./routes/recipes')
 const authRouter = require('./routes/auth')
 const shoppingListRouter = require('./routes/shopping-list')
@@ -82,6 +85,9 @@ app.use('/beta', require('./routes/beta'))
 
 // 9) ✅ Route upload (doit être APRÈS CORS)
 app.use('/upload', imagesRouter)
+
+//pour teste import sans compte cree 
+app.use('/demo', demoImportOcrRouter)
 
 // 10) Auth globale (remplit req.user pour toutes les routes suivantes)
 app.use(supabaseAuth)
