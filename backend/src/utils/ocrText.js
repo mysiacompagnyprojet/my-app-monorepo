@@ -6,7 +6,7 @@
 'use strict';
 
 
-const { looksLikeNonIngredientGarbage, looksLikeBareIngredientLine, looksLikeCreditsLine, extractParenNote, dedupeLines, smartFilterWithTrashFromText } = require('../utils/ocrNoise');
+const { looksLikeNonIngredientGarbage, looksLikeBareIngredientLine, looksLikeCreditsLine, extractParenNote, dedupeLines, smartFilterWithTrashFromText, looksLikeNutritionMetaLine, looksLikeTimeMetaLine } = require('../utils/ocrNoise');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
 const { normSpaces, looksLikeTimeInfoLine } = require('../utils/stringUtils');
@@ -25,25 +25,6 @@ const { joinWrappedLinesForSteps, splitStepsBySentences, splitLongSteps } = requ
 
 const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
-
-/* =========================
-   INGREDIENT PARSER (FR)
-========================= */
-
-
-/* =========================
-   TITLE (avec fallback sur ingrédients)
-========================= */
-
-
-// (le reste de ton fichier title + split etc. est inchangé)
-//function cleanTitleCandidate(t) {
-//  let s = normSpaces(t);
-//  s = s.replace(/^[·•\-\–—\*\.\,\;\:\s]+/g, '');
-//  s = normSpaces(s);
-//  s = s.replace(/[.!?…]+$/g, '');
-//  return normSpaces(s);
-//}
 
 
 
@@ -182,6 +163,27 @@ function debugWatchRecipeLines(label, arr) {
   if (hit.length) dlog(`[WATCH SPLIT][${label}]`, hit);
 }
 
+function normalizeParsedIngredientKey(line) {
+  const parsed = parseOcrIngredient(line);
+  if (!parsed || !parsed.name) return normSpaces(String(line || '')).toLowerCase();
+
+  return normSpaces(parsed.name)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
+}
+
+function isEquivalentIngredientCandidate(candidate, existingLines) {
+  const candKey = normalizeParsedIngredientKey(candidate);
+  if (!candKey) return false;
+
+  return (existingLines || []).some((l) => {
+    const k = normalizeParsedIngredientKey(l);
+    if (!k) return false;
+    return k === candKey || k.startsWith(candKey) || candKey.startsWith(k);
+  });
+}
+
 
 function splitIngredientsAndSteps(lines, opts = {}) {
   opts = opts || {};
@@ -276,12 +278,18 @@ function splitIngredientsAndSteps(lines, opts = {}) {
       //ajout le 01/04/26
       if (!inSteps && looksLikeBulletIngredientLine(l)) {
         const ex = extractParenNote(l);
-        if (ex) {
+        const parsedLine = parseOcrIngredient(l);
+
+        if (parsedLine?.note && parsedLine?.name) {
+          ingredientLines.push(parsedLine.name);
+          notesLines.push(parsedLine.note);
+        } else if (ex) {
           ingredientLines.push(ex.line);
           notesLines.push(ex.note);
         } else {
           ingredientLines.push(l);
         }
+
           prev = l;
           continue;
         }
@@ -457,7 +465,12 @@ function splitIngredientsAndSteps(lines, opts = {}) {
 
         if (parsedStrict) {
           const ex = extractParenNote(l);
-          if(ex) {
+          const parsedLine = parseOcrIngredient(l);
+
+          if (parsedLine?.note && parsedLine?.name) {
+            ingredientLines.push(parsedLine.name);
+            notesLines.push(parsedLine.note);
+          } else if (ex) {
             ingredientLines.push(ex.line);
             notesLines.push(ex.note);
           } else {
@@ -503,7 +516,7 @@ function splitIngredientsAndSteps(lines, opts = {}) {
   // si on a surtout une liste d'ingrédients nus, ne pas les fusionner entre eux
   const shouldSkipIngredientJoin = bareIngredientCount >= 3 && strictIngredientCount <= 2;
 
-ingredientLines = shouldSkipIngredientJoin
+  ingredientLines = shouldSkipIngredientJoin
   ? ingredientLines.map(normSpaces).filter(Boolean)
   : joinWrappedLinesForIngredients(ingredientLines, parseOcrIngredient);
 
@@ -573,21 +586,36 @@ ingredientLines = shouldSkipIngredientJoin
   dlog('[INLINE SOURCE][steps]', stepLines.slice(0, 30));
 
   //ajoute le 03/04/26
-  if (!disableInlineExtraction) {
+    if (!disableInlineExtraction) {
+    const strongExplicitIngredientBlock =
+      idxIng >= 0 && ingredientLines.filter((l) => isStrictIngredientLine(l)).length >= 3;
+
+    const shouldUseFullLinesAsInlineSource = !strongExplicitIngredientBlock;
+
     const inlineSource = dedupeLines([
-      ...L, //si je l'enleve une des recettes revient juste avec jaune d'oeuf - il faut donc le garder
+      ...(shouldUseFullLinesAsInlineSource ? L : []),
       ...notesLines,
       ...stepLines,
-    ]);
+    ]).filter((l) => {
+      const t = normSpaces(l);
+      if (!t) return false;
+      if (looksLikeNutritionMetaLine(t)) return false;
+      if (looksLikeTimeMetaLine(t)) return false;
+      if (/^(instructions?|instructiono|[ée]tapes?)\s*:?\s*$/i.test(t)) return false;
+      return true;
+    });
+        const inlineExtractedRaw = extractInlineIngredientFragmentsFromLines(inlineSource);
 
-    const inlineExtracted = extractInlineIngredientFragmentsFromLines(inlineSource);
+    const inlineExtracted = inlineExtractedRaw.filter(
+      (x) => !isEquivalentIngredientCandidate(x, ingredientLines)
+    );
 
     dlog('[INLINE EXTRACTED]', inlineExtracted);
 
     ingredientLines = dedupeLines([...ingredientLines, ...inlineExtracted]);
   } else {
     dlog('[INLINE EXTRACTED][SKIPPED]', { reason: 'fragmented_layout' });
-  }  
+  }
 
   ingredientLines = filterFinalIngredientLines(ingredientLines);
 

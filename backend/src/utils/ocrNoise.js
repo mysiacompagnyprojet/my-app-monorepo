@@ -73,6 +73,36 @@ function looksLikeEditorialNoise(line) {
   return false;
 }
 
+function looksLikeNutritionMetaLine(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^information nutritionnelle\s*:?\s*$/i.test(t) ||
+    /^-?\s*calories?\s*[:\-]/i.test(t) ||
+    /^-?\s*prot[ée]ines?\s*[:\-]/i.test(t) ||
+    /^-?\s*mati[èe]res?\s+grasses?\s*[:\-]/i.test(t) ||
+    /^-?\s*glucides?\s*[:\-]/i.test(t) ||
+    /^-?\s*lipides?\s*[:\-]/i.test(t) ||
+    /^-?\s*kcal\b/i.test(t)
+  );
+}
+
+function looksLikeTimeMetaLine(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /^temps\s*:?\s*$/i.test(t) ||
+    /^pr[ée]paration\s*[:\-]/i.test(t) ||
+    /^cuisson\s*[:\-]/i.test(t) ||
+    /^pr[ée]paration\s*:\s*\d+/i.test(t) ||
+    /^cuisson\s*:\s*\d+/i.test(t) ||
+    /\bpr[ée]paration\s*:\s*\d+.*\bcuisson\s*:\s*\d+/i.test(t)
+  );
+}
+
+
 //ajout du 22/04
 function looksLikeUiDisplayNameNoise(line) {
   const t = normSpaces(line);
@@ -487,6 +517,8 @@ module.exports = {
   stripTrailingPageNumber,
   looksLikeStatusBarNoise,
   looksLikeEditorialNoise,
+  looksLikeNutritionMetaLine,
+  looksLikeTimeMetaLine,
   looksLikeUiDisplayNameNoise,
   looksLikeNonIngredientGarbage,
   looksLikeBareIngredientLine,

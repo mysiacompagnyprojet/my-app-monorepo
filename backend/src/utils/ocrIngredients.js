@@ -414,6 +414,24 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
   return { ingredientLines: newIngredientLines, stepLines: newStepLines };
 }
 
+function looksLikeIngredientMetaName(name) {
+  const t = normSpaces(name).toLowerCase();
+  if (!t) return true;
+
+  return (
+    /^(?:-?\s*)?mati[èe]res?\s+grasses?$/i.test(t) ||
+    /^(?:-?\s*)?calories?$/i.test(t) ||
+    /^(?:-?\s*)?prot[ée]ines?$/i.test(t) ||
+    /^(?:-?\s*)?glucides?$/i.test(t) ||
+    /^(?:-?\s*)?lipides?$/i.test(t) ||
+    /^(?:-?\s*)?temps$/i.test(t) ||
+    /^(?:-?\s*)?pr[ée]paration$/i.test(t) ||
+    /^(?:-?\s*)?cuisson$/i.test(t) ||
+    /^information nutritionnelle$/i.test(t)
+  );
+}
+
+
 function filterFinalIngredientLines(ingredientLines) {
   return ingredientLines.filter((l) => {
     const t = normSpaces(l);
@@ -443,7 +461,7 @@ function filterFinalIngredientLines(ingredientLines) {
 
       if (/^(q|de|et|ou)$/i.test(low)) return false;
       if (/^\d+$/.test(name)) return false;
-      if (looksLikeUiDisplayNameNoise(name)) return false;
+      if (looksLikeIngredientMetaName(name)) return false;
 
       return true;
     }
@@ -481,5 +499,6 @@ module.exports = {
         looksLikeIngredientSubsectionLabel,
         looksLikeBulletIngredientLine,
         extractTrailingIngredientBlock,
+        looksLikeIngredientMetaName,
         filterFinalIngredientLines
 };

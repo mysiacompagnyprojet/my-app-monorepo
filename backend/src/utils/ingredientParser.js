@@ -290,6 +290,25 @@ function parseOcrIngredient(line) {
     }
   }
 
+  // "poivre au goût", "persil au goût", "épices au goût", etc.
+  m = l.match(/^(.+?)\s+au\s+go[uû]t$/i);
+  if (m) {
+    const name = postProcessIngredientName(m[1]);
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return {
+        name,
+        quantity: 0,
+        unit: '',
+        note: `${name} au goût`
+      };
+    }
+  }
+
   // quantité + nom sans unité : "2 œufs", "3 tomates", "1/2 poireau"
   m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));
   if (m) {
