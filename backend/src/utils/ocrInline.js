@@ -1,4 +1,4 @@
-// backend/src/utils/ocrNoise.js
+// backend/src/utils/ocrInline.js
 // LEVEL: UTIL (OCR text parsing)
 // import autorisés : 
 // import interdits : 

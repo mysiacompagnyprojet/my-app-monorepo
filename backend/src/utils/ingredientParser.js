@@ -42,21 +42,24 @@ function normalizeIngredientParseInput(line) {
   return normSpaces(t);
 }
 
+function firstDefinedGroup(groups, keys) {
+  for (const key of keys) {
+    const value = groups?.[key];
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return '';
+}
 
-//le 29/03/26, remplacé par :
+
 function parseOcrIngredient(line) {
   const raw0 = normSpaces(line);
   if (!raw0) return null;
 
-  // ✅ bruit OCR fréquent : "Og" / "0g" isolé
   if (/^o[gq]$/i.test(raw0) || /^0\s*g$/i.test(raw0)) return null;
 
-  //a remettre une fois le test fait, enlever const afterFix jusqu'à    afterNormalize: raw});} - const raw = normalizeIngredientParseInput(fixCommonOcrQuantityUnitBugs(raw0));
-  //a enlever d'ici à
   const afterFix = fixCommonOcrQuantityUnitBugs(raw0);
   const raw = normalizeIngredientParseInput(afterFix);
 
-  // TRACE FRACTIONS
   if (/^\s*(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(raw0)) {
     console.log('[FRACTION TRACE]', {
       original: raw0,
@@ -64,8 +67,6 @@ function parseOcrIngredient(line) {
       afterNormalize: raw
     });
   }
-  //ici
-
 
   if (isIngredientsHeader(raw)) return null;
   if (isPreparationHeader(raw)) return null;
@@ -81,18 +82,122 @@ function parseOcrIngredient(line) {
 
   const l = raw.replace(/^[-•*]\s+/, '');
 
-  // plage de quantité : "900 g à 1 kg de paleron de boeuf" - ajoute le 01/04/26
+  if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(l)) {
+    console.log('[PARSE FRACTION]', l);
+  }
+
+  if (/^(assaisonnement|assaisonement|cuisson|marinade|sauce)\b.*:$/i.test(l)) return null;
+  if (/^ingr[ée]dients?$/i.test(l)) return null;
+
+  if (/^sel\s*&\s*poivre$/i.test(l)) {
+    return { name: 'sel', quantity: 0, unit: '' };
+  }
+  if (/^poivre$/i.test(l)) {
+    return { name: 'poivre', quantity: 0, unit: '' };
+  }
+
+   // mesure naturelle : "1 belle poignée d'épinards frais"
   m = l.match(
     new RegExp(
-      `^${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:à|a|-)\\s*${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:de\\s+|d['’]\\s*)?(.+)$`,
+      `^(?:(?<qtyNat>${QTY_USED})|un|une)\\s+(?:(?:tr[eè]s\\s+)?(?:belle?|petite?|petit|grande?|grand|grosse?|gros)\\s+)?poign(?:ée|ee?)s?\\s+(?:de\\s+|d['’]\\s*)?(?<nameNat>.+)$`,
       'i'
     )
   );
-
   if (m) {
-    const qtyNum = parseQuantityToNumber(m[3]);
-    const qtyRaw = normalizeQuantityRawForDisplay(m[3]);
-    const unit = normalizeUnit(m[4]);
+    const name = postProcessIngredientName(firstDefinedGroup(m.groups, ['nameNat']));
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: 0, unit: '' };
+    }
+  }
+
+  // plage + unité cuillère à soupe : "3 à 4 càs de cottage cheese"
+  m = l.match(
+    new RegExp(
+      `^(?<qtyMinSoup>${QTY_USED})\\s*(?:à|a|-)\\s*(?<qtyMaxSoup>${QTY_USED})\\s+(?:càs|cas|cs|${CUILL_RE}\\s*(?:à|a)\\s*soupe|c\\.?\\s*(?:à|a)\\s*s\\.?)\\s*(?:de\\s+|d['’]\\s*)?(?<nameSoup>.+)$`,
+      'i'
+    )
+  );
+  if (m) {
+    const qtyToken = firstDefinedGroup(m.groups, ['qtyMinSoup']);
+    const qtyRaw = normalizeQuantityRawForDisplay(qtyToken);
+    const qtyNum = parseQuantityToNumber(qtyToken);
+    const name = postProcessIngredientName(firstDefinedGroup(m.groups, ['nameSoup']));
+
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càs' };
+    }
+  }
+
+
+  // plage + unité cuillère à café
+  m = l.match(
+    new RegExp(
+      `^(?<qtyMinTea>${QTY_USED})\\s*(?:à|a|-)\\s*(?<qtyMaxTea>${QTY_USED})\\s+(?:càc|cac|cc|${CUILL_RE}\\s*(?:à|a)\\s*caf(?:e|é)|c\\.?\\s*(?:à|a)\\s*c\\.?)\\s*(?:de\\s+|d['’]\\s*)?(?<nameTea>.+)$`,
+      'i'
+    )
+  );
+  if (m) {
+    const qtyToken = firstDefinedGroup(m.groups, ['qtyMinTea']);
+    const qtyRaw = normalizeQuantityRawForDisplay(qtyToken);
+    const qtyNum = parseQuantityToNumber(qtyToken);
+    const name = postProcessIngredientName(firstDefinedGroup(m.groups, ['nameTea']));
+
+    if (
+      name &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'càc' };
+    }
+  }
+
+   // plage sans unité explicite : "10 à 12 tomates cerises"
+  m = l.match(
+    new RegExp(
+      `^(?<qtyMinPlain>${QTY_USED})\\s*(?:à|a|-)\\s*(?<qtyMaxPlain>${QTY_USED})\\s+(?<namePlain>.+)$`,
+      'i'
+    )
+  );
+  if (m) {
+    const qtyToken = firstDefinedGroup(m.groups, ['qtyMinPlain']);
+    const qtyRaw = normalizeQuantityRawForDisplay(qtyToken);
+    const qtyNum = parseQuantityToNumber(qtyToken);
+    const name = postProcessIngredientName(firstDefinedGroup(m.groups, ['namePlain']));
+
+    if (
+      name &&
+      !/^(min|mins|minute|minutes|seconde|secondes)\b/i.test(name) &&
+      !/^(°c|degr[ée]s?\b)/i.test(name) &&
+      !looksLikeActionSentence(name) &&
+      !looksLikeStepVerbLine(name) &&
+      !looksLikeStepLine(name)
+    ) {
+      return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
+    }
+  }
+
+  // plage de quantité avec unité : "900 g à 1 kg de paleron"
+  m = l.match(
+    new RegExp(
+      `^(${QTY_USED})\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:à|a|-)\\s*(${QTY_USED})\\s*(kg|g|mg|l|dl|cl|ml)\\s*(?:de\\s+|d['’]\\s*)?(.+)$`,
+      'i'
+    )
+  );
+  if (m) {
+    const qtyNum = parseQuantityToNumber(m[1]);
+    const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
+    const unit = normalizeUnit(m[2]);
     const name = postProcessIngredientName(m[5]);
 
     if (
@@ -110,24 +215,6 @@ function parseOcrIngredient(line) {
     }
   }
 
-
-  //ajoute le 01/04/26
-  if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(l)) {
-    console.log('[PARSE FRACTION]', l);
-  }
-
-  //ajoute le 01/04/26
-  if (/^(assaisonnement|assaisonement|cuisson|marinade|sauce)\b.*:$/i.test(l)) return null;
-  if (/^ingr[ée]dients?$/i.test(l)) return null;
-
-
-  if (/^sel\s*&\s*poivre$/i.test(l)) {
-    return { name: 'sel', quantity: 0, unit: '' };
-  }
-  if (/^poivre$/i.test(l)) {
-    return { name: 'poivre', quantity: 0, unit: '' };
-  }
-
   // "X g/ml/... de ..."
   m = l.match(new RegExp(`^${QTY_USED}\\s*(kg|g|mg|l|dl|cl|ml)\\b\\s*(?:de\\s+|d['’]\\s*)?(.+)$`, 'i'));
   if (m) {
@@ -138,7 +225,6 @@ function parseOcrIngredient(line) {
     if (name) return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit };
   }
 
-  // le 29/03/26, remplacé par :
   // cuillère à café
   m = l.match(
     new RegExp(
@@ -160,8 +246,6 @@ function parseOcrIngredient(line) {
     }
   }
 
-
-   // le 28/03/26, remplacé par :
   // cuillère à soupe
   m = l.match(
     new RegExp(
@@ -183,13 +267,11 @@ function parseOcrIngredient(line) {
     }
   }
 
-
-  // le 29/03/26, remplacé par :
   // unités “humaines”
   m = l.match(
-    //remplacé le 01/04/26
     new RegExp(
-      `^${QTY_USED}\\s+(gousses?|tranches?|sachets?|verres?|tasses?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\\s+(?:de\\s+|d['’]\\s*)?(.+)$`, 'i'
+      `^${QTY_USED}\\s+(gousses?|tranches?|sachets?|verres?|tasses?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\\s+(?:de\\s+|d['’]\\s*)?(.+)$`,
+      'i'
     )
   );
 
@@ -208,8 +290,7 @@ function parseOcrIngredient(line) {
     }
   }
 
-   // le 29/03/26, remplacé par :
-  // Quantité + nom sans unité : "2 œufs", "3 tomates", "1/2 poireau"
+  // quantité + nom sans unité : "2 œufs", "3 tomates", "1/2 poireau"
   m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
@@ -227,27 +308,9 @@ function parseOcrIngredient(line) {
     return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
   }
 
-  // le 29/03/26, remplacé par :
-  // fallback prudent
-  // supprimer d'ici à - le 01/04/26 car il fait doublon avec celui du dessus
-  //m = l.match(new RegExp(`^${QTY_USED}\\s+(.+)$`, 'i'));//remplacé le 01/04/26
-  //if (m) {
-    //const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
-    //const qtyNum = parseQuantityToNumber(m[1]);
-    //const name = postProcessIngredientName(m[2]);
-
-   // if (
-    //  name &&
-     // !looksLikeActionSentence(name) &&
-     // !looksLikeStepVerbLine(name) &&
-     // !looksLikeStepLine(name)
-   // ) {
-     // return { name, quantity: qtyNum ?? 0, quantityRaw: qtyRaw || undefined, unit: 'pièce' };
-    //}
-  //} - ici
-
   return null;
 }
+
 module.exports = {
     parseOcrIngredient,
 }

@@ -58,13 +58,6 @@ function looksLikeEditorialNoise(line) {
     return true;
   }
 
-  // Blocs "à suivre" / recos qui polluent beaucoup - enlever le 23/02 car deja gerer par looksLikeSocialNoise
-  //if (/^\s*(à\s+suivre|a\s+suivre)\b/i.test(t)) return true;
-  //if (/^\s*<\s*recommandations?\b/i.test(t)) return true;
-
-  // Petits tokens UI isolés - enlever le 23/02 car deja gerer par looksLikeSocialNoise
-  //if (/^\s*(recommandations?|explorer|suivre)\s*$/i.test(t)) return true;
-  //if (/^\s*→\s*suivre\s*$/i.test(t)) return true;
 
   // Pseudos / noms courts bizarres ("iman.")
   if (
@@ -80,6 +73,33 @@ function looksLikeEditorialNoise(line) {
   return false;
 }
 
+//ajout du 22/04
+function looksLikeUiDisplayNameNoise(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  // cas typique IG/TikTok audio/display name :
+  // "73 Dennis Korn Soft Sun"
+  if (!/^\d+\s+/.test(t)) return false;
+
+  const tail = normSpaces(t.replace(/^\d+\s+/, ''));
+  if (!tail) return false;
+
+  // si on voit des marqueurs alimentaires ou de recette, on ne jette pas ici
+  if (/\b(de|d['’]|du|des|au|aux|avec|sans|pour)\b/i.test(tail)) return false;
+  if (/\b(kg|g|mg|ml|cl|dl|l|càs|cas|cs|càc|cac|cc)\b/i.test(tail)) return false;
+
+  const words = tail.split(/\s+/).filter(Boolean);
+  if (words.length < 3 || words.length > 6) return false;
+
+  const asciiWordsOnly = words.every((w) => /^[A-Za-z][A-Za-z'’-]*$/.test(w));
+  if (!asciiWordsOnly) return false;
+
+  const titleCaseCount = words.filter((w) => /^[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)?$/.test(w)).length;
+
+  return titleCaseCount >= words.length - 1;
+}
+
 //ajouter le 30/03/26 - fonction poubelle
 function looksLikeNonIngredientGarbage(line) {
   const t = normSpaces(line);
@@ -93,12 +113,10 @@ function looksLikeNonIngredientGarbage(line) {
 
   if (/^\d+\s+[a-z]$/i.test(low)) return true; // ex: 607 Q
   if (/^[a-z]$/i.test(low)) return true;       // ex: Q
+  if (looksLikeUiDisplayNameNoise(t)) return true;
 
-  //if (/^\d+\s+[a-z]$/i.test(low)) return true;   // ex: 607 Q
   if (/^\d+\s*[a-z]?$/i.test(low)) return true;  // ex: 607, 607 Q
-  //if (/^[a-z]\s*\d+$/i.test(low)) return true;   // cas inversé pourri
 
-  //if (/^(q|g|kg|ml|cl|dl|l)$/i.test(low)) return true;
 
   if (/^environ\s+\d+(?:[.,]\d+)?\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(low)) return true;
   if (/\b(directions?|préparation|preparation|astuce|quand)\b/i.test(low)) return true;
@@ -123,6 +141,7 @@ function looksLikeBareIngredientLine(line) {
   if (looksLikeDateNoise(t)) return false;
   if (looksLikeCountersNoise(t)) return false;
   if (looksLikeSocialNoise(t)) return false;
+  if (looksLikeUiDisplayNameNoise(t)) return false;
 
   // pas de phrases d'action / étapes
   if (looksLikeStepLine(t)) return false;
@@ -463,13 +482,12 @@ function smartFilterWithTrashFromText(rawText) {
 
 
 
-
-
 module.exports = {
   looksLikeBookRefNoise,
   stripTrailingPageNumber,
   looksLikeStatusBarNoise,
   looksLikeEditorialNoise,
+  looksLikeUiDisplayNameNoise,
   looksLikeNonIngredientGarbage,
   looksLikeBareIngredientLine,
   stripSocialHeaderPrefix,

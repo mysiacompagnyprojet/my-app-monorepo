@@ -100,6 +100,71 @@ function moveVariantsBlockToNotes({ stepLines, notesLines }) {
   return { stepLines: kept, notesLines: [...notes, ...moved] };
 }
 
+function buildStructuredIngredientLineFromParsed(parsed) {
+  if (!parsed || !parsed.name) return '';
+
+  const name = normSpaces(parsed.name || '');
+  const qtyRaw =
+    typeof parsed.quantityRaw === 'string' && parsed.quantityRaw.trim()
+      ? normSpaces(parsed.quantityRaw)
+      : '';
+
+  const unit = normSpaces(parsed.unit || '');
+
+  if (!name) return '';
+
+  if (!qtyRaw) return name;
+
+  if (!unit || unit === 'pièce') {
+    return normSpaces(`${qtyRaw} ${name}`);
+  }
+
+  return normSpaces(`${qtyRaw} ${unit} de ${name}`);
+}
+
+function shouldMirrorIngredientLineToNotes(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  const qtyToken = '(?:\\d+\\s+\\d+\\/\\d+|\\d+\\/\\d+|\\d+(?:[.,]\\d+)?|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)';
+
+  const isRange = new RegExp(`^${qtyToken}\\s*(?:à|a|-)\\s*${qtyToken}\\b`, 'i').test(t);
+  const isNaturalMeasure = new RegExp(
+    `^(?:${qtyToken}|un|une)\\s+(?:(?:tr[eè]s\\s+)?(?:belle?|petite?|petit|grande?|grand|grosse?|gros)\\s+)?poign(?:ée|ee?)s?\\b`,
+    'i'
+  ).test(t);
+
+  return isRange || isNaturalMeasure;
+}
+
+function normalizeStructuredIngredientCandidates({ ingredientLines, notesLines }) {
+  const nextIngredientLines = [];
+  const nextNotesLines = [...notesLines];
+
+  for (const rawLine of ingredientLines) {
+    const raw = normSpaces(rawLine);
+    if (!raw) continue;
+
+    const parsed = parseOcrIngredient(raw);
+    if (!parsed || !parsed.name) {
+      nextIngredientLines.push(raw);
+      continue;
+    }
+
+    const normalized = buildStructuredIngredientLineFromParsed(parsed) || raw;
+
+    if (shouldMirrorIngredientLineToNotes(raw) && raw.toLowerCase() !== normalized.toLowerCase()) {
+      nextNotesLines.push(raw);
+    }
+
+    nextIngredientLines.push(normalized);
+  }
+
+  return {
+    ingredientLines: dedupeLines(nextIngredientLines),
+    notesLines: dedupeLines(nextNotesLines),
+  };
+}
 
 // ici
 
@@ -525,6 +590,16 @@ ingredientLines = shouldSkipIngredientJoin
   }  
 
   ingredientLines = filterFinalIngredientLines(ingredientLines);
+
+  {
+    const normalizedStructured = normalizeStructuredIngredientCandidates({
+      ingredientLines,
+      notesLines,
+    });
+    ingredientLines = normalizedStructured.ingredientLines;
+    notesLines = normalizedStructured.notesLines;
+  }
+
  
   
   // split ingrédients composites (sel/poivre etc)

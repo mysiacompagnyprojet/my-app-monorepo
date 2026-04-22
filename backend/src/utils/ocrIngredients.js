@@ -8,7 +8,7 @@
 
 const { normSpaces } = require('./stringUtils');
 const { parseOcrIngredient } = require('./ingredientParser');
-const  { looksLikeStatusBarNoise, looksLikeEditorialNoise, looksLikeNonIngredientGarbage, looksLikeBareIngredientLine } = require('./ocrNoise');
+const { looksLikeStatusBarNoise, looksLikeEditorialNoise, looksLikeUiDisplayNameNoise, looksLikeNonIngredientGarbage, looksLikeBareIngredientLine } = require('./ocrNoise');
 const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken, isIngredientFragmentLine, joinWrappedLinesForIngredients, looksLikeListBullet } = require('./ingredientUtils');
 const { isIngredientsHeader, isPreparationHeader, isStepsHeader }  = require('./sectionHeaders'); 
 const { looksLikeStepVerbLine, looksLikeActionSentence, looksLikeStepLine} = require('../utils/heuristics');
@@ -417,42 +417,49 @@ function extractTrailingIngredientBlock({ ingredientLines, stepLines }) {
 function filterFinalIngredientLines(ingredientLines) {
   return ingredientLines.filter((l) => {
     const t = normSpaces(l);
-        if (!t) return false;
-        if (looksLikeNonIngredientGarbage(t)) return false;
+    if (!t) return false;
 
-        if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
-        if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
+    if (looksLikeNonIngredientGarbage(t)) return false;
+    if (looksLikeUiDisplayNameNoise(t)) return false;
 
-        const parsed = parseOcrIngredient(t);
+    if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
+    if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
 
-        if (parsed) {
-            const name = normSpaces(parsed.name || '');
-            if (!name) return false;
+    if (
+      looksLikeStepLine(t) ||
+      looksLikeStepVerbLine(t) ||
+      looksLikeActionSentence(t)
+    ) {
+      return false;
+    }
 
-            const low = name.toLowerCase();
+    const parsed = parseOcrIngredient(t);
 
-            if (/^(q|de|et|ou)$/i.test(low)) return false;
-            if (/^\d+$/.test(name)) return false;
+    if (parsed) {
+      const name = normSpaces(parsed.name || '');
+      if (!name) return false;
 
-            return true;
-        }
+      const low = name.toLowerCase();
 
-        if (
-            looksLikeStepLine(t) ||
-            looksLikeStepVerbLine(t) ||
-            looksLikeActionSentence(t)
-        ) {
-            return false;
-        }
+      if (/^(q|de|et|ou)$/i.test(low)) return false;
+      if (/^\d+$/.test(name)) return false;
+      if (looksLikeUiDisplayNameNoise(name)) return false;
 
-        if (looksLikeBareIngredientLine(t)) {
-            return true;
-        }
+      return true;
+    }
 
-        return false;
-    });
+    // fallback très prudent : on ne garde les "noms nus" que s'ils ressemblent
+    // à de vrais ingrédients, pas à du bruit d'UI / display name
+    if (!looksLikeBareIngredientLine(t)) return false;
+
+    // rejette les lignes capitalisées de type "Dennis Korn Soft Sun"
+    if (/^(?:[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)?\s+){2,}[A-Z][a-z]+(?:['’-][A-Z]?[a-z]+)?$/.test(t)) {
+      return false;
+    }
+
+    return true;
+  });
 }
-
 
 
 

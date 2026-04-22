@@ -167,6 +167,15 @@ function postProcessIngredientName(name) {
 
   // retire les débuts parasites fréquents
   n = n.replace(/^de\s+/i, '');
+  // retire les restes de bornes hautes OCR mal découpées
+  n = n.replace(/^(?:à|a)\s+\d+(?:[.,]\d+)?\s+/i, '');
+
+  // retire les restes d'unités cuillère mal laissés dans le nom
+  n = n.replace(/^(?:à|a)\s+\d+(?:[.,]\d+)?\s*(?:càs|cas|cs|càc|cac|cc)\s+(?:de\s+|d['’]\s*)?/i, '');
+  n = n.replace(/^(?:càs|cas|cs|càc|cac|cc)\s+(?:de\s+|d['’]\s*)?/i, '');
+
+  // retire les mesures naturelles descriptives quand elles sont laissées dans le nom
+  n = n.replace(/^(?:(?:tr[eè]s\s+)?(?:belle?|petite?|petit|grande?|grand|grosse?|gros)\s+)?poign(?:ée|ee?)s?\s+(?:de\s+|d['’]\s*)?/i, '');
   n = n.replace(/^(?:à|a)\s*caf[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
   n = n.replace(/^caf[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
   n = n.replace(/^af[ée]\s+(?:de\s+|d['’]\s*)?/i, '');
@@ -233,7 +242,6 @@ function parseQuantityToNumber(q) {
   const t = normSpaces(q).toLowerCase();
   if (!t) return null;
 
-  // unicode -> ascii fraction
   const uni = {
     '½': '1/2',
     '⅓': '1/3',
@@ -254,7 +262,9 @@ function parseQuantityToNumber(q) {
     const a = parseFloat(m[1]);
     const b = parseFloat(m[2]);
     const c = parseFloat(m[3]);
-    if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0) return a + b / c;
+    if (Number.isFinite(a) && Number.isFinite(b) && Number.isFinite(c) && c !== 0) {
+      return a + b / c;
+    }
   }
 
   // "1/2"
@@ -262,21 +272,26 @@ function parseQuantityToNumber(q) {
   if (m) {
     const a = parseFloat(m[1]);
     const b = parseFloat(m[2]);
-    if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) return a / b;
+    if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) {
+      return a / b;
+    }
   }
 
-  // "4-6" => max
+  // règle métier OCR :
+  // sur une plage "10 à 12", on garde la borne basse
   m = s.match(/(\d+(?:[.,]\d+)?)\s*(?:-|à|a)\s*(\d+(?:[.,]\d+)?)/i);
   if (m) {
     const a = parseFloat(String(m[1]).replace(',', '.'));
     const b = parseFloat(String(m[2]).replace(',', '.'));
-    if (Number.isFinite(a) && Number.isFinite(b)) return Math.max(a, b);
+    if (Number.isFinite(a) && Number.isFinite(b)) {
+      return Math.min(a, b);
+    }
   }
 
-  // nombre simple "0,5" ou "0.5" ou "2"
   const n = parseFloat(s.replace(',', '.'));
   return Number.isFinite(n) ? n : null;
 }
+
 
 function normalizeUnit(u) {
   const t = normSpaces(u).toLowerCase();
