@@ -207,10 +207,158 @@ function splitMergedIngredientLine(line, trash) {
   return [s];
 }
 
+function looksLikeCommentUiLine(line) {
+  const t = normSpaces(line).toLowerCase();
+  return (
+    /^ajouter un commentaire\b/.test(t) ||
+    /^notice sur l['’]ia\b/.test(t) ||
+    /^suivre$/.test(t)
+  );
+}
+
+function extractServingsFromLines(lines) {
+  for (const raw of lines || []) {
+    const t = normSpaces(raw);
+
+    const m =
+      t.match(/\b(?:ingr[eé]dients?)\s*\(\s*(\d{1,2})\s*(?:pers|personnes?)\.?\s*\)/i) ||
+      t.match(/\b(\d{1,2})\s*(?:pers|personnes?)\.?\b/i);
+
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n >= 1 && n <= 20) return n;
+    }
+  }
+
+  return null;
+}
+
+function looksLikeShortIngredientContinuation(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+  if (t.length > 28) return false;
+  if (/\d/.test(t)) return false;
+
+  if (/^(cocktail|cerise|noir|blanc|fra[iî]che?s?|s[eé]ch[ée]e?s?)$/i.test(t)) return true;
+
+  const words = t.split(/\s+/).filter(Boolean);
+  return words.length <= 2;
+}
+
+function looksLikeQuantifiedIngredientLine(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  if (/^\d{1,4}$/.test(t)) return false;  
+  return (
+    /^\s*(\d+([.,]\d+)?|\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾)/.test(t) ||
+    /\b\d+\s*(g|kg|mg|ml|cl|dl|l)\b/i.test(t)
+  );
+}
+
+function repairSplitIngredientLines(lines) {
+  const out = [];
+
+  for (let i = 0; i < (lines || []).length; i++) {
+    const current = normSpaces(lines[i]);
+    const next = normSpaces(lines[i + 1]);
+
+    if (!current) continue;
+
+    if (
+      next &&
+      looksLikeQuantifiedIngredientLine(current) &&
+      looksLikeShortIngredientContinuation(next)
+    ) {
+      out.push(`${current} ${next}`);
+      i++;
+      continue;
+    }
+
+    const sojaHerbes = current.match(/^(.*?\bsauce\s+soja\b.*?sal[ée]e?)\s+(herbes?\s+fra[îi]ches?.*)$/i);
+    if (sojaHerbes) {
+      out.push(normSpaces(sojaHerbes[1]));
+      out.push(normSpaces(sojaHerbes[2]));
+      continue;
+    }
+
+    out.push(current);
+  }
+
+  return out;
+}
+
+function buildWrappedIngredientLinesFromSource(sourceLines = []) {
+  const out = [];
+
+  for (let i = 0; i < sourceLines.length; i++) {
+    const current = normSpaces(sourceLines[i]);
+    const next = normSpaces(sourceLines[i + 1]);
+
+    if (!current || !next) continue;
+
+    if (
+      looksLikeQuantifiedIngredientLine(current) &&
+      looksLikeShortIngredientContinuation(next)
+    ) {
+      out.push(normSpaces(`${current} ${next}`));
+      i++;
+    }
+  }
+
+  return out;
+}
+
+function cleanFinalSplit(split, sourceLines = []) {
+  let ingredientLines = repairSplitIngredientLines(split.ingredientLines || [])
+    .filter((l) => !looksLikeCommentUiLine(l));
+
+  let stepLines = (split.stepLines || [])
+    .map(normSpaces)
+    .filter(Boolean)
+    .filter((l) => !looksLikeCommentUiLine(l));
+
+  let notesLines = (split.notesLines || [])
+    .map(normSpaces)
+    .filter(Boolean)
+    .filter((l) => !looksLikeCommentUiLine(l));
+
+
+  const wrappedFromSource = buildWrappedIngredientLinesFromSource(sourceLines);
+
+  for (const wrapped of wrappedFromSource) {
+    const shortPart = wrapped.split(/\s+/).slice(-1)[0];
+
+    ingredientLines = ingredientLines.filter((line) => {
+      const t = normSpaces(line).toLowerCase();
+      return t !== normSpaces(shortPart).toLowerCase();
+    });
+
+    if (!ingredientLines.some((line) => normSpaces(line).toLowerCase() === wrapped.toLowerCase())) {
+      ingredientLines.push(wrapped);
+    }
+
+    if (!notesLines.some((line) => normSpaces(line).toLowerCase() === wrapped.toLowerCase())) {
+      notesLines.push(wrapped);
+    }
+  }
+
+  const servingsFromLines = extractServingsFromLines(sourceLines);
+
+  return {
+    ...split,
+    servings: servingsFromLines || split.servings || 1,
+    ingredientLines,
+    stepLines,
+    notesLines,
+  };
+}
 
 module.exports = {
     splitCommaSeparatedNoQty,
     scoreSplitQuality,
     rescueWrappedIngredientFragmentsOnly,
     splitMergedIngredientLine,
+    extractServingsFromLines,
+    cleanFinalSplit,
 };

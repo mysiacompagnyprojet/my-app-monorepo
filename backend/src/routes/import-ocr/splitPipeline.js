@@ -9,7 +9,7 @@
 const { detectOcrLayoutCase } = require('../../utils/ocrLayoutCases');
 const { extractFragmentedIngredientLines, chooseBestIngredientLines, mergeSpatialHints, removeWeakerDuplicates } = require('../../utils/ocrFragmentedIngredients');
 const { splitIngredientsAndSteps, miniReflow } = require('../../utils/ocrText');
-const { scoreSplitQuality, rescueWrappedIngredientFragmentsOnly } = require('./splitHelpers');
+const { scoreSplitQuality, rescueWrappedIngredientFragmentsOnly, extractServingsFromLines, cleanFinalSplit } = require('./splitHelpers');
 
 function buildBestSplitFromOcr({ lines, rawLines, spatialIngredientHints, dlog,}) {
   const layoutCase = detectOcrLayoutCase(lines);
@@ -79,6 +79,8 @@ function buildBestSplitFromOcr({ lines, rawLines, spatialIngredientHints, dlog,}
       split = splitPass2;
     }
   }
+
+  split = cleanFinalSplit(split, rawLines || lines);
 
   let servings = split.servings || 1;
   if (!Number.isFinite(servings) || servings < 1) servings = 1;

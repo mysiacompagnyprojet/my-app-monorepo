@@ -47,8 +47,6 @@ const MAX_FILES = 10;
 
 router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
   try {
-    console.log('[IMPORT OCR ROUTE HIT]');
-    ocrStage('TEST_STAGE', { ok: true });
     const debugMode = String(req.query.debug || '').toLowerCase(); // "1" | "title" | ""
     const isDebug = debugMode === '1' || debugMode === 'title';
 
