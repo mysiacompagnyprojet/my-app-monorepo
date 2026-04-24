@@ -16,8 +16,8 @@ const { extractServingsFromLine } = require('./units');
 const { parseOcrIngredient } = require('./ingredientParser');
 const { buildMergedTitleCandidate } = require('./titleMerge');
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+const DEBUG_VERBOSE = process.env.OCR_VERBOSE === '1';
+const dlog = (...args) => { if (DEBUG_VERBOSE) console.log(...args); };
 
 
 // Nettoyage léger

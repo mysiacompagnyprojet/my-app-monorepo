@@ -6,13 +6,31 @@
 'use strict';
 
 
-const { looksLikeNonIngredientGarbage, looksLikeBareIngredientLine, looksLikeCreditsLine, extractParenNote, dedupeLines, smartFilterWithTrashFromText, looksLikeNutritionMetaLine, looksLikeTimeMetaLine } = require('../utils/ocrNoise');
+const {
+  looksLikeNonIngredientGarbage,
+  looksLikeBareIngredientLine,
+  looksLikeCreditsLine,
+  extractParenNote,
+  dedupeLines,
+  smartFilterWithTrashFromText,
+  looksLikeNutritionMetaLine,
+  looksLikeTimeMetaLine,
+  containsNutritionMeta,
+  containsTimeMeta,
+  looksLikeCallToActionNoise,
+} = require('../utils/ocrNoise');
 const { parseOcrIngredient} = require('../utils/ingredientParser');
 //stringUtils
 const { normSpaces, looksLikeTimeInfoLine } = require('../utils/stringUtils');
 
 //ingredientUtils'
-const { isIngredientFragmentLine, joinWrappedLinesForIngredients, looksLikeListBullet } = require('../utils/ingredientUtils');
+const {
+  isIngredientFragmentLine,
+  joinWrappedLinesForIngredients,
+  looksLikeListBullet,
+  looksLikeIngredientNoteLine,
+} = require('../utils/ingredientUtils');
+
 //unit.js
 const { extractServingsFromLine } = require('../utils/units');
 const { isIngredientsHeader,  isPreparationHeader,  isStepsHeader } = require('../utils/sectionHeaders');
@@ -23,8 +41,8 @@ const { extractInlineIngredientFragmentsFromLines } = require('../utils/ocrInlin
 const { joinWrappedLinesForSteps, splitStepsBySentences, splitLongSteps } = require('../utils/ocrSteps');
 
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+const DEBUG_VERBOSE = process.env.OCR_VERBOSE === '1';
+const dlog = (...args) => { if (DEBUG_VERBOSE) console.log(...args); };
 
 
 
@@ -134,6 +152,10 @@ function normalizeStructuredIngredientCandidates({ ingredientLines, notesLines }
 
     const normalized = buildStructuredIngredientLineFromParsed(parsed) || raw;
 
+    if (parsed.note) {
+      nextNotesLines.push(normSpaces(parsed.note));
+    }
+
     if (shouldMirrorIngredientLineToNotes(raw) && raw.toLowerCase() !== normalized.toLowerCase()) {
       nextNotesLines.push(raw);
     }
@@ -163,27 +185,166 @@ function debugWatchRecipeLines(label, arr) {
   if (hit.length) dlog(`[WATCH SPLIT][${label}]`, hit);
 }
 
-function normalizeParsedIngredientKey(line) {
+function normalizeParsedIngredientIdentity(line) {
   const parsed = parseOcrIngredient(line);
-  if (!parsed || !parsed.name) return normSpaces(String(line || '')).toLowerCase();
+  if (!parsed || !parsed.name) {
+    return {
+      nameKey: normSpaces(String(line || ''))
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, ''),
+      qty: null,
+      unit: '',
+      note: '',
+    };
+  }
 
-  return normSpaces(parsed.name)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+  return {
+    nameKey: normSpaces(parsed.name)
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''),
+    qty: Number.isFinite(Number(parsed.quantity)) ? Number(parsed.quantity) : null,
+    unit: normSpaces(parsed.unit || '').toLowerCase(),
+    note: normSpaces(parsed.note || '').toLowerCase(),
+  };
 }
 
 function isEquivalentIngredientCandidate(candidate, existingLines) {
-  const candKey = normalizeParsedIngredientKey(candidate);
-  if (!candKey) return false;
+  const cand = normalizeParsedIngredientIdentity(candidate);
+  if (!cand.nameKey) return false;
 
   return (existingLines || []).some((l) => {
-    const k = normalizeParsedIngredientKey(l);
-    if (!k) return false;
-    return k === candKey || k.startsWith(candKey) || candKey.startsWith(k);
+    const cur = normalizeParsedIngredientIdentity(l);
+    if (!cur.nameKey) return false;
+
+    if (cur.nameKey !== cand.nameKey) return false;
+
+    const sameUnit =
+      !cand.unit || !cur.unit || cand.unit === cur.unit;
+
+    const sameQty =
+      cand.qty == null ||
+      cur.qty == null ||
+      Math.abs(cand.qty - cur.qty) < 0.0001;
+
+    const sameNote =
+      !cand.note || !cur.note || cand.note === cur.note;
+
+    return sameUnit && sameQty && sameNote;
   });
 }
 
+function looksLikeAlternativeOnlyNote(line) {
+  const t = normSpaces(line);
+  const low = t.toLowerCase();
+  if (!t) return false;
+
+  if (looksLikeStepLine(t) || looksLikeStepVerbLine(t) || looksLikeActionSentence(t)) return false;
+  if (looksLikeNutritionMetaLine(t) || looksLikeTimeMetaLine(t)) return false;
+  if (parseOcrIngredient(t)) return false;
+
+  const words = t.split(/\s+/).filter(Boolean);
+  const hasOnlyWords = /^[a-zà-öø-ÿœ'’ -]+$/i.test(t);
+
+  return (
+    /\bou\b/i.test(low) &&
+    hasOnlyWords &&
+    !/[.!?:;]/.test(t) &&
+    words.length >= 2 &&
+    words.length <= 8 &&
+    t.length <= 50
+  );
+}
+
+function shouldKeepOnlyInNotes(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  return (
+    looksLikeAlternativeOnlyNote(t) ||
+    looksLikeIngredientNoteLine(t) ||
+    looksLikeNutritionMetaLine(t) ||
+    looksLikeTimeMetaLine(t) ||
+    containsNutritionMeta(t) ||
+    containsTimeMeta(t) ||
+    looksLikeCallToActionNoise(t)
+  );
+}
+
+function sanitizeIngredientCandidates({ ingredientLines, notesLines, stepLines }) {
+  const nextIngredients = [];
+  const nextNotes = [...notesLines];
+  const nextSteps = [...stepLines];
+
+  for (const rawLine of ingredientLines) {
+    const t = normSpaces(rawLine);
+    if (!t) continue;
+
+    if (shouldKeepOnlyInNotes(t)) {
+      nextNotes.push(t);
+      continue;
+    }
+
+    if (looksLikeNonIngredientGarbage(t)) {
+      continue;
+    }
+
+    nextIngredients.push(t);
+  }
+
+  return {
+    ingredientLines: dedupeLines(nextIngredients),
+    notesLines: dedupeLines(nextNotes),
+    stepLines: dedupeLines(nextSteps),
+  };
+}
+
+function shouldUseLineAsInlineSource(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  if (looksLikeNutritionMetaLine(t) || looksLikeTimeMetaLine(t)) return false;
+  if (containsNutritionMeta(t) || containsTimeMeta(t)) return false;
+  if (looksLikeCallToActionNoise(t)) return false;
+  if (looksLikeAlternativeOnlyNote(t)) return false;
+  if (looksLikeIngredientNoteLine(t)) return false;
+  if (looksLikeNonIngredientGarbage(t)) return false;
+  if (/^(instructions?|instructiono|[ée]tapes?)\s*:?\s*$/i.test(t)) return false;
+  if (/^ajouter?\s+un\s+commentaire\b/i.test(t)) return false;
+
+  return true;
+}
+
+
+function extractParsedNotesFromIngredientLines({ ingredientLines, notesLines }) {
+  const nextIngredientLines = [];
+  const nextNotesLines = [...notesLines];
+
+  for (const rawLine of ingredientLines) {
+    const raw = normSpaces(rawLine);
+    if (!raw) continue;
+
+    const parsed = parseOcrIngredient(raw);
+    if (!parsed || !parsed.name) {
+      nextIngredientLines.push(raw);
+      continue;
+    }
+
+    if (parsed.note) {
+      nextIngredientLines.push(parsed.name);
+      nextNotesLines.push(parsed.note);
+      continue;
+    }
+
+    nextIngredientLines.push(raw);
+  }
+
+  return {
+    ingredientLines: dedupeLines(nextIngredientLines),
+    notesLines: dedupeLines(nextNotesLines),
+  };
+}
 
 function splitIngredientsAndSteps(lines, opts = {}) {
   opts = opts || {};
@@ -577,6 +738,17 @@ function splitIngredientsAndSteps(lines, opts = {}) {
   debugWhere(notesLines, 'notesLines');
   dlog(stepLines.slice(0,30))
 
+  {
+    const sanitized = sanitizeIngredientCandidates({
+      ingredientLines,
+      notesLines,
+      stepLines,
+    });
+    ingredientLines = sanitized.ingredientLines;
+    notesLines = sanitized.notesLines;
+    stepLines = sanitized.stepLines;
+  }
+
   stepLines = joinWrappedLinesForSteps(stepLines, {
     looksLikeSpoonMeasureIngredient,
   });
@@ -587,37 +759,41 @@ function splitIngredientsAndSteps(lines, opts = {}) {
 
   //ajoute le 03/04/26
     if (!disableInlineExtraction) {
-    const strongExplicitIngredientBlock =
+      const strongExplicitIngredientBlock =
       idxIng >= 0 && ingredientLines.filter((l) => isStrictIngredientLine(l)).length >= 3;
 
-    const shouldUseFullLinesAsInlineSource = !strongExplicitIngredientBlock;
+      const shouldUseFullLinesAsInlineSource = !strongExplicitIngredientBlock;
 
-    const inlineSource = dedupeLines([
-      ...(shouldUseFullLinesAsInlineSource ? L : []),
-      ...notesLines,
-      ...stepLines,
-    ]).filter((l) => {
-      const t = normSpaces(l);
-      if (!t) return false;
-      if (looksLikeNutritionMetaLine(t)) return false;
-      if (looksLikeTimeMetaLine(t)) return false;
-      if (/^(instructions?|instructiono|[ée]tapes?)\s*:?\s*$/i.test(t)) return false;
-      return true;
-    });
-        const inlineExtractedRaw = extractInlineIngredientFragmentsFromLines(inlineSource);
+      const inlineSource = dedupeLines([
+        ...(shouldUseFullLinesAsInlineSource ? L : []),
+        ...notesLines,
+        ...stepLines,
+      ]).filter((l) => shouldUseLineAsInlineSource(l));
 
-    const inlineExtracted = inlineExtractedRaw.filter(
-      (x) => !isEquivalentIngredientCandidate(x, ingredientLines)
-    );
+      const inlineExtractedRaw = extractInlineIngredientFragmentsFromLines(inlineSource);
 
-    dlog('[INLINE EXTRACTED]', inlineExtracted);
+      const inlineExtracted = inlineExtractedRaw.filter(
+        (x) => !isEquivalentIngredientCandidate(x, ingredientLines)
+      );
 
-    ingredientLines = dedupeLines([...ingredientLines, ...inlineExtracted]);
-  } else {
-    dlog('[INLINE EXTRACTED][SKIPPED]', { reason: 'fragmented_layout' });
-  }
+      dlog('[INLINE EXTRACTED]', inlineExtracted);
+
+      ingredientLines = [...ingredientLines, ...inlineExtracted];
+    } else {
+      dlog('[INLINE EXTRACTED][SKIPPED]', { reason: 'fragmented_layout' });
+    }
+
 
   ingredientLines = filterFinalIngredientLines(ingredientLines);
+
+  {
+    const extractedParsedNotes = extractParsedNotesFromIngredientLines({
+      ingredientLines,
+      notesLines,
+    });
+    ingredientLines = extractedParsedNotes.ingredientLines;
+    notesLines = extractedParsedNotes.notesLines;
+  }
 
   {
     const normalizedStructured = normalizeStructuredIngredientCandidates({
@@ -637,6 +813,17 @@ function splitIngredientsAndSteps(lines, opts = {}) {
 
   ingredientLines = dedupeLines(ingredientLines);
 
+  {
+  const sanitizedAfterInline = sanitizeIngredientCandidates({
+    ingredientLines,
+    notesLines,
+    stepLines,
+  });
+  ingredientLines = sanitizedAfterInline.ingredientLines;
+  notesLines = sanitizedAfterInline.notesLines;
+  stepLines = sanitizedAfterInline.stepLines;
+}
+
   dlog('[INGREDIENT LINES AFTER INLINE]', ingredientLines);
 
 
@@ -645,6 +832,17 @@ function splitIngredientsAndSteps(lines, opts = {}) {
   stepLines = splitStepsBySentences(stepLines);
 
   stepLines = splitLongSteps(stepLines);
+
+  {
+  const sanitizedFinal = sanitizeIngredientCandidates({
+    ingredientLines,
+    notesLines,
+    stepLines,
+  });
+  ingredientLines = sanitizedFinal.ingredientLines;
+  notesLines = sanitizedFinal.notesLines;
+  stepLines = sanitizedFinal.stepLines;
+}
 
   return { ingredientLines, stepLines, notesLines, servings };
 }

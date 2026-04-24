@@ -22,13 +22,13 @@ const { buildBestSplitFromOcr } = require('./import-ocr/splitPipeline');
 const { buildFinalOcrTitle } = require('./import-ocr/titlePipeline');
 const { collectOcrDataFromFiles } = require('./import-ocr/visionHelpers');
 
-
+const { ocrStage } = require('../utils/ocrDebug');
 //ocrText
 const { smartFilterWithTrashFromText, joinWrappedLinesForSteps } = require('../utils/ocrText');
 
 const { splitStepsFromLines } = require('../utils/textUtils');
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
 const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 
@@ -47,6 +47,8 @@ const MAX_FILES = 10;
 
 router.post('/ocr', upload.array('files', MAX_FILES), async (req, res) => {
   try {
+    console.log('[IMPORT OCR ROUTE HIT]');
+    ocrStage('TEST_STAGE', { ok: true });
     const debugMode = String(req.query.debug || '').toLowerCase(); // "1" | "title" | ""
     const isDebug = debugMode === '1' || debugMode === 'title';
 
@@ -95,11 +97,23 @@ const {
 const rawText = texts.join('\n\n');
 const filtered = smartFilterWithTrashFromText(rawText);
 
+ocrStage('1_RAW_TEXT', rawText);
+ocrStage('2_FILTERED', {
+  lines: filtered.lines,
+  trash: filtered.trash,
+});
+
     
 
     const safeLinesForTitle = removeSocialHeaderLines(filtered.lines);
     const rawLines = removeSocialHeaderLines(filtered.lines);
     const lines = [...rawLines];
+
+    ocrStage('3_LINES_FOR_PIPELINE', {
+      rawLines,
+      lines,
+      safeLinesForTitle,
+    });
 
     const { split, servings, layoutCase } = buildBestSplitFromOcr({
       lines,
@@ -108,13 +122,25 @@ const filtered = smartFilterWithTrashFromText(rawText);
       dlog,
     });
 
-   const { ingredients, extraNotes } = buildIngredientsFromSplit({
-  ingredientLines: split.ingredientLines || [],
-  trash: filtered.trash,
-  parseRawLine,
-  dlog,
-});
+    ocrStage('4_SPLIT', {
+      servings,
+      layoutCase,
+      ingredientLines: split.ingredientLines || [],
+      stepLines: split.stepLines || [],
+      notesLines: split.notesLines || [],
+    });
 
+   const { ingredients, extraNotes } = buildIngredientsFromSplit({
+      ingredientLines: split.ingredientLines || [],
+      trash: filtered.trash,
+      parseRawLine,
+      dlog,
+    });
+
+    ocrStage('5_INGREDIENTS', {
+      ingredients,
+      extraNotes,
+    });
     // ---------- STEPS ----------
     const rawSteps = joinWrappedLinesForSteps(split.stepLines || []);
     const steps = splitStepsFromLines(rawSteps)
@@ -156,6 +182,8 @@ const filtered = smartFilterWithTrashFromText(rawText);
       totalCostEur: null,
     };
 
+    ocrStage('6_DRAFT_BEFORE_PRICING', draft);
+
     // ✅ Airtable pricing (V1) : UNE SEULE fois (ne pas dupliquer) - remplacer le 02/04/26
     const priced = await priceIngredients(draft.ingredients, { dlog });
     draft.ingredients = annotateDuplicateCourses(priced.ingredients);
@@ -165,14 +193,6 @@ const filtered = smartFilterWithTrashFromText(rawText);
  // ─────────────────────────────────────────────
    // ✅ Bêta: limite pricing (10 recettes) dès l’aperçu OCR
    // ─────────────────────────────────────────────
-
-    //console log a supprimer
-   dlog('[TITLE][PIPELINE]', {
-      guessedFromLines,
-      bestVisionTitle,
-      mergedFromVision,
-      titleBeforeResponse: title,
-    });
 
     // ✅ debug=title : renvoie seulement infos titres
     if (debugMode === 'title') {
@@ -232,6 +252,7 @@ const filtered = smartFilterWithTrashFromText(rawText);
 // Important: flou à partir de la 11e => on calcule blur AVANT incrément.
 
 const responsePayload = await buildOcrSuccessResponse({ req, draft });
+ocrStage('7_RESPONSE_PAYLOAD', responsePayload);
 return res.json(responsePayload);
   } catch (e) {
     console.error(e);

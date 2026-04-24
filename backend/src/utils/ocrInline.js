@@ -8,7 +8,16 @@
 
 const { parseOcrIngredient } = require('./ingredientParser');
 const { normSpaces } = require('./stringUtils');
-const { looksLikeNonIngredientGarbage, stripInlineSocialHandles, dedupeLines } = require('../utils/ocrNoise');
+const {
+  looksLikeNonIngredientGarbage,
+  stripInlineSocialHandles,
+  dedupeLines,
+  containsNutritionMeta,
+  containsTimeMeta,
+  looksLikeCallToActionNoise,
+  looksLikeNutritionMetaLine,
+  looksLikeTimeMetaLine,
+} = require('../utils/ocrNoise');
 
 //ajoute le 01/04/26
 function splitOnSlashOutsideFractions(text) {
@@ -102,6 +111,13 @@ function extractInlineIngredientFragmentsFromLines(lines) {
     if (!t) return;
 
     if (looksLikeNonIngredientGarbage(t)) return;
+    if (containsNutritionMeta(t)) return;
+    if (containsTimeMeta(t)) return;
+    if (looksLikeCallToActionNoise(t)) return;
+    if (/^.+\s+au\s+go[uû]t$/i.test(t)) return;
+    if (/\bou\b/i.test(t) && !parseOcrIngredient(t) && t.length <= 60) return;
+    if (looksLikeNutritionMetaLine(t)) return;
+    if (looksLikeTimeMetaLine(t)) return;
 
     //ajoute le 02/04/26
     if (/^pour\s+la\s+(cuisson|cuisson vapeur|dorure|sauce|pâte|pate)\b/i.test(t)) return;

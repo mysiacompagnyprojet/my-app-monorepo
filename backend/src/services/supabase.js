@@ -11,8 +11,8 @@ const { canonUnit, toBaseUnit } = require('../utils/units')
 // -------------------------
 // LOGS optionnels
 // -------------------------
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.debug(...args); };
+const DEBUG_VERBOSE = process.env.OCR_VERBOSE === '1';
+const dlog = (...args) => { if (DEBUG_VERBOSE) console.log(...args); };
 
 // -------------------------
 // Cache TTL 1 min (comme avant)

@@ -16,7 +16,8 @@ const needAuth = supabaseAuth;
 
 //const { cleanAndNormalizeIngredients, tidyName, normalizeUnit } = require('../utils/ingredients');
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
+
 //const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
 
 /**

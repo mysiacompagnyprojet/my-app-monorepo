@@ -59,7 +59,7 @@ function dedupeLinesPreservingCriticalFragments(lines) {
 }
 
 // debug
-const DEBUG_FRAGMENTED = process.env.OCR_DEBUG !== 'production';
+const DEBUG_FRAGMENTED = process.env.OCR_VERBOSE === '1';
 const flog = (...args) => {
   if (DEBUG_FRAGMENTED) console.log(...args);
 };

@@ -10,8 +10,8 @@ const { normalizeTitleJoinPiece } = require('../utils/textUtils');
 //stringUtils
 const { normSpaces } = require('../utils/stringUtils');
 //titleUtils
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+const DEBUG_VERBOSE = process.env.OCR_VERBOSE === '1';
+const dlog = (...args) => { if (DEBUG_VERBOSE) console.log(...args); };
 
 
 function buildMergedTitleCandidate(scan, startIdx, maxLines = 3, opts = {}) {

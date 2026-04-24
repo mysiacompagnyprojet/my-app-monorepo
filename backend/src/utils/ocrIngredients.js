@@ -439,9 +439,11 @@ function filterFinalIngredientLines(ingredientLines) {
 
     if (looksLikeNonIngredientGarbage(t)) return false;
     if (looksLikeUiDisplayNameNoise(t)) return false;
+    
 
     if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
     if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(t)) return false;
+    if (looksLikeIngredientMetaName(t)) return false;
 
     if (
       looksLikeStepLine(t) ||

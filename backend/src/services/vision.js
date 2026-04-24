@@ -14,7 +14,7 @@ const { normSpaces, stripEdgeEmojisAndPunct, cleanTitleCandidate } = require('..
 // ---------------------------------------------------------
 // DEBUG
 // ---------------------------------------------------------
-const DEBUG_VISION = process.env.OCR_DEBUG !== 'production';
+const DEBUG_VISION = process.env.OCR_VERBOSE === '1';
 const dlog = (...args) => {
   if (DEBUG_VISION) console.log(...args);
 };

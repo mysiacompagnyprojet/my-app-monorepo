@@ -23,7 +23,7 @@ const { buildDemoOcrSuccessResponse } = require('./import-ocr/demoResponseHelper
 const { smartFilterWithTrashFromText, joinWrappedLinesForSteps } = require('../utils/ocrText');
 const { splitStepsFromLines } = require('../utils/textUtils');
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
+const DEBUG_OCR = process.env.OCR_DEBUG === '1';
 const dlog = (...args) => {
   if (DEBUG_OCR) console.log(...args);
 };

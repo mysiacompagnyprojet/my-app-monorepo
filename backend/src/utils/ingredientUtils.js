@@ -365,7 +365,7 @@ function looksLikeNewIngredientStart(line, parseIngredientFn) {
  if (/^\d+\s*\/\s*\d+\b/.test(t)) return true;
 
  // cuillères
- if (/^\d+\s*(c\s*\.?\s*a\s*\.?\s*s|c\s*\.?\s*à\s*\.?\s*s|càs|cas)\b/i.test(t)) return true;
+ if (/^\d+\s*(c\s*\.?\s*a\s*\.?\s*s|c\s*\.?\s*à\s*\.?\s*s|càs|cas|c\s*\.?\s*a\s*\.?\s*c|c\s*\.?\s*à\s*\.?\s*c|càc|cac|cc)\b/i.test(t)) return true;
 
  //ingredients sans quantités
  const low = t.toLowerCase();
@@ -375,6 +375,27 @@ function looksLikeNewIngredientStart(line, parseIngredientFn) {
   if (typeof parseIngredientFn === 'function' && !!parseIngredientFn(t)) return true;
 
  return false;
+}
+
+function looksLikeIngredientNoteLine(line) {
+  const t = normSpaces(line);
+  const low = t.toLowerCase();
+  if (!t) return false;
+
+  if (/^.+\s+au\s+go[uû]t$/i.test(t)) return true;
+
+  // alternative simple de type "emmental ou cheddar"
+  if (
+    /\bou\b/i.test(low) &&
+    !/[.!?]/.test(t) &&
+    t.length <= 60 &&
+    !looksLikeStepLine(t) &&
+    !looksLikeStepVerbLine(t) &&
+    !looksLikeActionSentence(t)
+  ) {
+    return true;
+  }
+    return false;
 }
 
 function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
@@ -391,14 +412,60 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
 
  for (let i = 0; i < src.length; i++) {
    const cur = src[i];
-   //ajoute le 01/04/26
-   if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(cur)) {
-      console.log('[JOIN INPUT]', cur);
-    }
    const next = i + 1 < src.length ? src[i + 1] : '';
 
    const bufferHasOpenParen = buffer.includes('(') && !buffer.includes(')');
    const curLooksNewIngredientStart = looksLikeNewIngredientStart(cur, parseIngredientFn);
+
+   // garde-fou : si buffer ou cur ressemble à une étape/note, on ne fusionne pas sauvagement
+   const bufferLooksStep =
+     !!buffer &&
+     (looksLikeStepLine(buffer) || looksLikeStepVerbLine(buffer) || looksLikeActionSentence(buffer));
+
+   const curLooksStep =
+     looksLikeStepLine(cur) || looksLikeStepVerbLine(cur) || looksLikeActionSentence(cur);
+
+   if (bufferLooksStep) {
+     flush();
+     buffer = cur;
+     continue;
+   }
+
+   if (curLooksStep) {
+     flush();
+     out.push(cur);
+     continue;
+   }
+
+   if (buffer && /^\(/.test(cur)) {
+     const m = cur.match(/^\(([^)]+)\)\s*(.*)$/);
+     if (m) {
+       const note = `(${m[1]})`;
+       const rest = normSpaces(m[2] || '');
+
+       buffer = normSpaces(`${buffer} ${note}`);
+       flush();
+
+       if (rest) {
+         buffer = rest;
+       } else {
+         buffer = '';
+       }
+       continue;
+     }
+   }
+
+   if (buffer && looksLikeIngredientNoteLine(cur)) {
+     flush();
+     out.push(cur);
+     continue;
+   }
+
+   if (buffer && looksLikeIngredientNoteLine(buffer)) {
+     flush();
+     buffer = cur;
+     continue;
+   }
 
    // parenthèse ouverte => on recolle jusqu’à fermeture
    if (buffer && bufferHasOpenParen && !curLooksNewIngredientStart) {
@@ -413,11 +480,6 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
 
    // 1) "200" + "g"
    if (/^\d{1,4}$/.test(cur) && isUnitToken(next)) {
-      //ajoute le 01/04/26
-      if (/(\d+\s+\d+\/\d+|\d+\/\d+|½|⅓|⅔|¼|¾|⅛|⅜|⅝|⅞)/.test(buffer)) {
-        console.log('[JOIN BUFFER]', buffer);
-      }
-
      flush();
      buffer = `${cur} ${next}`;
      i++;
@@ -435,7 +497,7 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
      continue;
    }
 
-   // ✅ garde-fou : nouveau début ingrédient => on flush
+   // nouveau début ingrédient => flush
    if (buffer && !bufferHasOpenParen && curLooksNewIngredientStart) {
      flush();
      buffer = cur;
@@ -448,25 +510,6 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
      continue;
    }
 
-   // si la ligne commence par une parenthèse, on traite la note à part ex: "(büche) Quelques cerneaux" -> on colle "(büche)" à l’ingrédient précédent,
-    // et on garde "Quelques cerneaux" comme nouvelle ligne.
-    if (buffer && /^\(/.test(cur)) {
-      const m = cur.match(/^\(([^)]+)\)\s*(.*)$/);
-      if (m) {
-        const note = `(${m[1]})`;
-        const rest = normSpaces(m[2] || '');
-
-        buffer = normSpaces(`${buffer} ${note}`);
-        flush();
-
-        if (rest) {
-          buffer = rest; // reste devient une nouvelle ligne “ingredient-like”
-        } else {
-          buffer = '';
-        }
-        continue;
-      }
-    }
 
    // 4) heuristiques
    const bufIsNumber = /^\d{1,4}$/.test(buffer);
@@ -482,8 +525,7 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
      continue;
    }
 
-   // ✅ FIX ICI
-   if (!curLooksNewIngredientStart && !curParsesAsIngredient && (curStartsDe || curIsFragment || curIsUnit)) { //
+   if (!curLooksNewIngredientStart && !curParsesAsIngredient && (curStartsDe || curIsFragment || curIsUnit)) {
      buffer = `${buffer} ${cur}`;
      continue;
    }
@@ -495,6 +537,7 @@ function joinWrappedLinesForIngredients(lines, parseIngredientFn) {
  flush();
  return out.map((s) => normSpaces(s)).filter(Boolean);
 }
+
 
 
 module.exports = {
@@ -509,5 +552,6 @@ module.exports = {
     isUnitToken,
     isIngredientFragmentLine,
     joinWrappedLinesForIngredients,
+    looksLikeIngredientNoteLine,
     looksLikeListBullet,
 }

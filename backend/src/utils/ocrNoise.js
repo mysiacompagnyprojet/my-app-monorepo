@@ -13,8 +13,8 @@ const { looksLikePlausibleTitleLine } = require('./titleUtils');
 const { looksLikeDateNoise, looksLikeCountersNoise, looksLikeSocialNoise, isUnitToken } = require('./ingredientUtils');
 const { looksLikeStepLine, looksLikeActionSentence, looksLikeStepVerbLine } = require('./heuristics');
 
-const DEBUG_OCR = process.env.OCR_DEBUG !== 'production';
-const dlog = (...args) => { if (DEBUG_OCR) console.log(...args); };
+const DEBUG_VERBOSE = process.env.OCR_VERBOSE === '1';
+const dlog = (...args) => { if (DEBUG_VERBOSE) console.log(...args); };
 
 function looksLikeBookRefNoise(line) {
   const t = normSpaces(line).toLowerCase();
@@ -78,14 +78,59 @@ function looksLikeNutritionMetaLine(line) {
   if (!t) return false;
 
   return (
-    /^information nutritionnelle\s*:?\s*$/i.test(t) ||
+    /^information\s+nutritionnelle\s*:?\s*$/i.test(t) ||
+    /^valeurs?\s+nutritionnelles?\s*:?\s*$/i.test(t) ||
+    /^nutrition\s*:?\s*$/i.test(t) ||
+
     /^-?\s*calories?\s*[:\-]/i.test(t) ||
+    /^-?\s*kcal\b/i.test(t) ||
     /^-?\s*prot[ée]ines?\s*[:\-]/i.test(t) ||
-    /^-?\s*mati[èe]res?\s+grasses?\s*[:\-]/i.test(t) ||
     /^-?\s*glucides?\s*[:\-]/i.test(t) ||
     /^-?\s*lipides?\s*[:\-]/i.test(t) ||
-    /^-?\s*kcal\b/i.test(t)
+    /^-?\s*mati[èe]res?\s+grasses?\s*[:\-]/i.test(t) ||
+    /^-?\s*fibres?\s*[:\-]/i.test(t) ||
+    /^-?\s*sucre?s?\s*[:\-]/i.test(t) ||
+    /^-?\s*sel\s*[:\-]/i.test(t)
   );
+}
+
+function containsNutritionMeta(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /\binformation nutritionnelle\b/i.test(t) ||
+    /\bvaleurs?\s+nutritionnelles?\b/i.test(t) ||
+    /\bnutrition\b/i.test(t) ||
+    /\bcalories?\b/i.test(t) ||
+    /\bkcal\b/i.test(t) ||
+    /\bprot[ée]ines?\b/i.test(t) ||
+    /\bglucides?\b/i.test(t) ||
+    /\blipides?\b/i.test(t) ||
+    /\bmati[èe]res?\s+grasses?\b/i.test(t) ||
+    /\bfibres?\b/i.test(t) ||
+    /\bsucre?s?\b/i.test(t) ||
+    /\bsel\b/i.test(t)
+  );
+}
+
+function containsTimeMeta(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  return (
+    /\btemps\b/i.test(t) ||
+    /\bdur[ée]e?\b/i.test(t) ||
+    /\bpr[ée]paration\b/i.test(t) ||
+    /\bcuisson\b/i.test(t) ||
+    /\brepos\b/i.test(t) ||
+    /\bmarinade\b/i.test(t) ||
+    /\b\d+\s*(?:min|minutes?|h|heures?)\b/i.test(t)
+  );
+}
+
+function looksLikeCallToActionNoise(line) {
+  return looksLikeCtaOrEngagementNoise(line)
 }
 
 function looksLikeTimeMetaLine(line) {
@@ -94,13 +139,55 @@ function looksLikeTimeMetaLine(line) {
 
   return (
     /^temps\s*:?\s*$/i.test(t) ||
+    /^temps\s+(?:de\s+)?(?:pr[ée]paration|cuisson)\s*:?\s*$/i.test(t) ||
+    /^dur[ée]e?\s*:?\s*$/i.test(t) ||
+
     /^pr[ée]paration\s*[:\-]/i.test(t) ||
     /^cuisson\s*[:\-]/i.test(t) ||
-    /^pr[ée]paration\s*:\s*\d+/i.test(t) ||
-    /^cuisson\s*:\s*\d+/i.test(t) ||
-    /\bpr[ée]paration\s*:\s*\d+.*\bcuisson\s*:\s*\d+/i.test(t)
+    /^repos\s*[:\-]/i.test(t) ||
+    /^marinade\s*[:\-]/i.test(t) ||
+
+    /\bpr[ée]paration\s*:\s*\d+/i.test(t) ||
+    /\bcuisson\s*:\s*\d+/i.test(t) ||
+    /\brepos\s*:\s*\d+/i.test(t) ||
+    /\b\d+\s*(?:min|minutes?|h|heures?)\b.*\b(?:pr[ée]paration|cuisson|repos)\b/i.test(t)
   );
 }
+
+function looksLikeCtaOrEngagementNoise(line) {
+  const t = normSpaces(line).toLowerCase();
+  if (!t) return false;
+
+  if (looksLikeStepLine(t) || looksLikeStepVerbLine(t) || looksLikeActionSentence(t)) {
+    return false;
+  }
+
+  return (
+    /\b(commente|commenter|partage|partager|abonne|abonner|sauvegarde|enregistre|like|aime|suivez|suis-moi|fais moi savoir|fais-moi savoir|dis moi|dis-moi)\b/i.test(t) ||
+    /\b(lien dans ma bio|link in bio|follow for more|save recipe|save this post)\b/i.test(t)
+  );
+}
+
+function looksLikeBrokenOcrPromoLine(line) {
+  const t = normSpaces(line);
+  const low = t.toLowerCase();
+  if (!t) return false;
+
+  if (parseOcrIngredient(t)) return false;
+  if (looksLikeStepLine(t) || looksLikeStepVerbLine(t) || looksLikeActionSentence(t)) return false;
+  if (looksLikeNutritionMetaLine(t) || looksLikeTimeMetaLine(t)) return false;
+
+  const words = t.split(/\s+/).filter(Boolean);
+
+  return (
+    words.length >= 5 &&
+    words.length <= 18 &&
+    !/\d+\s*(g|kg|mg|ml|cl|dl|l|càc|càs)\b/i.test(low) &&
+    /[a-zà-öø-ÿ]/i.test(low) &&
+    /\b(ro+o+|ocotte|tosto)\b/i.test(low)
+  );
+}
+
 
 
 //ajout du 22/04
@@ -137,28 +224,30 @@ function looksLikeNonIngredientGarbage(line) {
 
   const low = t.toLowerCase();
 
-  if (/^(directions?|préparation|preparation|préparer la pâte|preparer la pate|cuisson et finition|astuce)\s*:?\s*$/i.test(t)) return true;
+  if (looksLikeUiDisplayNameNoise(t)) return true;
+  if (looksLikeNutritionMetaLine(t)) return true;
+  if (looksLikeTimeMetaLine(t)) return true;
+  if (looksLikeCtaOrEngagementNoise(t)) return true;
+  if (looksLikeBrokenOcrPromoLine(t)) return true;
 
+  if (/^(directions?|préparation|preparation|préparer la pâte|preparer la pate|cuisson et finition|astuce)\s*:?\s*$/i.test(t)) return true;
   if (/^(préchauffez|prechauffez|versez|ajoutez|incorporez|incorporez progressivement|mélangez|melangez|laissez|dégustez|degustez)\b/i.test(low)) return true;
 
-  if (/^\d+\s+[a-z]$/i.test(low)) return true; // ex: 607 Q
-  if (/^[a-z]$/i.test(low)) return true;       // ex: Q
-  if (looksLikeUiDisplayNameNoise(t)) return true;
-
-  if (/^\d+\s*[a-z]?$/i.test(low)) return true;  // ex: 607, 607 Q
-
+  if (/^\d+\s+[a-z]$/i.test(low)) return true;
+  if (/^[a-z]$/i.test(low)) return true;
+  if (/^\d+\s*[a-z]?$/i.test(low)) return true;
 
   if (/^environ\s+\d+(?:[.,]\d+)?\s*(kg|g|mg|l|dl|cl|ml)\b/i.test(low)) return true;
   if (/\b(directions?|préparation|preparation|astuce|quand)\b/i.test(low)) return true;
   if (/\b(préchauffez|prechauffez|versez|ajoutez|incorporez|mélangez|laissez|dégustez|degustez)\b/i.test(low)) return true;
 
-  //ajoute le 30/03/26 a 13h56
-  if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true;      // ex: 10,5 K
-  if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true; // ex: 302 10,5 K
-  if (/^\d{1,4}\s+[a-z]$/i.test(low)) return true; // ex: 607 Q
+  if (/^\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true;
+  if (/^\d{1,4}\s+\d{1,4}(?:[.,]\d+)?\s*[kK]\s*$/i.test(low)) return true;
+  if (/^\d{1,4}\s+[a-z]$/i.test(low)) return true;
 
   return false;
 }
+
 
 function looksLikeBareIngredientLine(line) {
   const t = normSpaces(line);
@@ -166,6 +255,10 @@ function looksLikeBareIngredientLine(line) {
 
   const low = t.toLowerCase();
 
+  if (looksLikeNutritionMetaLine(t)) return false;
+  if (looksLikeTimeMetaLine(t)) return false;
+  if (looksLikeCtaOrEngagementNoise(t)) return false;
+  if (looksLikeBrokenOcrPromoLine(t)) return false;
   if (looksLikeNonIngredientGarbage(t)) return false;
   if (looksLikeStatusBarNoise(t)) return false;
   if (looksLikeDateNoise(t)) return false;
@@ -483,6 +576,16 @@ function smartFilterWithTrashFromText(rawText) {
       continue;
     }
 
+    if (looksLikeCtaOrEngagementNoise(l)) {
+      trash.push(l);
+      continue;
+    }
+
+    if (looksLikeBrokenOcrPromoLine(l)) {
+      trash.push(l);
+      continue;
+    }
+
     if (looksLikeEditorialNoise(l)) {
       trash.push(l);
       continue;
@@ -519,6 +622,11 @@ module.exports = {
   looksLikeEditorialNoise,
   looksLikeNutritionMetaLine,
   looksLikeTimeMetaLine,
+  containsNutritionMeta,
+  containsTimeMeta,
+  looksLikeCallToActionNoise,
+  looksLikeCtaOrEngagementNoise,
+  looksLikeBrokenOcrPromoLine,
   looksLikeUiDisplayNameNoise,
   looksLikeNonIngredientGarbage,
   looksLikeBareIngredientLine,
