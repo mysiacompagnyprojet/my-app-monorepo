@@ -17,6 +17,73 @@ const { cleanParsedIngredientName, shouldDropParsedIngredientRow } = require('./
 
 const { splitCommaSeparatedNoQty, splitMergedIngredientLine } = require('./splitHelpers');
 
+
+function classifyParenthesisContent(content) {
+  const t = normSpaces(content);
+  const low = normalizeLoose(t);
+
+  if (!t) return 'none';
+
+  // Bruit social / marketing / commentaire perso
+  if (
+    /\b(bio|abonne|abonnez|like|commentaire|commente|partage|sauvegarde|instagram|lien|profil)\b/i.test(low) ||
+    /\b(j adore|j'aime|trop bon|delicieux|recette facile|simple et rapide)\b/i.test(low)
+  ) {
+    return 'noise';
+  }
+
+  // Quantité / unité / précision exploitable
+  if (
+    /\b\d+\s*(g|kg|mg|ml|cl|l|t[eê]tes?|gousses?|pi[eè]ces?|tomates?)\b/i.test(t) ||
+    /\b\d+\s*(?:à|a|-|–)\s*\d+\b/i.test(t) ||
+    /\benviron\b/i.test(t)
+  ) {
+    return 'useful';
+  }
+
+  // Alternative / précision cuisine utile
+  if (
+    /\bou\b/i.test(t) ||
+    /\bfacultatif\b/i.test(t) ||
+    /\bau choix\b/i.test(t) ||
+    /\bsi besoin\b/i.test(t) ||
+    /\bpersil\b/i.test(t) ||
+    /\bcoriandre\b/i.test(t)
+  ) {
+    return 'useful';
+  }
+
+  return 'noise';
+}
+
+function shouldMirrorFullIngredientLineToNotes(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  if (/^\s*(?:\d+(?:[.,]\d+)?|\d+\s*\/\s*\d+|½|⅓|⅔|¼|¾)\s+nids?\s+de\b/i.test(t)) {
+    return true;
+  }
+  
+  // Alternatives hors parenthèses : utile à garder
+  if (/\bou\s+\d+\s*[-–]\s*\d+\b/i.test(t)) return true;
+
+  const matches = [...t.matchAll(/\(([^)]+)\)/g)];
+  if (!matches.length) return false;
+
+  return matches.some((m) => classifyParenthesisContent(m[1]) === 'useful');
+}
+
+
+function pushUniqueNote(extraNotes, note) {
+  const clean = normSpaces(note);
+  if (!clean) return;
+
+  const exists = extraNotes.some((n) => normSpaces(n).toLowerCase() === clean.toLowerCase());
+  if (!exists) extraNotes.push(clean);
+}
+
+
+
 function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog }) {
   const extraNotes = [];
 
@@ -27,6 +94,9 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
       .map((obj) => {
         const l0 = String(obj?.text || '').trim();
         let l = stripBulletPrefix(l0).trim();
+        if (shouldMirrorFullIngredientLineToNotes(l)) {
+          pushUniqueNote(extraNotes, l);
+        }
         if (!l) return null;
 
         l = l.replace(/^[.■]+/g, '').trim();
@@ -115,13 +185,7 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
 
         row.name = String(row.name || '').replace(/[↑■]+/g, '').trim();
 
-        const paren = row.name.match(/\(([^)]+)\s*$/);
-        if (paren?.[1]) {
-          const noteFromParen = paren[1].trim();
-          row.name = row.name.replace(/\s*\([^)]+\)\s*$/, '').trim();
-          extraNotes.push(noteFromParen);
-          row.note = noteFromParen;
-        }
+        row.name = row.name.replace(/\s*\([^)]*\)\s*$/g, '').trim();
 
         if (row.unit && typeof row.name === 'string') {
           row.name = row.name.replace(new RegExp(`\\s+${row.unit}$`, 'i'), '').trim();

@@ -241,8 +241,9 @@ function looksLikeShortIngredientContinuation(line) {
 
   if (/^(cocktail|cerise|noir|blanc|fra[iî]che?s?|s[eé]ch[ée]e?s?)$/i.test(t)) return true;
 
-  const words = t.split(/\s+/).filter(Boolean);
-  return words.length <= 2;
+  const GENERIC_CONTINUATIONS = /^(coktail|cerise|cerises|noir|noire|noires|blanc|blanche|blancs|blanches|fra[iî]che?s?|s[eé]ch[ée]e?s?)$/i;
+  if (GENERIC_CONTINUATIONS.test(t)) return true;
+  return false;
 }
 
 function looksLikeQuantifiedIngredientLine(line) {
@@ -309,6 +310,105 @@ function buildWrappedIngredientLinesFromSource(sourceLines = []) {
   return out;
 }
 
+function buildWrappedOpenParenthesisIngredientLinesFromSource(sourceLines = []) {
+  const out = [];
+
+  for (let i = 0; i < sourceLines.length - 1; i++) {
+    const current = normSpaces(sourceLines[i]);
+    const next = normSpaces(sourceLines[i + 1]);
+
+    if (!current || !next) continue;
+
+    const cleanCurrent = stripBulletPrefix(current).trim();
+    const cleanNext = stripBulletPrefix(next).trim();
+
+    if (!looksLikeQuantifiedIngredientLine(cleanCurrent)) continue;
+    if (!cleanCurrent.includes('(')) continue;
+    if (cleanCurrent.includes(')')) continue;
+    if (!/\)$/.test(cleanNext)) continue;
+    if (/[.!?]$/.test(cleanCurrent)) continue;
+
+    out.push(normSpaces(`${cleanCurrent} ${cleanNext}`));
+    i++;
+  }
+
+  return out;
+}
+
+function hasUsefulParenthesis(line) {
+  const t = normSpaces(line);
+  if (!/\([^)]{3,}\)/.test(t)) return false;
+
+  const inside = [...t.matchAll(/\(([^)]+)\)/g)]
+    .map((m) => normSpaces(m[1]))
+    .join(' ');
+
+  if (!inside) return false;
+
+  if (/\b(bio|abonne|abonnez|like|commentaire|commente|instagram|profil|lien)\b/i.test(inside)) {
+    return false;
+  }
+
+  return (
+    /\d/.test(inside) ||
+    /\bou\b/i.test(inside) ||
+    /\bsi besoin\b/i.test(inside) ||
+    /\benviron\b/i.test(inside) ||
+    /\bfacultatif\b/i.test(inside) ||
+    /\bpersil\b/i.test(inside) ||
+    /\bcoriandre\b/i.test(inside)
+  );
+}
+
+function stripParenthesisForCompare(line) {
+  return normSpaces(line)
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\bd['’]/gi, 'de ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function restoreUsefulParenthesizedIngredientLines({ ingredientLines, notesLines, sourceLines }) {
+  let ingredients = [...ingredientLines];
+  let notes = [...notesLines];
+
+  const sourceUseful = (sourceLines || [])
+    .map(normSpaces)
+    .filter(Boolean)
+    .filter(hasUsefulParenthesis);
+
+  for (const fullLine of sourceUseful) {
+    const comparableFull = stripParenthesisForCompare(fullLine);
+
+    const idx = ingredients.findIndex((line) => {
+      const comparableIngredient = stripParenthesisForCompare(line);
+      return comparableFull.includes(comparableIngredient);
+    });
+
+    if (idx >= 0) {
+      ingredients[idx] = fullLine;
+    }
+
+    if (!notes.some((n) => normSpaces(n).toLowerCase() === fullLine.toLowerCase())) {
+      notes.push(fullLine);
+    }
+
+    notes = notes.filter((note) => {
+      const n = normSpaces(note);
+      if (!n) return false;
+      if (fullLine.includes(`(${n})`)) return false;
+      return true;
+    });
+  }
+
+  return {
+    ingredientLines: ingredients,
+    notesLines: notes,
+  };
+}
+
+
 function cleanFinalSplit(split, sourceLines = []) {
   let ingredientLines = repairSplitIngredientLines(split.ingredientLines || [])
     .filter((l) => !looksLikeCommentUiLine(l));
@@ -342,6 +442,43 @@ function cleanFinalSplit(split, sourceLines = []) {
       notesLines.push(wrapped);
     }
   }
+
+  const wrappedParenFromSource = buildWrappedOpenParenthesisIngredientLinesFromSource(sourceLines);
+
+  for (const wrapped of wrappedParenFromSource) {
+    const wrappedNorm = normSpaces(wrapped).toLowerCase();
+
+    ingredientLines = ingredientLines.filter((line) => {
+      const t = normSpaces(stripBulletPrefix(line)).toLowerCase();
+      if (!t) return false;
+      if (wrappedNorm.includes(t) && t.length < wrappedNorm.length) return false;
+      return true;
+    });
+
+    notesLines = notesLines.filter((line) => {
+      const t = normSpaces(stripBulletPrefix(line)).toLowerCase();
+      if (!t) return false;
+      if (wrappedNorm.includes(t) && t.length < wrappedNorm.length) return false;
+      return true;
+    });
+
+    if (!ingredientLines.some((line) => normSpaces(line).toLowerCase() === wrappedNorm)) {
+      ingredientLines.push(wrapped);
+    }
+
+    if (!notesLines.some((line) => normSpaces(line).toLowerCase() === wrappedNorm)) {
+      notesLines.push(wrapped);
+    }
+  }
+
+  const restoredParentheses = restoreUsefulParenthesizedIngredientLines({
+    ingredientLines,
+    notesLines,
+    sourceLines,
+  });
+
+  ingredientLines = restoredParentheses.ingredientLines;
+  notesLines = restoredParentheses.notesLines;
 
   const servingsFromLines = extractServingsFromLines(sourceLines);
 
