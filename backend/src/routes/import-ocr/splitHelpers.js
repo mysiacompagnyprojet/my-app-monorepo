@@ -13,11 +13,6 @@ const { looksLikeBareIngredientLine, looksLikeNonIngredientGarbage } = require('
 const { normSpaces, stripBulletPrefix } = require('../../utils/stringUtils');
 
 
-
-
-
-
-
 function splitCommaSeparatedNoQty(line) {
   const raw = stripBulletPrefix(line);
   if (!raw) return [{ text: line, noQtyList: false }];
@@ -408,6 +403,102 @@ function restoreUsefulParenthesizedIngredientLines({ ingredientLines, notesLines
   };
 }
 
+function rescueQuantifiedSeasoningLinesFromNotes(notesLines = []) {
+  return (notesLines || [])
+    .map(normSpaces)
+    .filter(Boolean)
+    .filter((line) =>
+      /^\d+(?:[.,]\d+)?\s+pinc[ée]es?\s+(?:de\s+)?(?:sel|poivre)(?:\s+ou\s+sel\s+fin)?$/i.test(line)
+    )
+    .map((line) =>
+      normSpaces(
+        line
+          .replace(/\bpincées\b/i, 'pincée')
+          .replace(/\bsel\s+ou\s+sel\s+fin\b/i, 'sel')
+      )
+    );
+}
+
+function rescueExplicitIngredientLinesFromSource(sourceLines = []) {
+  const out = [];
+
+  for (let i = 0; i < sourceLines.length; i++) {
+    const current = normSpaces(sourceLines[i]);
+    const next = normSpaces(sourceLines[i + 1]);
+
+    const clean = stripBulletPrefix(current)
+      .replace(/^\.+/, '')
+      .trim();
+
+    if (!clean) continue;
+
+    let m = clean.match(/^jus\s+de\s+(\d+(?:[.,]\d+)?)\s+(.+)$/i);
+    if (m) {
+      out.push(`${m[1]} ${m[2]}`);
+      out.push(clean);
+      continue;
+    }
+
+    m = clean.match(/^(\d+(?:[.,]\d+)?)\s+(.+?)\s*&\s*(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|dl|cl|ml|a)\s+de\s+(.+?)(?:\s*\([^)]*\))?$/i);
+    if (m) {
+      out.push(`${m[1]} ${m[2]}`);
+      if (m[4].toLowerCase() !== 'a') {
+        out.push(`${m[3]} ${m[4]} de ${m[5]}`);
+      }
+      out.push(clean);
+      continue;
+    }
+
+    m = clean.match(/^(\d+(?:[.,]\d+)?)\s+c\.?\s*[àa]\s*caf[ée]?\s+de\s+(.+?)(?:\s*\([^)]*\))?\s*,?\s*sel\s*&\s*$/i);
+    if (m) {
+      out.push(`${m[1]} càc de ${m[2]}`);
+      out.push('sel');
+      if (/^poivre$/i.test(next)) out.push('poivre');
+      out.push(clean);
+      continue;
+    }
+
+    if (/^\d+(?:[.,]\d+)?\s+cm\s+de\s+/i.test(clean)) {
+      out.push(clean);
+      continue;
+    }
+
+    if (/^\d+(?:[.,]\d+)?\s+avocats?\b/i.test(clean)) {
+      out.push(clean);
+      continue;
+    }
+  }
+
+  return out;
+}
+
+function addMissingIngredientLinesFromSource({ ingredientLines, notesLines, sourceLines }) {
+  let ingredients = [...ingredientLines];
+  let notes = [...notesLines];
+
+  for (const line of rescueExplicitIngredientLinesFromSource(sourceLines)) {
+    const clean = normSpaces(line);
+    if (!clean) continue;
+
+    if (!ingredients.some((x) => normSpaces(x).toLowerCase() === clean.toLowerCase())) {
+      ingredients.push(clean);
+    }
+
+    if (
+      /^jus\s+de\b/i.test(clean) ||
+      /\([^)]*\)/.test(clean) ||
+      /\bavocats?\s+m[uû]rs?\s+[àa]\s+point\b/i.test(clean) ||
+      /\bgingembre\s+frais\s*\(/i.test(clean)
+    ) {
+      if (!notes.some((x) => normSpaces(x).toLowerCase() === clean.toLowerCase())) {
+        notes.push(clean);
+      }
+    }
+  }
+
+  return { ingredientLines: ingredients, notesLines: notes };
+}
+
 
 function cleanFinalSplit(split, sourceLines = []) {
   let ingredientLines = repairSplitIngredientLines(split.ingredientLines || [])
@@ -480,6 +571,23 @@ function cleanFinalSplit(split, sourceLines = []) {
   ingredientLines = restoredParentheses.ingredientLines;
   notesLines = restoredParentheses.notesLines;
 
+  const seasoningFromNotes = rescueQuantifiedSeasoningLinesFromNotes(notesLines);
+
+  for (const line of seasoningFromNotes) {
+    if (!ingredientLines.some((x) => normSpaces(x).toLowerCase() === line.toLowerCase())) {
+      ingredientLines.push(line);
+    }
+  }
+
+  const rescuedFromSource = addMissingIngredientLinesFromSource({
+    ingredientLines,
+    notesLines,
+    sourceLines,
+  });
+
+  ingredientLines = rescuedFromSource.ingredientLines;
+  notesLines = rescuedFromSource.notesLines;
+  
   const servingsFromLines = extractServingsFromLines(sourceLines);
 
   return {

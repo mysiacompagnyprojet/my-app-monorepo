@@ -82,19 +82,41 @@ function pushUniqueNote(extraNotes, note) {
   if (!exists) extraNotes.push(clean);
 }
 
+function shouldMirrorDescriptorLineToNotes(line) {
+  const t = normSpaces(line);
+  return /^\d+\s+œufs?\s+(moyens?|gros|grosses|petits?|petites?)$/i.test(t);
+}
 
+function ingredientDedupeKey(row) {
+  return normalizeLoose(`${row?.name || ''}|${row?.quantity || 0}|${row?.unit || ''}`);
+}
+
+function dedupeExactParsedIngredients(rows) {
+  const seen = new Set();
+  const out = [];
+
+  for (const row of rows || []) {
+    const key = ingredientDedupeKey(row);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+
+  return out;
+}
 
 function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog }) {
   const extraNotes = [];
 
-  const ingredients = beautifyIngredients(
+  const ingredients = dedupeExactParsedIngredients(beautifyIngredients(
+    beautifyIngredients(
     (Array.isArray(ingredientLines) ? ingredientLines : [])
       .flatMap((l) => splitMergedIngredientLine(l, trash))
       .flatMap((l) => splitCommaSeparatedNoQty(l))
       .map((obj) => {
         const l0 = String(obj?.text || '').trim();
         let l = stripBulletPrefix(l0).trim();
-        if (shouldMirrorFullIngredientLineToNotes(l)) {
+        if (shouldMirrorFullIngredientLineToNotes(l) || shouldMirrorDescriptorLineToNotes(l)) {
           pushUniqueNote(extraNotes, l);
         }
         if (!l) return null;
@@ -214,8 +236,9 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
       })
       .flat()
       .filter(Boolean)
-  );
-
+  )
+  ));
+  
   return {
     ingredients,
     extraNotes,

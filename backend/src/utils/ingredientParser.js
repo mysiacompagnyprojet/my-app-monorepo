@@ -93,9 +93,61 @@ function parseQuantityFromParenthesisIngredient(line) {
 
 function cleanParsedNameLocal(name) {
   let s = postProcessIngredientName(name);
+
   s = s.replace(/^[.\s]+de\s+/i, '');
+  s = s.replace(/^d['’]\s*/i, '');
+  s = s.replace(/^de\s+/i, '');
   s = s.replace(/^[.\s]+/g, '');
+
+  s = s.replace(/\s+pour\s+(les\s+)?(boulettes?|sauce)\s*$/i, '');
+
+  if (/^sel\s+ou\s+sel\s+fin$/i.test(s)) return 'sel';
+  if (/^poivre\b/i.test(s)) return 'poivre';
+
   return normSpaces(s);
+}
+
+const CONTAINER_UNITS = {
+  gousse: 'gousse',
+  gousses: 'gousse',
+  tranche: 'tranche',
+  tranches: 'tranche',
+  sachet: 'sachet',
+  sachets: 'sachet',
+  verre: 'verre',
+  verres: 'verre',
+  tasse: 'tasse',
+  tasses: 'tasse',
+  botte: 'botte',
+  bottes: 'botte',
+  bâton: 'bâton',
+  bâtons: 'bâton',
+  baton: 'bâton',
+  batons: 'bâton',
+  nid: 'nid',
+  nids: 'nid',
+  pincée: 'pincée',
+  pincées: 'pincée',
+  pincee: 'pincée',
+  pincees: 'pincée',
+  cm: 'cm',
+  centimètre: 'cm',
+  centimètres: 'cm',
+  centimetre: 'cm',
+  centimetres: 'cm',
+  pièce: 'pièce',
+  pièces: 'pièce',
+  piece: 'pièce',
+  pieces: 'pièce',
+};
+
+const CONTAINER_UNIT_RE = Object.keys(CONTAINER_UNITS)
+.sort((a, b) => b.length - a.length)
+.join('|');
+
+function normalizeContainerUnit(unit) {
+  const key = normSpaces(unit).toLowerCase();
+  return CONTAINER_UNITS[key] || '';
 }
 
 function parseOcrIngredient(line) {
@@ -314,7 +366,7 @@ function parseOcrIngredient(line) {
   // unités “humaines” : gousse, tranche, nid, bâton, botte...
   m = l.match(
     new RegExp(
-      `^${QTY_USED}\\s+(gousses?|tranches?|sachets?|verres?|tasses?|bottes?|b[âa]tons?|nids?|pi[nñ]c[ée]es?|pinc[ée]es?|pièces?|pieces?)\\s+(?:de\\s+|d['’]\\s*)?(.+)$`,
+      `^${QTY_USED}\\s+(?<container>${CONTAINER_UNIT_RE})\\s+(?:de\\s+|d['’]\\s*)?(?<name>.+)$`,
       'i'
     )
   );
@@ -322,17 +374,13 @@ function parseOcrIngredient(line) {
   if (m) {
     const qtyRaw = normalizeQuantityRawForDisplay(m[1]);
     const qtyNum = parseQuantityToNumber(m[1]);
-    const rawUnit = normSpaces(m[2]).toLowerCase();
 
-    let unit = normalizeUnit(m[2]);
-    if (/^bottes?$/.test(rawUnit)) unit = 'botte';
-    if (/^b[âa]tons?$/.test(rawUnit)) unit = 'bâton';
-    if (/^nids?$/.test(rawUnit)) unit = 'nid';
-
-    const name = cleanParsedNameLocal(m[3]);
+    const unit = normalizeContainerUnit(firstDefinedGroup(m.groups, ['container']));
+    const name = cleanParsedNameLocal(firstDefinedGroup(m.groups, ['name']));
 
     if (
       name &&
+      unit &&
       !looksLikeActionSentence(name) &&
       !looksLikeStepVerbLine(name) &&
       !looksLikeStepLine(name)
@@ -341,7 +389,7 @@ function parseOcrIngredient(line) {
         name,
         quantity: qtyNum ?? 0,
         quantityRaw: qtyRaw || undefined,
-        unit: unit || '',
+        unit,
       };
     }
   }

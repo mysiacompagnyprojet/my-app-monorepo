@@ -19,6 +19,26 @@ function cleanParsedIngredientName(name) {
   s = s.replace(/\s+ou\s+autre\s+[a-zà-öø-ÿœ' -]+$/i, '');
   s = s.replace(/\s+ou\s+herbes\s*$/i, '');
   s = s.replace(/\s*[:;,*]+$/g, '');
+  s = s.replace(/^faline$/i, 'farine');
+  s = s.replace(/^parmesan\s+râp$/i, 'parmesan râpé');
+  s = s.replace(/^œufs?\s+(moyens?|gros|grosses|petits?|petites?)$/i, 'œufs');
+  s = s.replace(/\s+pour\s+(les\s+)?(boulettes?|sauce)\s*$/i, '');
+
+  if (/^farine\s+d['’]huile\s+d['’]olive$/i.test(s)) {
+    s = 'farine';
+  }
+
+  if (/^sel\s+ou\s+sel\s+fin$/i.test(s)) {
+    s = 'sel';
+  }
+
+  if (/^poivre\b/i.test(s)) {
+    s = 'poivre';
+  }
+
+  s = s.replace(/^avocats?\s+m[uû]rs?\s+[àa]\s+point$/i, 'avocats');
+  s = s.replace(/^huile\s+d['’]olive\s+extra\s+vierge$/i, "huile d'olive");
+  s = s.replace(/^gingembre\s+frais\s*\([^)]*\)$/i, 'gingembre frais');
 
   return normSpaces(s);
 }
@@ -34,6 +54,13 @@ function shouldDropParsedIngredientRow(row) {
   if (/ajouter un commentaire/i.test(name)) return true;
   if (/^quelques gousses d['’]ail\b.*orni/i.test(name)) return true;
   if (/^(assaisonnement|assaisonement|cuisson|marinade|sauce)\b.*:$/i.test(name)) return true;
+  if (/[♡❤️♥]/.test(name)) return true;
+  if (/\bw\s+\d{1,3}\s*[-–]\s*\d{1,3}\b/i.test(name)) return true;
+  if (/^[^a-zà-öø-ÿœ]*$/i.test(name)) return true;
+  if (/^rs\s*faktory\.?$/i.test(name)) return true;
+  if (/^faktory$/i.test(name)) return true;
+  if (/^jumbo\s+expedition$/i.test(name)) return true;
+  if (/dr[oó]nar/i.test(name)) return true;
 
   return false;
 }
