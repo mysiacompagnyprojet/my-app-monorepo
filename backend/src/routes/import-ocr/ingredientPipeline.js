@@ -91,6 +91,25 @@ function ingredientDedupeKey(row) {
   return normalizeLoose(`${row?.name || ''}|${row?.quantity || 0}|${row?.unit || ''}`);
 }
 
+function ingredientSemanticKey(row) {
+  const cleanedName = cleanParsedIngredientName(row?.name || '');
+  return normalizeLoose(`${cleanedName}|${row?.quantity || 0}|${row?.unit || ''}`);
+}
+
+function dedupeSemanticParsedIngredients(rows) {
+  const seen = new Set();
+  const out = [];
+
+  for (const row of rows || []) {
+    const key = ingredientSemanticKey(row);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(row);
+  }
+
+  return out;
+}
+
 function dedupeExactParsedIngredients(rows) {
   const seen = new Set();
   const out = [];
@@ -108,7 +127,7 @@ function dedupeExactParsedIngredients(rows) {
 function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog }) {
   const extraNotes = [];
 
-  const ingredients = dedupeExactParsedIngredients(beautifyIngredients(
+  const ingredients = dedupeSemanticParsedIngredients(beautifyIngredients(
     beautifyIngredients(
     (Array.isArray(ingredientLines) ? ingredientLines : [])
       .flatMap((l) => splitMergedIngredientLine(l, trash))
@@ -221,7 +240,12 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
           return null;
         }
 
+        const beforeFinalClean = row.name;
         row.name = cleanParsedIngredientName(row.name);
+
+        if (beforeFinalClean && row.name && beforeFinalClean !== row.name) {
+          pushUniqueNote(extraNotes, l);
+        }
 
         if (shouldDropParsedIngredientRow(row)) {
           return null;

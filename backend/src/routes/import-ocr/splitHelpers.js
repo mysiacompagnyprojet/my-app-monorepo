@@ -140,6 +140,24 @@ function scoreSplitQuality(split) {
   };
 }
 
+function uniqLines(lines = []) {
+  const seen = new Set();
+  const out = [];
+
+  for (const raw of lines || []) {
+    const line = normSpaces(raw);
+    if (!line) continue;
+
+    const key = line.toLowerCase();
+    if (seen.has(key)) continue;
+
+    seen.add(key);
+    out.push(line);
+  }
+
+  return out;
+}
+
 function rescueWrappedIngredientFragmentsOnly(split) {
   const ing = Array.isArray(split?.ingredientLines) ? [...split.ingredientLines] : [];
   const notes = Array.isArray(split?.notesLines) ? split.notesLines : [];
@@ -439,13 +457,21 @@ function rescueExplicitIngredientLinesFromSource(sourceLines = []) {
       continue;
     }
 
-    m = clean.match(/^(\d+(?:[.,]\d+)?)\s+(.+?)\s*&\s*(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|dl|cl|ml|a)\s+de\s+(.+?)(?:\s*\([^)]*\))?$/i);
+    m = clean.match(/^(\d+(?:[.,]\d+)?)\s+(.+?)\s*(?:&|et)\s*(\d+(?:[.,]\d+)?)\s*(kg|g|mg|l|dl|cl|ml|a)\s+de\s+(.+?)(?:\s*\([^)]*)?$/i);
+
     if (m) {
       out.push(`${m[1]} ${m[2]}`);
-      if (m[4].toLowerCase() !== 'a') {
-        out.push(`${m[3]} ${m[4]} de ${m[5]}`);
-      }
-      out.push(clean);
+
+      const unit = m[4].toLowerCase() === 'a' ? 'g' : m[4];
+
+      const name = normSpaces(
+        m[5]
+        .replace(/\s*\([^)]*$/g, '')
+        .replace(/\s*\([^)]*\)\s*$/g, '')
+      );
+
+      if (name) out.push(`${m[3]} ${unit} de ${name}`);
+
       continue;
     }
 
@@ -497,6 +523,50 @@ function addMissingIngredientLinesFromSource({ ingredientLines, notesLines, sour
   }
 
   return { ingredientLines: ingredients, notesLines: notes };
+}
+
+function looksLikePollutedRescueLine(line) {
+  const t = normSpaces(line);
+  if (!t) return true;
+
+  if (/rs\s*faktory|faktory|jumbo\s+expedition|notice\s+sur\s+l['’]ia|dr[oó]nar/i.test(t)) return true;
+  if (/[♡❤️♥◆≈~<>]/.test(t)) return true;
+
+  if (/\bpour\s+le\s*$/i.test(t)) return true;
+  if (/\(\s*pour\s+le\s*$/i.test(t)) return true;
+
+  if (/\b&\s*\d+\s*a\s+de\b/i.test(t)) return true;
+
+  if (/^jus\s+de\s+\d+/i.test(t)) return true; // on garde "2 Citrons", pas "Jus de 2 Citrons"
+
+  if (/\bmiel\b/i.test(t) && /\bsel\s*&\s*$/i.test(t)) return true;
+
+  return false;
+}
+
+function cleanRescuedIngredientLines(lines = []) {
+  const out = [];
+  const seenParsed = new Set();
+
+  for (const raw of lines || []) {
+    const line = normSpaces(raw);
+    if (!line) continue;
+    if (looksLikePollutedRescueLine(line)) continue;
+
+    const parsed = parseOcrIngredient(line);
+    const key = parsed
+      ? normSpaces(`${parsed.name}|${parsed.quantity || 0}|${parsed.unit || ''}`)
+          .toLowerCase()
+          .replace(/\s*\([^)]*\)/g, '')
+      : line.toLowerCase();
+
+    if (seenParsed.has(key)) continue;
+
+    seenParsed.add(key);
+    out.push(line);
+  }
+
+  return out;
 }
 
 
@@ -587,6 +657,7 @@ function cleanFinalSplit(split, sourceLines = []) {
 
   ingredientLines = rescuedFromSource.ingredientLines;
   notesLines = rescuedFromSource.notesLines;
+  ingredientLines = cleanRescuedIngredientLines(ingredientLines);
   
   const servingsFromLines = extractServingsFromLines(sourceLines);
 
