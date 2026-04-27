@@ -128,7 +128,6 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
   const extraNotes = [];
 
   const ingredients = dedupeSemanticParsedIngredients(beautifyIngredients(
-    beautifyIngredients(
     (Array.isArray(ingredientLines) ? ingredientLines : [])
       .flatMap((l) => splitMergedIngredientLine(l, trash))
       .flatMap((l) => splitCommaSeparatedNoQty(l))
@@ -260,8 +259,8 @@ function buildIngredientsFromSplit({ ingredientLines, trash, parseRawLine, dlog 
       })
       .flat()
       .filter(Boolean)
-  )
-  ));
+    )
+  );
   
   return {
     ingredients,

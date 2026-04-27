@@ -6,6 +6,7 @@
 
 'use strict';
 const { isUnitOnlyLine } = require('./helpers');
+const { cleanIngredientCandidateLines } = require('./ingredientCandidateClassifier');
 
 const { parseOcrIngredient } = require('../../utils/ingredientParser');
 const { joinWrappedLinesForIngredients, looksLikeListBullet } = require('../../utils/ingredientUtils');
@@ -659,6 +660,15 @@ function cleanFinalSplit(split, sourceLines = []) {
   notesLines = rescuedFromSource.notesLines;
   ingredientLines = cleanRescuedIngredientLines(ingredientLines);
   
+  const cleanedCandidates = cleanIngredientCandidateLines(ingredientLines);
+  ingredientLines = cleanedCandidates.ingredientLines;
+
+  for (const note of cleanedCandidates.notesLines) {
+    if (!notesLines.some((x) => normSpaces(x).toLowerCase() === note.toLowerCase())) {
+      notesLines.push(note);
+    }
+  }
+
   const servingsFromLines = extractServingsFromLines(sourceLines);
 
   return {
