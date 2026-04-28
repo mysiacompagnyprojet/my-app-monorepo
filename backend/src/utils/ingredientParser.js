@@ -135,6 +135,12 @@ const CONTAINER_UNITS = {
   centimètres: 'cm',
   centimetre: 'cm',
   centimetres: 'cm',
+  feuilles: 'feuille',
+  feuille: 'feuille',
+  pavé: 'pavé',
+  pavés: 'pavé',
+  pave: 'pavé',
+  paves: 'pavé',
   pièce: 'pièce',
   pièces: 'pièce',
   piece: 'pièce',
@@ -376,7 +382,15 @@ function parseOcrIngredient(line) {
     const qtyNum = parseQuantityToNumber(m[1]);
 
     const unit = normalizeContainerUnit(firstDefinedGroup(m.groups, ['container']));
-    const name = cleanParsedNameLocal(firstDefinedGroup(m.groups, ['name']));
+    let name = cleanParsedNameLocal(firstDefinedGroup(m.groups, ['name']));
+
+    if (unit === 'feuille' && /^brick\b/i.test(name)) {
+      name = 'brick';
+    }
+
+    if (unit === 'pavé' && /^saumon\b/i.test(name)) {
+      name = 'saumon';
+    }
 
     if (
       name &&

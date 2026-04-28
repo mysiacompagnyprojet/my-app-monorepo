@@ -570,6 +570,23 @@ function cleanRescuedIngredientLines(lines = []) {
   return out;
 }
 
+function looksLikeRecoverableIngredientNote(line) {
+  const t = normSpaces(line);
+  if (!t) return false;
+
+  if (/ajouter un commentaire|notice sur l['’]ia|suivre/i.test(t)) return false;
+  if (/[♡❤️♥◆≈~<>σ☑]/.test(t)) return false;
+  if (/\b(faktory|jumbo expedition|dr[oó]nar|grammes|750grammes|prot|food)\b/i.test(t)) return false;
+
+  if (/^\d+\s+portions?$/i.test(t)) return false;
+  if (/^(ingr[eé]dients?|les ingr[eé]dients?|préparation|preparation|instructions?)$/i.test(t)) return false;
+
+  return (
+    /^\d/.test(t) ||
+    /^(sel|poivre|sel\s+et\s+poivre|sel\s+ou\s+sel\s+fin)$/i.test(t) ||
+    /\b(feuilles?|tranches?|morceaux?|nids?|bottes?|gousses?|pav[eé]s?)\s+de\b/i.test(t)
+  );
+}
 
 function cleanFinalSplit(split, sourceLines = []) {
   let ingredientLines = repairSplitIngredientLines(split.ingredientLines || [])
@@ -661,13 +678,31 @@ function cleanFinalSplit(split, sourceLines = []) {
   ingredientLines = cleanRescuedIngredientLines(ingredientLines);
   
   const cleanedCandidates = cleanIngredientCandidateLines(ingredientLines);
-  ingredientLines = cleanedCandidates.ingredientLines;
+ingredientLines = cleanedCandidates.ingredientLines;
 
-  for (const note of cleanedCandidates.notesLines) {
-    if (!notesLines.some((x) => normSpaces(x).toLowerCase() === note.toLowerCase())) {
-      notesLines.push(note);
-    }
+for (const note of cleanedCandidates.notesLines) {
+  if (!notesLines.some((x) => normSpaces(x).toLowerCase() === note.toLowerCase())) {
+    notesLines.push(note);
   }
+}
+
+const rescuedNoteCandidates = cleanIngredientCandidateLines(
+  notesLines.filter(looksLikeRecoverableIngredientNote)
+);
+
+for (const line of rescuedNoteCandidates.ingredientLines) {
+  if (!ingredientLines.some((x) => normSpaces(x).toLowerCase() === line.toLowerCase())) {
+    ingredientLines.push(line);
+  }
+}
+
+for (const note of rescuedNoteCandidates.notesLines) {
+  if (!notesLines.some((x) => normSpaces(x).toLowerCase() === note.toLowerCase())) {
+    notesLines.push(note);
+  }
+}
+
+notesLines = uniqLines(notesLines);
 
   const servingsFromLines = extractServingsFromLines(sourceLines);
 

@@ -8,7 +8,7 @@
 
 'use strict';
 
-const { normSpaces } = require('../utils/stringUtils');
+const { normSpaces, normalizeLoose } = require('../utils/stringUtils');
 const { parseOcrIngredient } = require('../utils/ingredientParser');
 const { looksLikeStepLine, looksLikeStepVerbLine, looksLikeActionSentence } = require('../utils/heuristics');
 
@@ -88,6 +88,34 @@ function looksLikeTitleOrBrandNoise(line) {
 
   // nom de compte / page / pseudo court
   if (/^[a-z0-9._-]{3,}\s+[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿœ]+/.test(t)) return true;
+
+  if (looksLikeContextOrStandaloneNoise(t)) return true;
+  return false;
+}
+
+function looksLikeContextOrStandaloneNoise(line) {
+  const t = normSpaces(line);
+  const low = normalizeLoose(t);
+
+  if (!t) return true;
+
+  if (/^ingr[eé]dients?\b/i.test(low)) return true;
+  if (/^les ingr[eé]dients\b/i.test(low)) return true;
+
+  if (/_/.test(t)) return true;
+  if (/[♫♪]/.test(t)) return true;
+
+  if (/\b(anniversaire|recette|ultra gourmand|sans cuisson|gourmand|gourmande)\b/i.test(low)) return true;
+  if (/\b(ajouter un commentaire|suivre|notice sur l ia|instagram)\b/i.test(low)) return true;
+
+  // Ligne titre courte, pas une ligne ingrédient fiable
+  if (
+    !/\d/.test(t) &&
+    /^[A-ZÀ-ÖØ-Þ][a-zà-öø-ÿœ' -]+$/.test(t) &&
+    t.split(/\s+/).length <= 4
+  ) {
+    return true;
+  }
 
   return false;
 }
@@ -272,6 +300,7 @@ function looksLikeQualifierTail(line) {
     /^(doux|douce|fumé|fumee|fumée|fumee|fort|forte|moulu|moulue|moulus|moulues|séché|seche|séchée|sechee|frais|fraîche|fraiches|fraîches)$/i.test(t) ||
     /^(haché|hache|hachés|haches|hachée|hachee|hachées|hachees)(?:\s+finement)?$/i.test(t) ||
     /^finement\s+(haché|hache|hachés|haches|hachée|hachee|hachées|hachees)$/i.test(t) ||
+    /^(liquide\s+enti[eè]re|enti[eè]re|cr[eè]me\s+liquide\s+enti[eè]re)$/i.test(t) ||
     /^en\s+poudre$/i.test(t)
   );
 }
@@ -432,6 +461,13 @@ function looksLikeIngredientNameOnlyLocal(line) {
   if (looksLikeCoordinatedTail(t)) return false;
 
   return /[A-Za-zÀ-ÖØ-öø-ÿœ]/.test(t);
+}
+
+function looksLikeSafeBareIngredientName(line) {
+  const t = normalizeOcrConfusions(line).toLowerCase();
+  if (!t) return false;
+
+  return /^(sel|poivre|thym|laurier|persil|coriandre|basilic|origan|paprika|curry|cumin|cannelle|huile de tournesol|huile d['’]olive)$/i.test(t);
 }
 
 function countMeasureTokens(line) {
@@ -1050,12 +1086,18 @@ function joinMeasureAndNameFragments(lines) {
     if (looksLikeConnectorFragmentLocal(cur)) continue;
 
     if (looksLikeStrongStandaloneIngredient(cur)) {
-      out.push(normalizeFragmentedIngredientLine(cur));
-      used.add(i);
+      const enriched = enrichIngredientWithFollowingTails(L, [i], cur);
+
+      out.push(normalizeFragmentedIngredientLine(enriched.text));
+
+      for (const idx of enriched.indexes || [i]) {
+        used.add(idx);
+      }
 
       flog('[FRAG][JOIN][PASS0_STRONG_ACCEPT]', {
         index: i,
         text: cur,
+        enriched: enriched.text,
       });
     }
   }
@@ -1146,34 +1188,31 @@ function joinMeasureAndNameFragments(lines) {
     if (!cur) continue;
 
     if (looksLikeIngredientNameOnlyLocal(cur)) {
-      const next = normalizeOcrConfusions(L[i + 1] || '');
-      const prev = normalizeOcrConfusions(L[i - 1] || '');
 
-      const shouldDelaySalvage =
-        looksLikeQualifierTail(next) ||
-        looksLikeCoordinatedTail(next) ||
-        looksLikeMeasureOnlyFragment(prev) ||
-        /^(de|du|des|d['’])$/i.test(prev);
+  const canSaveBareNameInFragmented =
+    looksLikeSafeBareIngredientName(cur) &&
+    !looksLikeContextOrStandaloneNoise(cur);
 
-      if (!shouldDelaySalvage) {
-        out.push(cur);
-        used.add(i);
+  if (canSaveBareNameInFragmented) {
+    out.push(cur);
+    used.add(i);
 
-        flog('[FRAG][JOIN][PASS3_NAME_SALVAGE]', {
-          index: i,
-          text: cur,
-        });
-      } else {
-        flog('[FRAG][JOIN][PASS3_NAME_DELAYED]', {
-          index: i,
-          text: cur,
-          next,
-          prev,
-        });
-      }
+    flog('[FRAG][JOIN][PASS3_SAFE_BARE_ACCEPT]', {
+      index: i,
+      text: cur,
+    });
 
-      continue;
-    }
+    continue;
+  }
+
+  flog('[FRAG][JOIN][PASS3_NAME_REJECTED]', {
+    index: i,
+    text: cur,
+    reason: 'bare_name_not_attached_to_measure',
+  });
+
+  continue;
+}
 
     if (/^et\s+(poudre d['’]ail)$/i.test(cur)) {
       const fixed = cur.replace(/^et\s+/i, '');
@@ -1236,10 +1275,10 @@ function normalizeFragmentedIngredientLine(line) {
 function extractFragmentedIngredientLines(lines) {
   const joined = joinMeasureAndNameFragments(lines);
 
-  return dedupeLines(
+  return removeShorterIncludedDuplicateSameMeasure(
     joined
-      .map(normalizeFragmentedIngredientLine)
-      .filter(Boolean)
+    .map(normalizeFragmentedIngredientLine)
+    .filter(Boolean)
   );
 }
 
@@ -1289,7 +1328,7 @@ function scoreIngredientExtraction(lines) {
     }
 
     if (looksLikeIngredientNameOnlyLocal(line)) {
-      looseNames++;
+      looseNames += 2;
       continue;
     }
 
@@ -1303,7 +1342,7 @@ function scoreIngredientExtraction(lines) {
     suspicious * 10 -
     fragments * 10 -
     polluted * 12 -
-    looseNames * 3;
+    looseNames * 12;
 
   return {
     total: L.length,
@@ -1461,6 +1500,55 @@ function hasStrongQtyUnit(line){
   return hasQty && hasUnit;
 }
 
+function removeShorterIncludedDuplicateSameMeasure(lines) {
+  const source = Array.isArray(lines) ? lines : [];
+  const out = [];
+
+  for (const line of source) {
+    const parsed = parseOcrIngredient(line);
+
+    if (!parsed || !parsed.name) {
+      out.push(line);
+      continue;
+    }
+
+    const name = normSpaces(parsed.name).toLowerCase();
+    const qty = Number(parsed.quantity || 0);
+    const unit = String(parsed.unit || '').trim().toLowerCase();
+
+    if (!name || !qty || !unit) {
+      out.push(line);
+      continue;
+    }
+
+    const strongerSameMeasure = source.find((other) => {
+      if (normSpaces(other).toLowerCase() === normSpaces(line).toLowerCase()) {
+        return false;
+      }
+
+      const otherParsed = parseOcrIngredient(other);
+      if (!otherParsed || !otherParsed.name) return false;
+
+      const otherName = normSpaces(otherParsed.name).toLowerCase();
+      const otherQty = Number(otherParsed.quantity || 0);
+      const otherUnit = String(otherParsed.unit || '').trim().toLowerCase();
+
+      if (otherQty !== qty) return false;
+      if (otherUnit !== unit) return false;
+      if (otherName === name) return false;
+
+      return otherName.length > name.length && otherName.includes(name);
+    });
+
+    if (strongerSameMeasure) continue;
+
+    out.push(line);
+  }
+
+  return dedupeLines(out);
+}
+
+
 function removeWeakerDuplicates(lines){
 
   const source =
@@ -1515,10 +1603,10 @@ function removeWeakerDuplicates(lines){
     out.push(line);
   }
 
-  return Array.from(
-    new Set(
-      out.map(x =>
-        normSpaces(x)
+  return removeShorterIncludedDuplicateSameMeasure(
+    Array.from(
+      new Set(
+        out.map((x) => normSpaces(x))
       )
     )
   );

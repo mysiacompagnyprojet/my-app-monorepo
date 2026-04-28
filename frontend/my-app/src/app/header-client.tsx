@@ -6,7 +6,7 @@
 import Image from 'next/image'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useEffect, useMemo, useState } from 'react'
-import { apiFetch } from 'src/lib/api'
+import { apiFetch } from '@/lib/api'
 import { createClient } from '@supabase/supabase-js'
 import { FolderOpen, Camera, Plus } from 'lucide-react'
 

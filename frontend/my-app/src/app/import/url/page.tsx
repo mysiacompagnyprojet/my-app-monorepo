@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { apiFetch } from 'src/lib/api'
+import { apiFetch } from '@/lib/api'
 import PricingPaywallNotice from '@/components/PricingPaywallNotice'
 
 // ✅ Types

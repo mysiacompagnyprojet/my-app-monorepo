@@ -4496,13 +4496,13 @@ TRY / TEST GRATUIT PAGE
 }
 
 .demo-blur-value {
-  filter: blur(10px);
+  filter: blur(18px);
   user-select: none;
   pointer-events: none;
   display: inline-block;
   min-width: 70px;
   text-align: right;
-  opacity: 0.85;
+  opacity: 0.8;
 
 }
 
