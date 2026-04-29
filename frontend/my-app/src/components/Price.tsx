@@ -18,7 +18,7 @@ export default function Price({ value, blur = false }: PriceProps) {
   if (n > 0 && n < 0.01) {
     if (blur) {
       return (
-        <span style={{ filter: 'blur(5px)', userSelect: 'none' }}>
+        <span style={{ filter: 'blur(10px)', userSelect: 'none' }}>
           {'< 0,01 €'}
         </span>
       )
@@ -31,7 +31,7 @@ export default function Price({ value, blur = false }: PriceProps) {
 
   if (blur) {
     return (
-      <span style={{ filter: 'blur(5px)', userSelect: 'none' }}>
+      <span style={{ filter: 'blur(0px)', userSelect: 'none' }}>
         {formatted} €
       </span>
     )
